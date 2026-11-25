@@ -3,6 +3,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { ArrowUp, LogOut } from '@lucide/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
+import { appName } from '@/lib/brand'
 import { openVersionDialog, useVersion } from '@/lib/version'
 import GitHubIcon from './GitHubIcon.vue'
 import IconAction from './IconAction.vue'
@@ -35,11 +36,11 @@ const itemClass =
 <template>
   <Sidebar variant="inset" collapsible="icon">
     <SidebarHeader>
-      <!-- 顶部一行：标志、名称，版本号徽章靠右；只显示、不可点，版本号徽章是按钮，点开版本弹窗（lib/version.ts）。
-           尺寸照 SidebarMenuButton size="lg"：48px 高、8px 内边距，收起成图标栏时只剩 32px 的标志，和下面的图标对齐。 -->
-      <div class="flex h-12 items-center gap-2 p-2 pr-0 transition-[width,height,padding] group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0">
+      <!-- 顶部：标志，右边两行是名称和版本号徽章（参考图的布局）；只显示、不可点，版本号徽章是按钮，点开版本弹窗（lib/version.ts）。
+           展开时标志 40px，和右边两行（20px + 2px + 18px）等高；收起成图标栏时缩回 32px，和下面的菜单图标对齐。 -->
+      <div class="flex h-14 items-center gap-2.5 p-2 transition-[width,height,padding] group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0">
         <div class="relative shrink-0">
-          <LogoMark class="size-8" />
+          <LogoMark class="size-10 transition-[width,height] group-data-[collapsible=icon]:size-8" />
           <!-- 收起成图标栏时放不下版本号：有新版本就在标志右上角出一个绿点，点开版本弹窗 -->
           <Tooltip v-if="version?.update">
             <TooltipTrigger as-child>
@@ -53,26 +54,28 @@ const itemClass =
             <TooltipContent side="right">有新版本 {{ version.update }}</TooltipContent>
           </Tooltip>
         </div>
-        <span class="flex-1 text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">agy2api</span>
-        <!-- 版本号徽章（20px 高、11px 字）：平时灰色描边，有新版本时浅绿底绿字加向上箭头。侧边栏 13rem，标志和名称之后约 62px，
-             正好放下 v0.0.0 加箭头；名称不截断，放不下时截断版本号（开发构建的版本号很长，如 v0.1.0-3-gabc1234-dirty），悬停看全 -->
-        <Tooltip v-if="version">
-          <TooltipTrigger as-child>
-            <button
-              type="button"
-              :class="[
-                'inline-flex h-5 min-w-0 items-center gap-0.5 rounded-md border px-1 text-[11px] tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden',
-                version.update
-                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400'
-                  : 'border-sidebar-border text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground',
-              ]"
-              @click="openVersionDialog"
-            >
-              <span class="truncate">{{ version.version }}</span><ArrowUp v-if="version.update" class="size-3 shrink-0" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{{ version.update ? `有新版本 ${version.update}` : `版本 ${version.version}` }}</TooltipContent>
-        </Tooltip>
+        <div class="grid min-w-0 flex-1 justify-items-start gap-0.5 group-data-[collapsible=icon]:hidden">
+          <span :title="appName" class="max-w-full truncate text-base leading-5 font-semibold tracking-tight">{{ appName }}</span>
+          <!-- 版本号徽章（18px 高、11px 字）：平时灰色描边，有新版本时浅绿底绿字加向上箭头。
+               开发构建的版本号很长（v0.1.0-3-gabc1234-dirty），放不下时截断，悬停看全 -->
+          <Tooltip v-if="version">
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                :class="[
+                  'inline-flex h-4.5 max-w-full items-center gap-0.5 rounded-md border px-1 text-[11px] tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                  version.update
+                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400'
+                    : 'border-sidebar-border text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                ]"
+                @click="openVersionDialog"
+              >
+                <span class="truncate">{{ version.version }}</span><ArrowUp v-if="version.update" class="size-3 shrink-0" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{{ version.update ? `有新版本 ${version.update}` : `版本 ${version.version}` }}</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
     </SidebarHeader>
     <SidebarContent>

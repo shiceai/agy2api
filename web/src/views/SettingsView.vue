@@ -9,6 +9,7 @@ import DataSettings from '@/components/settings/DataSettings.vue'
 import ClientFilterSettings from '@/components/settings/ClientFilterSettings.vue'
 import SystemPromptSettings from '@/components/settings/SystemPromptSettings.vue'
 import RequestHandlingSettings from '@/components/settings/RequestHandlingSettings.vue'
+import { appName } from '@/lib/brand'
 import { openVersionDialog, useVersion } from '@/lib/version'
 
 // 当前标签记在地址的 tab 参数里，刷新、分享链接都停在同一个标签。
@@ -62,7 +63,7 @@ const version = useVersion()
       class="self-start rounded-sm text-left text-xs text-muted-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 md:hidden"
       @click="openVersionDialog"
     >
-      agy2api {{ version.version }}<span v-if="version.update" class="text-emerald-700 dark:text-emerald-400"> · 有新版本 {{ version.update }}</span>
+      {{ appName }} {{ version.version }}<span v-if="version.update" class="text-emerald-700 dark:text-emerald-400"> · 有新版本 {{ version.update }}</span>
     </button>
   </Tabs>
 </template>
