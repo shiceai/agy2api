@@ -43,8 +43,8 @@ importers:
         specifier: 22.9.0
         version: 22.9.0
       '@vitejs/plugin-vue':
-        specifier: 5.2.1
-        version: 5.2.1(vite@5.4.11(@types/node@22.9.0)(lightningcss@1.33.0))(vue@3.5.13(typescript@5.6.3))
+        specifier: 6.0.11
+        version: 6.0.11(vite@5.4.11(@types/node@22.9.0)(lightningcss@1.33.0))(vue@3.5.13(typescript@5.6.3))
       tailwindcss:
         specifier: 4.3.5
         version: 4.3.5
@@ -261,6 +261,9 @@ packages:
     resolution: {integrity: sha512-B+okr/d8qC2imLzNPJ5tW8Nf7uKC19DgiOafxU0bOMfLnkd5Tkss4GW640+s5FierTJjgl99LpuO40u+yni0qQ==}
     peerDependencies:
       vue: '>=3.0.1'
+
+  '@rolldown/pluginutils@1.1.1':
+    resolution: {integrity: sha512-glFIJDvLNDtJhT9qrMFWLPbvS+skxgt4L0K8Ei2YtnhPysAJnsI7nyxSJxKj4ADeKX0OLjC4ntRkwpLOoS3rwA==}
 
   '@rollup/rollup-android-arm-eabi@4.68.8':
     resolution: {integrity: sha512-7l9FdeCGjhmMTVePgndK4t9u5tLR+VuTTMoyc0PscqZDdYjS07ZsQ0vQYsWsODu/ZZYPG7WVJwbUZ77n1hVT+w==}
@@ -518,12 +521,12 @@ packages:
   '@types/web-bluetooth@0.0.21':
     resolution: {integrity: sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA==}
 
-  '@vitejs/plugin-vue@5.2.1':
-    resolution: {integrity: sha512-cxh314tzaWwOLqVes2gnnCtvBDcM1UMdn+iFR+UjAn411dPT3tOmqrJjbMd7koZpMAmBM/GqeV4n9ge7JSiJJQ==}
-    engines: {node: ^18.0.0 || >=20.0.0}
+  '@vitejs/plugin-vue@6.0.11':
+    resolution: {integrity: sha512-m48lskIUJGlB6qUiYhDMI8nd2ngeidz2U4nKTjqI13cFMu5rH8JeEILPkDtK9Fk/TjBA2pkj8AlbenqDaKu+ww==}
+    engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
-      vite: ^5.0.0 || ^6.0.0
-      vue: ^3.2.25
+      vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
+      vue: ^3.2.25 || ^3.6.0-rc.15
 
   '@volar/language-core@2.4.31':
     resolution: {integrity: sha512-OM+OZfynHa1/4WlC8klqvwTQVmhYUZuwpAKdfl/rlvK8jaIozMD5qwXsOkxcRJA2tC+TEFsG1K81lNP4s/IAzQ==}
@@ -1061,6 +1064,8 @@ snapshots:
     dependencies:
       vue: 3.5.13(typescript@5.6.3)
 
+  '@rolldown/pluginutils@1.1.1': {}
+
   '@rollup/rollup-android-arm-eabi@4.68.8':
     optional: true
 
@@ -1224,8 +1229,9 @@ snapshots:
 
   '@types/web-bluetooth@0.0.21': {}
 
-  '@vitejs/plugin-vue@5.2.1(vite@5.4.11(@types/node@22.9.0)(lightningcss@1.33.0))(vue@3.5.13(typescript@5.6.3))':
+  '@vitejs/plugin-vue@6.0.11(vite@5.4.11(@types/node@22.9.0)(lightningcss@1.33.0))(vue@3.5.13(typescript@5.6.3))':
     dependencies:
+      '@rolldown/pluginutils': 1.1.1
       vite: 5.4.11(@types/node@22.9.0)(lightningcss@1.33.0)
       vue: 3.5.13(typescript@5.6.3)
 
