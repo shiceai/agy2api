@@ -18,6 +18,7 @@ secret*.json
 # 前端
 /web/node_modules/
 /web/dist/
+/web/dist-demo/
 /web/.vite/
 *.tsbuildinfo
 

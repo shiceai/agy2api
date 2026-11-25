@@ -45,38 +45,50 @@ function waitText(retryAfter: string | null): string {
   return minutes < 60 ? `${minutes} 分钟` : `${Math.ceil(minutes / 60)} 小时`
 }
 
+// isDemo：演示站构建（vite build --mode demo）。正式构建里它是常量 false，演示相关的分支和模块都不会打包进去。
+export const isDemo = import.meta.env.MODE === 'demo'
+
 // password 不传时用保存的口令；传了（登录页校验口令）时口令不对只抛 401，不清口令、不跳转。
 async function request<T>(method: string, path: string, body?: unknown, password?: string): Promise<T> {
-  const headers: Record<string, string> = {}
   const pw = password ?? getAdminPassword()
-  if (pw) headers['X-Admin-Password'] = pw
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-  const text = await res.text()
+  let status: number
   let data: unknown = undefined
-  if (text) {
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = { error: text }
+  let retryAfter: string | null = null
+  if (isDemo) {
+    // 演示站没有服务器：请求交给浏览器里的模拟后端，返回的状态码和数据照常走下面的处理。
+    const { demoRequest } = await import('@/demo/server')
+    ;({ status, data } = await demoRequest(method, path, body, pw))
+  } else {
+    const headers: Record<string, string> = {}
+    if (pw) headers['X-Admin-Password'] = pw
+    if (body !== undefined) headers['Content-Type'] = 'application/json'
+    const res = await fetch(path, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    status = res.status
+    retryAfter = res.headers.get('Retry-After')
+    const text = await res.text()
+    if (text) {
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { error: text }
+      }
     }
   }
-  if (!res.ok) {
-    if (res.status === 401 && password === undefined) {
+  if (status < 200 || status >= 300) {
+    if (status === 401 && password === undefined) {
       clearAdminPassword()
       unauthorizedHandler?.()
     }
     const d = data as { error?: string; code?: string } | undefined
     // 错误口令太多，这个地址的管理端被暂时锁定（429）：登录页和各页面的报错都显示中文说明和大约要等多久。
-    if (res.status === 429 && d?.code === 'admin_locked') {
-      throw new ApiError(429, `口令错误太多，已暂时锁定，约 ${waitText(res.headers.get('Retry-After'))}后再试`, d.code)
+    if (status === 429 && d?.code === 'admin_locked') {
+      throw new ApiError(429, `口令错误太多，已暂时锁定，约 ${waitText(retryAfter)}后再试`, d.code)
     }
-    throw new ApiError(res.status, d?.error ?? `HTTP ${res.status}`, d?.code)
+    throw new ApiError(status, d?.error ?? `HTTP ${status}`, d?.code)
   }
   return data as T
 }

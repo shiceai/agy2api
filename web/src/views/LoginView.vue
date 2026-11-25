@@ -2,7 +2,7 @@
 import { onMounted, ref, useTemplateRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Loader2 } from '@lucide/vue'
-import { ApiError, fetchSession, setAdminPassword } from '@/api/client'
+import { ApiError, fetchSession, isDemo, setAdminPassword } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
@@ -13,7 +13,8 @@ import AppLogo from '@/components/AppLogo.vue'
 // 地址里带着 redirect，登录后回到原来的页面。
 const route = useRoute()
 const router = useRouter()
-const pw = ref('')
+// 演示站的口令固定是 demo，预先填好。
+const pw = ref(isDemo ? 'demo' : '')
 const error = ref('')
 const busy = ref(false)
 const input = useTemplateRef<{ $el: HTMLInputElement }>('input')
@@ -54,7 +55,7 @@ async function submit() {
     <Card class="w-full max-w-sm">
       <CardHeader>
         <CardTitle>登录控制台</CardTitle>
-        <CardDescription>输入启动时设置的管理口令。</CardDescription>
+        <CardDescription>{{ isDemo ? '演示站，口令是 demo，数据是模拟的。' : '输入启动时设置的管理口令。' }}</CardDescription>
       </CardHeader>
       <CardContent>
         <form class="grid gap-4" @submit.prevent="submit">

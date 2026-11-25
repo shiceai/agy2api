@@ -1,0 +1,73 @@
+# 演示站：管理端用演示模式构建（接口由浏览器里的模拟后端应答，见 web/src/demo），部署到 Cloudflare Pages。
+# 推送正式版标签（不带 -）时跟着发版更新，也可以在 Actions 页手动运行。
+#
+# 需要仓库的 Secrets：CLOUDFLARE_API_TOKEN（只给 Account → Cloudflare Pages → Edit 权限）、CLOUDFLARE_ACCOUNT_ID。
+# 没配置时跳过部署，不算失败。Pages 项目 agy2api 不存在时自动创建，地址是 https://agy2api.pages.dev（名字被占时
+# Cloudflare 会加后缀，以 Pages 控制台显示的为准）。
+
+name: Demo
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: 12.21.0
+  NODE_VERSION: '24'
+  WRANGLER_VERSION: 4.166.0
+  PAGES_PROJECT: agy2api
+
+jobs:
+  deploy:
+    name: 部署演示站
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查 Cloudflare 配置
+        id: cf
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::没有配置 CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID，跳过部署演示站"
+          fi
+      - if: steps.cf.outputs.ready
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # 版本号取 git describe
+      - if: steps.cf.outputs.ready
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - if: steps.cf.outputs.ready
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: 构建演示版
+        if: steps.cf.outputs.ready
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          VITE_APP_VERSION="$(git describe --tags --always)" pnpm build:demo
+      - name: 部署到 Cloudflare Pages
+        if: steps.cf.outputs.ready
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # 项目已存在时 create 会报错，忽略；权限或账号不对的话，下面的 deploy 会报出来。
+          pnpm dlx "wrangler@$WRANGLER_VERSION" pages project create "$PAGES_PROJECT" --production-branch main || true
+          pnpm dlx "wrangler@$WRANGLER_VERSION" pages deploy web/dist-demo --project-name "$PAGES_PROJECT" --branch main --commit-dirty=true

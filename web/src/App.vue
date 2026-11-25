@@ -16,6 +16,8 @@ import AppSidebar from './components/AppSidebar.vue'
 import MobileNav from './components/MobileNav.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
+import DemoNotice from './components/DemoNotice.vue'
+import { isDemo } from '@/api/client'
 
 const route = useRoute()
 const isLogin = computed(() => route.name === 'login')
@@ -69,6 +71,7 @@ const headerClass = computed(() =>
         </header>
         <!-- 移动端底部给标签栏和安全区留出空间。@container/main：页面按内容区宽度（而不是视口）排版，侧边栏收起展开都准 -->
         <div class="@container/main flex-1 px-4 py-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:px-6">
+          <DemoNotice v-if="isDemo" class="mb-6" />
           <RouterView />
         </div>
       </SidebarInset>
