@@ -7,7 +7,7 @@
 #
 # 数据（SQLite 库和加密密钥）在 /data，挂卷持久化，密钥要和库一起备份。部署说明见 docs/deploy.md。
 
-FROM --platform=$BUILDPLATFORM node:24-alpine AS web
+FROM --platform=$BUILDPLATFORM node:26-alpine AS web
 RUN npm install -g pnpm@12.21.0
 WORKDIR /src/web
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
