@@ -10,11 +10,12 @@
 <p align="center"><strong>把 Antigravity 账号池变成可调度、可观测的 Gemini 兼容 API 网关</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Go-1.27-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.27">
-  <img src="https://img.shields.io/badge/Vue-3.5-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" alt="Vue 3.5">
-  <img src="https://img.shields.io/badge/SQLite-pure%20Go-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
-  <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
+  <a href="https://github.com/shiceai/agy2api/releases/latest"><img src="https://img.shields.io/github/v/release/shiceai/agy2api?style=flat-square" alt="Latest release"></a>
+  <a href="https://github.com/shiceai/agy2api/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/shiceai/agy2api/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/shiceai/agy2api?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/shiceai/agy2api?style=flat-square&logo=go&logoColor=white" alt="Go version">
+  <img src="https://img.shields.io/github/package-json/dependency-version/shiceai/agy2api/vue?filename=web%2Fpackage.json&style=flat-square&logo=vuedotjs&logoColor=white&label=Vue" alt="Vue version">
+  <a href="https://github.com/shiceai/agy2api/pkgs/container/agy2api"><img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker image"></a>
   <img src="https://img.shields.io/badge/API-Gemini%20v1beta-4285F4?style=flat-square" alt="Gemini v1beta">
 </p>
 
