@@ -9,7 +9,7 @@ import (
 	"github.com/shiceai/agy2api/internal/upgrade"
 )
 
-// systemView 是设置页"版本"的数据：版本、新版本、升级进度，加上数据库结构的情况。
+// systemView 是版本弹窗的数据：版本、新版本、升级进度，加上数据库结构的情况。
 type systemView struct {
 	upgrade.View
 	// NewMigrations 是在线升级后新版本执行过的迁移数：撤销后回到的程序不认识这些结构。

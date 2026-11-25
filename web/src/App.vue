@@ -2,10 +2,11 @@
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { LogOut } from '@lucide/vue'
+import { ArrowUpCircle, LogOut } from '@lucide/vue'
 import { navItems, useLogout } from '@/lib/nav'
 import { selectionMode } from '@/lib/selection'
 import { useTheme } from '@/lib/theme'
+import { openVersionDialog, versionInfo } from '@/lib/version'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -15,6 +16,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import AppSidebar from './components/AppSidebar.vue'
 import MobileNav from './components/MobileNav.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import VersionDialog from './components/VersionDialog.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import DemoNotice from './components/DemoNotice.vue'
 import { isDemo } from '@/api/client'
@@ -62,6 +64,17 @@ const headerClass = computed(() =>
               <h1 class="text-base font-semibold">{{ pageLabel }}</h1>
             </template>
             <div v-show="!selectionMode" id="page-actions" class="ml-auto flex items-center gap-2" />
+            <!-- 手机上没有侧边栏的版本号：有新版本时顶栏出一个绿色的向上箭头，点开版本弹窗 -->
+            <Button
+              v-if="!selectionMode && versionInfo?.update"
+              variant="ghost"
+              size="icon"
+              class="text-emerald-600 md:hidden dark:text-emerald-400"
+              :aria-label="`有新版本 ${versionInfo.update}`"
+              @click="openVersionDialog"
+            >
+              <ArrowUpCircle />
+            </Button>
             <!-- 手机上主题切换在顶栏（桌面在侧边栏底部）。ThemeToggle 的根是不渲染元素的 DropdownMenu，class 要加在外层 -->
             <div v-if="!selectionMode" class="md:hidden"><ThemeToggle /></div>
             <Button v-if="!selectionMode" variant="ghost" size="icon" class="-mr-2 md:hidden" aria-label="退出登录" @click="logout">
@@ -77,6 +90,7 @@ const headerClass = computed(() =>
       </SidebarInset>
       <MobileNav />
     </SidebarProvider>
+    <VersionDialog v-if="!isLogin" />
     <ConfirmDialog />
     <Toaster :position="mobile ? 'top-center' : 'bottom-right'" :theme="toastTheme" />
   </TooltipProvider>

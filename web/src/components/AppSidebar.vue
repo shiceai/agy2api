@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { LogOut } from '@lucide/vue'
+import { ArrowUpCircle, LogOut } from '@lucide/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
-import { useVersion } from '@/lib/version'
+import { openVersionDialog, useVersion } from '@/lib/version'
 import IconAction from './IconAction.vue'
 import LogoMark from './LogoMark.vue'
 import ThemeToggle from './ThemeToggle.vue'
@@ -15,7 +15,6 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
@@ -35,34 +34,45 @@ const itemClass =
 <template>
   <Sidebar variant="inset" collapsible="icon">
     <SidebarHeader>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton size="lg" as-child>
-            <RouterLink to="/">
-              <!-- 收起后按钮是 32px 见方，标志也用 32px，和下面的图标对齐。按钮把直接子元素里的 svg 统一设成 16px
-                   （[&>svg]:size-4，优先级比 size-8 高），这里要用 ! 盖过去。 -->
-              <LogoMark class="size-8! shrink-0" />
-              <!-- 名称下面一行是版本号（shadcn sidebar-07 的写法）：正式版如 v0.1.0，开发构建带提交距离和提交号。
-                   名称 16px 粗体、版本号 12px 灰字，字号、粗细、深浅一起拉开主次。收起成图标栏时只剩标志。 -->
-              <div class="grid flex-1">
-                <span class="truncate text-base leading-5.5 font-semibold tracking-tight">agy2api</span>
-                <span v-if="version" class="truncate text-xs leading-4 text-sidebar-foreground/50">{{ version.version }}</span>
-              </div>
-            </RouterLink>
-          </SidebarMenuButton>
-          <!-- 有新版本时名称右侧出一个小圆点，点开是设置页的"版本"标签。和上面的链接是兄弟节点，不嵌套；收起成图标栏时隐藏 -->
+      <!-- 顶部：标志、名称和下面一行版本号（shadcn sidebar-07 的布局），只显示、不可点；版本号是按钮，点开版本弹窗。
+           尺寸照 SidebarMenuButton size="lg"：48px 高、8px 内边距，收起成图标栏时只剩 32px 的标志，和下面的图标对齐。 -->
+      <div class="flex h-12 items-center gap-2 p-2 transition-[width,height,padding] group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0">
+        <div class="relative shrink-0">
+          <LogoMark class="size-8" />
+          <!-- 收起时版本号放不下：有新版本就在标志右上角出一个绿点，点开版本弹窗 -->
           <Tooltip v-if="version?.update">
             <TooltipTrigger as-child>
-              <SidebarMenuAction as-child>
-                <RouterLink :to="{ path: '/settings', query: { tab: 'version' } }" :aria-label="`有新版本 ${version.update}`">
-                  <span class="size-2 rounded-full bg-emerald-500" />
-                </RouterLink>
-              </SidebarMenuAction>
+              <button
+                type="button"
+                :aria-label="`有新版本 ${version.update}`"
+                class="absolute -top-1 -right-1 hidden size-3 rounded-full bg-emerald-500 ring-2 ring-sidebar outline-none group-data-[collapsible=icon]:block focus-visible:ring-sidebar-ring"
+                @click="openVersionDialog"
+              />
             </TooltipTrigger>
             <TooltipContent side="right">有新版本 {{ version.update }}</TooltipContent>
           </Tooltip>
-        </SidebarMenuItem>
-      </SidebarMenu>
+        </div>
+        <!-- 名称 16px 粗体、版本号 12px：字号、粗细、深浅一起拉开主次。版本号平时是灰字；有新版本时是绿色小胶囊加向上箭头 -->
+        <div class="grid min-w-0 flex-1 justify-items-start group-data-[collapsible=icon]:hidden">
+          <span class="truncate text-base leading-5.5 font-semibold tracking-tight">agy2api</span>
+          <Tooltip v-if="version">
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                :class="
+                  version.update
+                    ? '-mx-1.5 inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 text-xs leading-4 text-emerald-700 outline-none hover:bg-emerald-500/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring dark:text-emerald-400'
+                    : 'max-w-full truncate rounded-sm text-xs leading-4 text-sidebar-foreground/50 outline-none hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring'
+                "
+                @click="openVersionDialog"
+              >
+                <span class="truncate">{{ version.version }}</span><ArrowUpCircle v-if="version.update" class="size-3 shrink-0" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{{ version.update ? `有新版本 ${version.update}` : '版本和更新' }}</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
     </SidebarHeader>
     <SidebarContent>
       <SidebarGroup>

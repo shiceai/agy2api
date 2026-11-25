@@ -101,7 +101,7 @@ export interface Session {
   update?: string
 }
 
-// --- 版本与在线升级（设置页"版本"） ---
+// --- 版本与在线升级（版本弹窗） ---
 export interface ReleaseInfo {
   version: string
   notes: string
