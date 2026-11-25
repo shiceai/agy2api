@@ -1,0 +1,55 @@
+# agy2api 的 systemd 服务，安装步骤见 docs/deploy.md：
+#   install -m 755 bin/agy2api-linux-amd64 /usr/local/bin/agy2api
+#   install -D -m 600 deploy/env.example /etc/agy2api/env   # 再填上口令
+#   install -m 644 deploy/agy2api.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now agy2api
+#
+# 用 DynamicUser 跑在临时的非 root 用户下，数据（库和加密密钥）在 /var/lib/agy2api，要一起备份。
+[Unit]
+Description=agy2api
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/agy2api
+# 默认只在本机监听，由反向代理对外提供 HTTPS；/etc/agy2api/env 里的同名变量优先。
+Environment=AGY2API_ADDR=127.0.0.1:8080
+Environment=AGY2API_DATA_DIR=/var/lib/agy2api
+EnvironmentFile=/etc/agy2api/env
+DynamicUser=yes
+StateDirectory=agy2api
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=5
+# 关停时先等进行中的请求（最多 10 秒），再写完排队的用量记录（最多 5 秒）。
+TimeoutStopSec=30
+
+# 加固：没有任何特权，只能写自己的数据目录，网络只用 IPv4、IPv6 和本地套接字，系统调用限于普通服务需要的
+# （其余返回 EPERM，不杀进程）。
+CapabilityBoundingSet=
+UMask=0077
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelLogs=yes
+PrivateUsers=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

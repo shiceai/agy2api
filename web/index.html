@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>agy2api 控制台</title>
+    <!-- 网站图标：支持 SVG 的浏览器用 favicon.svg（随系统深浅色反色），sizes 让它们优先选 SVG；PNG 给不支持的浏览器，
+         apple-touch-icon 给 iOS 主屏幕。图形同 src/components/LogoMark.vue。 -->
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- 预加载英文数字用的 Inter（拉丁字符子集），和 JS 同时下载。不预加载时要等 JS 渲染出文字才开始下载，
+         这之前用系统字体显示，换成 Inter 时英文数字会变窄、跳一下。构建时 Vite 会换成带哈希的文件名，
+         和 CSS 里引用的是同一个文件。 -->
+    <link rel="preload" href="/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+
+    <!-- 主题在渲染前设好（和 src/lib/theme.ts 的 useColorMode 读同一个键），刷新时不会先白后黑闪一下。 -->
+    <script>
+      ;(function () {
+        var m = localStorage.getItem('vueuse-color-scheme') || 'auto'
+        if (m === 'dark' || (m === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark')
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

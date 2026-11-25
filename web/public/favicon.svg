@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- 图形同 src/components/LogoMark.vue；浏览器是深色时反色，深色标签栏上也看得清。 -->
+  <style>
+    .bg { fill: #18181b }
+    .fg { stroke: #fafafa }
+    .dot { fill: #fafafa }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #e4e4e7 }
+      .fg { stroke: #18181b }
+      .dot { fill: #18181b }
+    }
+  </style>
+  <rect class="bg" width="32" height="32" rx="8" />
+  <path class="fg" d="M9.5 22C9.5 18 16 18 16 14M22.5 22C22.5 18 16 18 16 14M16 22V7.5M12.3 11.2 16 7.5l3.7 3.7" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+  <g class="dot">
+    <circle cx="9.5" cy="24" r="2" />
+    <circle cx="16" cy="24" r="2" />
+    <circle cx="22.5" cy="24" r="2" />
+  </g>
+</svg>

@@ -1,0 +1,35 @@
+# 二进制与构建产物
+/bin/
+/agy2api
+/agy2api.exe
+*.exe
+
+# 运行数据（数据库、密钥、凭据）
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.key
+
+# 导入的真实凭据，绝不入库
+*antigravity-*.json
+secret*.json
+
+# 前端
+/web/node_modules/
+/web/dist/
+/web/.vite/
+*.tsbuildinfo
+
+# 环境
+.env
+.env.local
+
+# 编辑器
+.idea/
+.vscode/
+*.log
+
+# 前端构建产物（go:embed 目录）：只提交 .gitkeep
+/internal/server/webdist/*
+!/internal/server/webdist/.gitkeep

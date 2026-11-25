@@ -1,0 +1,26 @@
+# 构建上下文只要源码：不带运行数据、凭据、构建产物和依赖目录（镜像里重新安装）。
+.git
+.gitignore
+.gitattributes
+.idea
+.vscode
+.env*
+*.log
+*.db
+*.db-*
+*.key
+*antigravity-*.json
+secret*.json
+data
+bin
+docs
+deploy
+README.md
+AGENTS.md
+compose.yaml
+Dockerfile
+web/node_modules
+web/dist
+web/.vite
+web/*.tsbuildinfo
+internal/server/webdist

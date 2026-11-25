@@ -1,0 +1,6 @@
+# 统一 LF：脚本在 Windows 上被转成 CRLF 后无法在 Linux 执行。
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary

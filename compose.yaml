@@ -1,0 +1,23 @@
+# docker compose up -d --build
+#
+# 先把 deploy/env.example 复制成和本文件同目录的 .env，至少填上 AGY2API_ADMIN_PASSWORD（.env 不入库）。
+# 默认只在本机 8080 监听，由同机的反向代理（Caddy、nginx）对外提供 HTTPS，见 docs/deploy.md。
+services:
+  agy2api:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    image: agy2api:${VERSION:-dev}
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - data:/data
+    # 关停时先等进行中的请求（最多 10 秒），再写完排队的用量记录（最多 5 秒）；默认 10 秒不够。
+    stop_grace_period: 30s
+
+volumes:
+  # 命名卷：库和加密密钥都在里面，要一起备份。
+  data:
