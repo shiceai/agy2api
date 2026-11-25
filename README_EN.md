@@ -89,6 +89,19 @@ curl http://127.0.0.1:8080/v1beta/models/gemini-2.5-flash:generateContent \
 Before exposing it to the internet, read the [deployment guide](docs/deploy.md) (in Chinese): HTTPS reverse proxy,
 admin access control, backup and upgrade, and deployment with systemd.
 
+## Upgrade
+
+- **Online upgrade**: when a new release is available, the version under the name in the admin console's sidebar turns
+  green with an up arrow; click it to read the release notes and upgrade in one click. The server verifies the package,
+  backs up the database and restarts in place, with a few seconds of downtime. The new binary lives in the data
+  directory, so it survives recreating the Docker container or restarting the systemd service; if it fails to start,
+  the previous version takes over again, and you can also undo the upgrade. Linux and macOS are supported; set
+  `AGY2API_UPDATE=off` to turn it off.
+- **Manual upgrade**: run the install script above again (add `--docker` for Docker); with your own compose file, run
+  `docker compose pull && docker compose up -d`.
+
+See the [deployment guide](docs/deploy.md#在线升级) for details.
+
 ## Configuration
 
 Common environment variables, set in `.env`; see the [deployment guide](docs/deploy.md#环境变量) for the full list.
@@ -101,6 +114,7 @@ Common environment variables, set in `.env`; see the [deployment guide](docs/dep
 | `AGY2API_ADMIN_ALLOW` | Only these IPs may access the admin console (IPs or CIDRs, comma-separated) | No restriction |
 | `AGY2API_TRUSTED_PROXIES` | Trusted reverse proxies; the client IP is taken only from what they forward | Loopback and private addresses |
 | `AGY2API_LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | `info` |
+| `AGY2API_UPDATE` | Online upgrade: check for new releases daily; `off` turns it off (no calls to GitHub) | On |
 
 ## Build from source
 

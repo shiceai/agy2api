@@ -80,6 +80,15 @@ curl http://127.0.0.1:8080/v1beta/models/gemini-2.5-flash:generateContent \
 
 上公网前请看[部署说明](docs/deploy.md)：HTTPS 反向代理、管理端访问限制、备份和升级，以及 systemd 部署方式。
 
+## 升级
+
+- **在线升级**：有新的正式版时，管理端侧边栏的版本号变绿并带向上箭头，点开可以看更新内容并一键升级。服务先校验发布包、
+  备份数据库，再原地重启，中断几秒。新程序放在数据目录里，Docker 容器重建、systemd 重启之后都还是新版本；新版本起不来
+  会自动退回原来的版本，也可以手动撤销。支持 Linux、macOS，`AGY2API_UPDATE=off` 关闭。
+- **手动升级**：再运行一次上面的安装脚本（Docker 加 `--docker`）；自己写 compose 的执行 `docker compose pull && docker compose up -d`。
+
+详见[部署说明](docs/deploy.md#在线升级)。
+
 ## 配置
 
 常用的环境变量如下，写在 `.env` 里；完整列表见[部署说明](docs/deploy.md#环境变量)。
@@ -92,6 +101,7 @@ curl http://127.0.0.1:8080/v1beta/models/gemini-2.5-flash:generateContent \
 | `AGY2API_ADMIN_ALLOW` | 只允许这些 IP 访问管理端（IP 或 CIDR，逗号分隔） | 不限 |
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理，只认它们转发来的客户端 IP | 回环和内网地址 |
 | `AGY2API_LOG_LEVEL` | 日志级别：`debug`、`info`、`warn`、`error` | `info` |
+| `AGY2API_UPDATE` | 在线升级：每天查一次新版本；`off` 关闭（不连 GitHub） | 开启 |
 
 ## 从源码构建
 
