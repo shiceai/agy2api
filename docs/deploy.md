@@ -17,12 +17,19 @@ agy2api 的数据（SQLite 库和凭据加密密钥）都在数据目录里。�
 
 ## Docker Compose
 
+用发布的镜像（`ghcr.io/shiceai/agy2api`，linux/amd64、linux/arm64），只需要 `compose.yaml` 和 `.env`：
+
 ```bash
-cp deploy/env.example .env        # 至少填上 AGY2API_ADMIN_PASSWORD
-VERSION=$(git describe --tags --always --dirty) docker compose up -d --build
+curl -fsSLO https://raw.githubusercontent.com/shiceai/agy2api/main/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/shiceai/agy2api/main/deploy/env.example -o .env   # 至少填上 AGY2API_ADMIN_PASSWORD
+docker compose up -d
 docker compose logs -f
 ```
 
+- 默认用最新的正式版（`latest`）。要固定版本，在 `.env` 里写 `AGY2API_IMAGE=ghcr.io/shiceai/agy2api:0.1.0`。
+- 从源码构建：在仓库根目录 `VERSION=$(git describe --tags --always --dirty) docker compose up -d --build`。
+  构建出的镜像也叫 `ghcr.io/shiceai/agy2api:latest`，要换回发布的镜像时执行 `docker compose pull`。
+- 核验镜像确实由本仓库的发布流程构建：`gh attestation verify oci://ghcr.io/shiceai/agy2api:<版本> -R shiceai/agy2api`。
 - 镜像分三段构建：前端（Node + pnpm）→ Go 单二进制（无 CGO）→ Alpine 运行镜像，以非 root 用户（UID 10001）运行。
 - 数据在命名卷 `agy2api_data`（项目名取目录名）里。改用宿主机目录挂载时，目录要归 UID 10001 所有：
   `chown 10001:10001 ./data`。
@@ -33,9 +40,9 @@ docker compose logs -f
 ## systemd
 
 ```bash
-bash scripts/build.sh linux/amd64                       # 在开发机上交叉编译，输出 bin/agy2api-linux-amd64
-# 拷到服务器后：
-install -m 755 agy2api-linux-amd64 /usr/local/bin/agy2api
+# 从 Releases 下载对应平台的压缩包，解压后在包目录里执行（包里有二进制、env.example 和 agy2api.service）。
+# 也可以在开发机上 bash scripts/build.sh linux/amd64 自己编译，再把 bin/agy2api-linux-amd64 当作 agy2api 拷过去。
+install -m 755 agy2api /usr/local/bin/agy2api
 install -D -m 600 env.example /etc/agy2api/env        # 填上 AGY2API_ADMIN_PASSWORD 等
 install -m 644 agy2api.service /etc/systemd/system/
 systemctl daemon-reload
@@ -112,8 +119,8 @@ server {
   docker compose start
   ```
 
-- 升级：Docker 用 `git pull` 后重新 `docker compose up -d --build`；systemd 替换 `/usr/local/bin/agy2api` 后
-  `systemctl restart agy2api`。数据库迁移在启动时自动执行。升级前先备份，要回退时用旧版本加备份的数据。
+- 升级：Docker 执行 `docker compose pull && docker compose up -d`（从源码构建的 `git pull` 后加 `--build`）；systemd 换成
+  新版本包里的 `agy2api` 后 `systemctl restart agy2api`。各版本的变化见 `CHANGELOG.md`。数据库迁移在启动时自动执行。升级前先备份，要回退时用旧版本加备份的数据。
 
 ## 环境变量
 

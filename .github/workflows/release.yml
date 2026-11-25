@@ -1,0 +1,160 @@
+# 发布：推送 v* 标签时，检查通过后构建并推送 ghcr.io 镜像（linux/amd64、linux/arm64），再交叉编译各平台的
+# 二进制包，用 CHANGELOG.md 里这个版本的一节作为说明创建 GitHub Release。带 - 的标签（如 v0.2.0-rc.1）发成预发布版，
+# 镜像不打 latest。
+#
+# 发布链路的防护：第三方 Action 都按提交 SHA 固定（注释里是对应版本），每个任务只给需要的权限，
+# 不用 GITHUB_TOKEN 以外的密钥；二进制包和镜像都生成构建来源证明，用户可以用 gh attestation verify 核验。
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PNPM_VERSION: 12.21.0
+  NODE_VERSION: '24'
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  check:
+    name: 检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: 完整检查（gofmt、vet、staticcheck、带 -race 的测试、前端类型检查）
+        run: bash scripts/check.sh
+
+  image:
+    name: 镜像
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          # 0.2.0 和 0.2；预发布版只打完整版本号（metadata-action 对预发布版不生成 major.minor），也不打 latest。
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - id: push
+        name: 构建并推送镜像
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+      - name: 镜像来源证明
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: 冒烟：拉取刚推送的镜像，版本号要和标签一致
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          got=$(docker run --rm "$IMAGE@$DIGEST" -version)
+          echo "镜像版本：$got"
+          [ "$got" = "$GITHUB_REF_NAME" ]
+
+  release:
+    name: 二进制包和 Release
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # 找上一个标签，生成比较链接
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+
+      - name: 发布说明（CHANGELOG.md 里这个版本的一节）
+        run: bash scripts/release-notes.sh "$GITHUB_REF_NAME" > notes.md && cat notes.md
+
+      - name: 交叉编译
+        run: VERSION="$GITHUB_REF_NAME" bash scripts/build.sh linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+
+      - name: 打包和校验和
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            os="${target%/*}"; arch="${target#*/}"; ext=""
+            [ "$os" = windows ] && ext=".exe"
+            name="agy2api_${version}_${os}_${arch}"
+            dir="package/$name"
+            mkdir -p "$dir"
+            cp "bin/agy2api-$os-$arch$ext" "$dir/agy2api$ext"
+            cp README.md README_EN.md LICENSE CHANGELOG.md docs/deploy.md deploy/env.example deploy/agy2api.service "$dir/"
+            if [ "$os" = windows ]; then
+              (cd package && zip -qr "../dist/$name.zip" "$name")
+            else
+              tar -C package -czf "dist/$name.tar.gz" "$name"
+            fi
+          done
+          (cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: 二进制包来源证明
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/agy2api_*
+
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          args=(--verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md)
+          case "$GITHUB_REF_NAME" in *-*) args+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" "${args[@]}" dist/*

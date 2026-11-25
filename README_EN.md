@@ -56,12 +56,21 @@ flowchart LR
 
 ## Quick start
 
-Requires Docker:
+With Docker (images for linux/amd64 and linux/arm64):
 
 ```bash
-git clone https://github.com/shiceai/agy2api.git && cd agy2api
-cp deploy/env.example .env     # set AGY2API_ADMIN_PASSWORD
-docker compose up -d --build
+mkdir agy2api && cd agy2api
+curl -fsSLO https://raw.githubusercontent.com/shiceai/agy2api/main/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/shiceai/agy2api/main/deploy/env.example -o .env
+# edit .env and set AGY2API_ADMIN_PASSWORD
+docker compose up -d
+```
+
+Without Docker, download the archive for your platform from [Releases](https://github.com/shiceai/agy2api/releases),
+extract it and run:
+
+```bash
+AGY2API_ADMIN_PASSWORD=<your password> ./agy2api
 ```
 
 Open `http://127.0.0.1:8080`, sign in with the admin password, add accounts on the accounts page, create an API key on

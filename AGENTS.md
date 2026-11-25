@@ -34,7 +34,8 @@ agy2api 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 | `web` | 管理端前端，构建输出到 `internal/server/webdist` |
 | `docs` | 部署说明 |
 | `deploy` | 部署示例：systemd 服务、环境变量模板（Dockerfile、compose.yaml 在仓库根目录） |
-| `scripts` | 构建脚本 |
+| `scripts` | 构建、提交前检查、从 CHANGELOG 取发布说明 |
+| `.github/workflows` | 发布工作流：推送 `v*` 标签时检查、推送镜像、构建二进制包、创建 Release |
 
 ## 开发流程
 
@@ -45,7 +46,9 @@ agy2api 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 - README 有两份：`README.md`（简体中文，默认）和 `README_EN.md`（英文），内容保持一致，改一份时另一份一起改。
 - 前端构建产物不入库：`internal/server/webdist` 只提交 `.gitkeep`，Vite 构建后会自动补回。
 - 完整构建：`bash scripts/build.sh`；交叉编译传 `os/arch`，如 `bash scripts/build.sh linux/amd64`。版本号默认取 `git describe --tags --always --dirty`，注入 `main.version`。
-- 发版按语义化版本打附注标签，如 `git tag -a v0.2.0`。1.0 之前用 `v0.x.y`：新功能升 MINOR，只修 bug 升 PATCH。
+- 发版按语义化版本打附注标签，如 `git tag -a v0.2.0`。1.0 之前用 `v0.x.y`：新功能升 MINOR，只修 bug 升 PATCH；预发布用 `v0.2.0-rc.1`。
+- 打标签前先在 `CHANGELOG.md` 加 `## vX.Y.Z - YYYY-MM-DD` 一节：简体中文，写给使用者看，分"功能""修复""升级说明"等小节，每条先用一句加粗的话说清变化，再补一两句细节；`bash scripts/release-notes.sh vX.Y.Z` 可预览发布说明。推送 `v*` 标签后 `.github/workflows/release.yml` 依次做完整检查、推送 ghcr.io 镜像（多架构）、构建 5 个平台的二进制包，并用这一节创建 Release；没有这一节时发布中止。
+- 工作流里的第三方 Action 按提交 SHA 固定（注释写版本），升级时连 SHA 一起换；每个任务只给需要的权限，不引入 `GITHUB_TOKEN` 以外的密钥。
 
 ## 验证
 

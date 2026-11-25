@@ -50,12 +50,20 @@ flowchart LR
 
 ## 快速开始
 
-需要 Docker：
+用 Docker（镜像支持 linux/amd64、linux/arm64）：
 
 ```bash
-git clone https://github.com/shiceai/agy2api.git && cd agy2api
-cp deploy/env.example .env     # 填上 AGY2API_ADMIN_PASSWORD
-docker compose up -d --build
+mkdir agy2api && cd agy2api
+curl -fsSLO https://raw.githubusercontent.com/shiceai/agy2api/main/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/shiceai/agy2api/main/deploy/env.example -o .env
+# 编辑 .env，填上 AGY2API_ADMIN_PASSWORD
+docker compose up -d
+```
+
+不用 Docker 时，从 [Releases](https://github.com/shiceai/agy2api/releases) 下载对应平台的压缩包，解压后运行：
+
+```bash
+AGY2API_ADMIN_PASSWORD=<你的口令> ./agy2api
 ```
 
 打开 `http://127.0.0.1:8080`，用管理口令登录，在"账号"页添加账号，在"密钥"页新建 API Key，然后调用：
