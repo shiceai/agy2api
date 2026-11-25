@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { LogOut } from '@lucide/vue'
+import { ArrowUp, LogOut } from '@lucide/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
 import { openVersionDialog, useVersion } from '@/lib/version'
+import GitHubIcon from './GitHubIcon.vue'
 import IconAction from './IconAction.vue'
 import LogoMark from './LogoMark.vue'
 import ThemeToggle from './ThemeToggle.vue'
@@ -39,13 +40,13 @@ const itemClass =
       <div class="flex h-12 items-center gap-2 p-2 pr-0 transition-[width,height,padding] group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0">
         <div class="relative shrink-0">
           <LogoMark class="size-8" />
-          <!-- 有新版本时标志右上角出一个绿点（收起成图标栏时只剩它），点开版本弹窗 -->
+          <!-- 收起成图标栏时放不下版本号：有新版本就在标志右上角出一个绿点，点开版本弹窗 -->
           <Tooltip v-if="version?.update">
             <TooltipTrigger as-child>
               <button
                 type="button"
                 :aria-label="`有新版本 ${version.update}`"
-                class="absolute -top-1 -right-1 size-3 rounded-full bg-emerald-500 ring-2 ring-sidebar outline-none focus-visible:ring-sidebar-ring"
+                class="absolute -top-1 -right-1 hidden size-3 rounded-full bg-emerald-500 ring-2 ring-sidebar outline-none group-data-[collapsible=icon]:block focus-visible:ring-sidebar-ring"
                 @click="openVersionDialog"
               />
             </TooltipTrigger>
@@ -53,21 +54,21 @@ const itemClass =
           </Tooltip>
         </div>
         <span class="flex-1 text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">agy2api</span>
-        <!-- 版本号徽章（20px 高、11px 字）：平时灰色描边，有新版本时浅绿底绿字。侧边栏只有 12rem，标志和名称之后只剩约 46px，
-             放不下箭头图标；名称不截断，放不下时截断版本号（开发构建的版本号很长，如 v0.1.0-3-gabc1234-dirty），悬停看全 -->
+        <!-- 版本号徽章（20px 高、11px 字）：平时灰色描边，有新版本时浅绿底绿字加向上箭头。侧边栏 13rem，标志和名称之后约 62px，
+             正好放下 v0.0.0 加箭头；名称不截断，放不下时截断版本号（开发构建的版本号很长，如 v0.1.0-3-gabc1234-dirty），悬停看全 -->
         <Tooltip v-if="version">
           <TooltipTrigger as-child>
             <button
               type="button"
               :class="[
-                'inline-flex h-5 min-w-0 items-center rounded-md border px-1 text-[11px] tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden',
+                'inline-flex h-5 min-w-0 items-center gap-0.5 rounded-md border px-1 text-[11px] tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden',
                 version.update
                   ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400'
                   : 'border-sidebar-border text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground',
               ]"
               @click="openVersionDialog"
             >
-              <span class="truncate">{{ version.version }}</span>
+              <span class="truncate">{{ version.version }}</span><ArrowUp v-if="version.update" class="size-3 shrink-0" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">{{ version.update ? `有新版本 ${version.update}` : `版本 ${version.version}` }}</TooltipContent>
@@ -91,9 +92,10 @@ const itemClass =
       </SidebarGroup>
     </SidebarContent>
     <SidebarFooter>
-      <!-- 主题、退出做成图标按钮排一行，悬停出说明；收起成图标栏时放不下，竖着排。图标中心和上面菜单的图标对齐。 -->
+      <!-- 主题、GitHub、退出做成图标按钮排一行，悬停出说明；收起成图标栏时放不下，竖着排。图标中心和上面菜单的图标对齐。 -->
       <div class="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
         <ThemeToggle placement="sidebar" />
+        <IconAction label="GitHub" as="a" href="https://github.com/shiceai/agy2api" target="_blank" rel="noopener noreferrer"><GitHubIcon class="size-3.5" /></IconAction>
         <IconAction label="退出" @click="logout"><LogOut /></IconAction>
       </div>
     </SidebarFooter>
