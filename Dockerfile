@@ -30,7 +30,7 @@ ARG VERSION=dev
 ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-X main.version=${VERSION}" -o /out/agy2api .
 
-FROM alpine:3.22
+FROM alpine:3.24
 # ca-certificates：连上游和代理用 TLS；tzdata：设 TZ 后日志按本地时间；wget（busybox 自带）给健康检查用。
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -H -u 10001 agy2api \
