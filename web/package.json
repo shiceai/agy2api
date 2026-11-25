@@ -17,7 +17,7 @@
     "cn": "0.5.2",
     "reka-ui": "2.11.0",
     "vue": "3.5.46",
-    "vue-router": "4.4.5",
+    "vue-router": "4.6.5",
     "vue-sonner": "2.0.9"
   },
   "devDependencies": {
