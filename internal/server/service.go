@@ -16,6 +16,7 @@ import (
 	"github.com/shiceai/agy2api/internal/pricing"
 	"github.com/shiceai/agy2api/internal/relay"
 	"github.com/shiceai/agy2api/internal/store"
+	"github.com/shiceai/agy2api/internal/upgrade"
 )
 
 // Service 持有各依赖，供 handler 使用。
@@ -34,6 +35,8 @@ type Service struct {
 	guard *adminGuard
 	// build 是版本信息，启动时读一次（见 session.go）。
 	build buildInfo
+	// upgrade 查新版本、执行在线升级（见 system.go）。
+	upgrade *upgrade.Manager
 	// oauth 是进行中的 Google 登录会话，零值可用。
 	oauth oauthSessions
 	// bgStop、bg 控制服务自己的后台任务：代理定时测试（egress.go）、用量记录清理（retention.go）。
@@ -44,7 +47,7 @@ type Service struct {
 	purging atomic.Bool
 }
 
-// NewService 构造服务，从库加载号池、API Key 缓存、价格和设置，启动后台额度刷新、价格同步和代理出口检测。
+// NewService 构造服务，从库加载号池、API Key 缓存、价格和设置，启动后台额度刷新、价格同步、代理出口检测和新版本检查。
 // 用完调用 Close。
 func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cryptox.Cipher) (*Service, error) {
 	trusted, err := parsePrefixes(cfg.TrustedProxies)
@@ -58,6 +61,16 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 	if len(adminAllow) > 0 {
 		slog.Info("管理端只允许这些地址访问", "allow", adminAllow)
 	}
+	up, err := upgrade.New(upgrade.Options{
+		DataDir: cfg.DataDir,
+		Version: readBuildInfo(cfg.Version).Version,
+		Enabled: cfg.Update,
+		API:     cfg.UpdateAPI,
+		Backup:  st.BackupTo,
+	})
+	if err != nil {
+		return nil, err
+	}
 	client := antigravity.NewClient(antigravity.Options{
 		TokenURL:      cfg.TokenURL,
 		UserInfoURL:   cfg.UserInfoURL,
@@ -65,14 +78,15 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 		UpstreamBases: cfg.UpstreamBases,
 	})
 	svc := &Service{
-		cfg:    cfg,
-		store:  st,
-		enc:    enc,
-		client: client,
-		relay:  relay.New(client, st, enc),
-		prices: pricing.New(st),
-		keys:   newAPIKeyCache(st),
-		build:  readBuildInfo(cfg.Version),
+		cfg:     cfg,
+		store:   st,
+		enc:     enc,
+		client:  client,
+		relay:   relay.New(client, st, enc),
+		prices:  pricing.New(st),
+		keys:    newAPIKeyCache(st),
+		build:   readBuildInfo(cfg.Version),
+		upgrade: up,
 
 		trusted:    trusted,
 		adminAllow: adminAllow,
@@ -117,14 +131,16 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 	}
 	svc.startEgressChecks()
 	svc.startUsagePurge()
+	svc.upgrade.Start()
 	return svc, nil
 }
 
-// Close 释放服务持有的后台资源：停止后台额度刷新、价格同步、代理测试和用量清理，等密钥最近使用时间写完，
+// Close 释放服务持有的后台资源：停止后台额度刷新、价格同步、代理测试、用量清理和新版本检查，等密钥最近使用时间写完，
 // 写完排队的用量记录。
 // 应在 HTTP 服务停止后调用。
 func (s *Service) Close(ctx context.Context) error {
 	s.stopOnce.Do(func() { close(s.bgStop) })
+	s.upgrade.Close()
 	done := make(chan struct{})
 	go func() {
 		s.bg.Wait()

@@ -50,6 +50,12 @@ type Config struct {
 	// 环境变量默认开启；直接构造 Config 时（测试）为关闭，不访问外网。
 	PriceSync bool
 
+	// Update 开启在线升级：每天查一次 GitHub 上的新版本，管理端可以一键升级；启动时运行数据目录里在线升级的新程序。
+	// 环境变量默认开启；直接构造 Config 时（测试）为关闭，不访问外网。
+	Update bool
+	// UpdateAPI 换查新版本用的 GitHub API 地址，只用于测试，只能是本机地址；留空用 https://api.github.com。
+	UpdateAPI string
+
 	// EmbedMock 在同进程启动模拟上游并把上游地址指向它，仅用于本机开发。
 	EmbedMock bool
 	// MockAddr 是内置模拟上游的监听地址。
@@ -72,6 +78,8 @@ func Load() Config {
 		UserInfoURL:      env("AGY2API_USERINFO_URL", ""),
 		UserAgent:        env("AGY2API_USER_AGENT", ""),
 		PriceSync:        !offEnv("AGY2API_PRICE_SYNC"),
+		Update:           !offEnv("AGY2API_UPDATE"),
+		UpdateAPI:        env("AGY2API_UPDATE_API", ""),
 		EmbedMock:        boolEnv("AGY2API_EMBED_MOCK"),
 		MockAddr:         env("AGY2API_MOCK_ADDR", "127.0.0.1:8099"),
 	}

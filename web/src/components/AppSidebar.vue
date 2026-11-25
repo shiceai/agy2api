@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
 import { LogOut } from '@lucide/vue'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
 import { useVersion } from '@/lib/version'
 import IconAction from './IconAction.vue'
@@ -14,6 +15,7 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
@@ -48,6 +50,17 @@ const itemClass =
               </div>
             </RouterLink>
           </SidebarMenuButton>
+          <!-- 有新版本时名称右侧出一个小圆点，点开是设置页的"版本"标签。和上面的链接是兄弟节点，不嵌套；收起成图标栏时隐藏 -->
+          <Tooltip v-if="version?.update">
+            <TooltipTrigger as-child>
+              <SidebarMenuAction as-child>
+                <RouterLink :to="{ path: '/settings', query: { tab: 'version' } }" :aria-label="`有新版本 ${version.update}`">
+                  <span class="size-2 rounded-full bg-emerald-500" />
+                </RouterLink>
+              </SidebarMenuAction>
+            </TooltipTrigger>
+            <TooltipContent side="right">有新版本 {{ version.update }}</TooltipContent>
+          </Tooltip>
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarHeader>

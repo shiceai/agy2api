@@ -34,6 +34,8 @@ type Encryptor interface {
 type Store struct {
 	writer *sql.DB
 	reader *sql.DB
+	// unknown 是库里执行过、但这个程序里没有的迁移：库被更新的版本改过结构。
+	unknown []string
 }
 
 // Open 打开（必要时创建）数据库，执行 ddl 目录中尚未执行的迁移，返回 Store。
@@ -102,6 +104,16 @@ func (s *Store) migrate(migrations fs.FS) error {
 		return err
 	}
 	sort.Strings(names)
+	known := make(map[string]bool, len(names))
+	for _, name := range names {
+		known[name] = true
+	}
+	for name := range applied {
+		if !known[name] {
+			s.unknown = append(s.unknown, name)
+		}
+	}
+	sort.Strings(s.unknown)
 	for _, name := range names {
 		if applied[name] {
 			continue
@@ -115,6 +127,24 @@ func (s *Store) migrate(migrations fs.FS) error {
 		}
 	}
 	return nil
+}
+
+// UnknownMigrations 返回库里执行过、但这个程序里没有的迁移（文件名）。不为空说明库被更新的版本改过结构，
+// 当前程序可能不兼容（换成了更旧的程序）。
+func (s *Store) UnknownMigrations() []string { return s.unknown }
+
+// MigrationsSince 返回 since（Unix 毫秒）之后执行的迁移数。撤销在线升级前用它判断新版本有没有改过库的结构。
+func (s *Store) MigrationsSince(ctx context.Context, since int64) (int, error) {
+	var n int
+	err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE applied_at >= ?`, since).Scan(&n)
+	return n, err
+}
+
+// BackupTo 把整个库导出到 dst（VACUUM INTO，得到一份一致、紧凑的副本），dst 不能已经存在。
+// 走读连接，不挡写入。
+func (s *Store) BackupTo(ctx context.Context, dst string) error {
+	_, err := s.reader.ExecContext(ctx, `VACUUM INTO ?`, dst)
+	return err
 }
 
 func (s *Store) appliedMigrations() (map[string]bool, error) {

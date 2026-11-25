@@ -35,6 +35,10 @@ func (s *Service) Router() http.Handler {
 		r.Use(s.adminAllowlist, s.adminAuth)
 
 		r.Get("/session", s.adminSession)
+		r.Get("/system", s.adminSystem)
+		r.Post("/system/check", s.adminCheckUpdate)
+		r.Post("/system/upgrade", s.adminUpgrade)
+		r.Post("/system/revert", s.adminRevertUpgrade)
 		r.Get("/overview", s.adminOverview)
 		r.Get("/live", s.adminLive)
 

@@ -20,6 +20,7 @@ import (
 	"github.com/shiceai/agy2api/internal/mockupstream"
 	"github.com/shiceai/agy2api/internal/server"
 	"github.com/shiceai/agy2api/internal/store"
+	"github.com/shiceai/agy2api/internal/upgrade"
 )
 
 // version 由构建脚本通过 -ldflags "-X main.version=..." 注入。
@@ -42,6 +43,22 @@ func main() {
 		slog.Warn("AGY2API_LOG_LEVEL 无法识别，使用 info", "value", cfg.LogLevel)
 	}
 
+	// 数据目录里有在线升级的更新的程序时，把进程换成它（不返回）。
+	upgrade.Boot(cfg.DataDir, version, cfg.Update)
+	if base, ok := upgrade.Running(); ok {
+		slog.Info("运行在线升级的程序", "version", version, "base", base)
+	}
+
+	if run(cfg) {
+		// 在线升级或撤销：服务和数据库都关了，换回自带的程序，由它选择运行哪个。
+		if err := upgrade.Restart(); err != nil {
+			fatal("重启失败", "err", err)
+		}
+	}
+}
+
+// run 启动服务，直到收到退出信号或需要重启（在线升级、撤销），关停后返回是否要重启。
+func run(cfg config.Config) (restart bool) {
 	// 开发联调：在同进程内另起一个模拟上游，并把令牌/上游地址指向它。
 	if cfg.EmbedMock {
 		base := startMockUpstream(cfg.MockAddr)
@@ -74,6 +91,9 @@ func main() {
 		fatal("打开数据库失败", "err", err)
 	}
 	defer st.Close()
+	if unknown := st.UnknownMigrations(); len(unknown) > 0 {
+		slog.Warn("数据库被更新的版本改过结构，当前程序可能不兼容；请换回新版本，或恢复升级前的备份", "migrations", unknown)
+	}
 
 	svc, err := server.NewService(context.Background(), cfg, st, enc)
 	if err != nil {
@@ -90,17 +110,28 @@ func main() {
 		// 请求体大小由 MaxBytesReader 限制，上游调用按请求 ctx 控制截止时间。
 	}
 
+	ln, err := net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		fatal("监听失败", "addr", cfg.Addr, "err", err)
+	}
+	slog.Info("agy2api 监听", "version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir)
+	// 能监听了才算在线升级的程序正常启动；之前退出的都计入启动失败次数。
+	upgrade.Confirm(cfg.DataDir)
 	go func() {
-		slog.Info("agy2api 监听", "version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fatal("服务退出", "err", err)
 		}
 	}()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
-	slog.Info("正在关闭")
+	select {
+	case <-stop:
+		slog.Info("正在关闭")
+	case <-svc.RestartRequested():
+		restart = true
+		slog.Info("正在关闭，之后重启")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
@@ -111,6 +142,13 @@ func main() {
 	defer closeCancel()
 	if err := svc.Close(closeCtx); err != nil {
 		slog.Error("关闭时用量记录没写完", "err", err)
+	}
+	// 重启前关停的这段时间里收到了退出信号（如 docker stop）：按退出处理，不再重启。
+	select {
+	case <-stop:
+		return false
+	default:
+		return restart
 	}
 }
 

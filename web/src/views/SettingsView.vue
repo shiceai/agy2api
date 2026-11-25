@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import TierSettings from '@/components/settings/TierSettings.vue'
 import SchedulingSettings from '@/components/settings/SchedulingSettings.vue'
@@ -9,12 +9,13 @@ import DataSettings from '@/components/settings/DataSettings.vue'
 import ClientFilterSettings from '@/components/settings/ClientFilterSettings.vue'
 import SystemPromptSettings from '@/components/settings/SystemPromptSettings.vue'
 import RequestHandlingSettings from '@/components/settings/RequestHandlingSettings.vue'
+import VersionSettings from '@/components/settings/VersionSettings.vue'
 import { useVersion } from '@/lib/version'
 
 // 当前标签记在地址的 tab 参数里，刷新、分享链接都停在同一个标签。
 const route = useRoute()
 const router = useRouter()
-const tabs = ['tiers', 'scheduling', 'client-filter', 'system-prompt', 'request', 'prices', 'data']
+const tabs = ['tiers', 'scheduling', 'client-filter', 'system-prompt', 'request', 'prices', 'data', 'version']
 const tab = computed({
   get: () => (tabs.includes(String(route.query.tab)) ? String(route.query.tab) : 'tiers'),
   set: (v: string | number) => router.replace({ query: v === 'tiers' ? {} : { tab: String(v) } }),
@@ -46,6 +47,7 @@ const version = useVersion()
         <TabsTrigger value="request">请求处理</TabsTrigger>
         <TabsTrigger value="prices">价格</TabsTrigger>
         <TabsTrigger value="data">数据</TabsTrigger>
+        <TabsTrigger value="version">版本</TabsTrigger>
       </TabsList>
     </div>
     <TabsContent value="tiers"><TierSettings /></TabsContent>
@@ -55,9 +57,13 @@ const version = useVersion()
     <TabsContent value="request"><RequestHandlingSettings /></TabsContent>
     <TabsContent value="prices"><PriceSettings /></TabsContent>
     <TabsContent value="data"><DataSettings /></TabsContent>
-    <!-- 手机上没有侧边栏：版本号放在这里（桌面在侧边栏顶部、名称下面） -->
-    <p v-if="version" class="text-xs text-muted-foreground md:hidden">
-      agy2api {{ version.version }}
+    <TabsContent value="version"><VersionSettings /></TabsContent>
+    <!-- 手机上没有侧边栏：版本号放在这里（桌面在侧边栏顶部、名称下面），有新版本时链到"版本"标签 -->
+    <p v-if="version && tab !== 'version'" class="text-xs text-muted-foreground md:hidden">
+      agy2api {{ version.version
+      }}<RouterLink v-if="version.update" :to="{ query: { tab: 'version' } }" class="text-primary underline-offset-4 hover:underline"
+        > · 有新版本 {{ version.update }}</RouterLink
+      >
     </p>
   </Tabs>
 </template>

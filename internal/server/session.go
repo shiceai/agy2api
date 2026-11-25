@@ -16,7 +16,13 @@ func readBuildInfo(version string) buildInfo {
 	return buildInfo{Version: version}
 }
 
+// sessionView 是版本号加上查到的新版本（侧边栏提示用，没有时为空）。
+type sessionView struct {
+	buildInfo
+	Update string `json:"update,omitempty"`
+}
+
 // adminSession 返回版本信息。走管理端鉴权，口令不对时已经返回 401：登录页用它当场校验口令，管理端用它显示版本。
 func (s *Service) adminSession(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.build)
+	writeJSON(w, http.StatusOK, sessionView{buildInfo: s.build, Update: s.upgrade.UpdateVersion()})
 }

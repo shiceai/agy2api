@@ -97,6 +97,45 @@ async function request<T>(method: string, path: string, body?: unknown, password
 // 本地 go run 为 dev）。
 export interface Session {
   version: string
+  // update 是查到的更新的版本（侧边栏提示），没有时不出现。
+  update?: string
+}
+
+// --- 版本与在线升级（设置页"版本"） ---
+export interface ReleaseInfo {
+  version: string
+  notes: string
+  url?: string
+  published_at?: number
+}
+// 升级进度：state 为空表示没有在升级。
+export type UpgradeState = 'downloading' | 'verifying' | 'backing_up' | 'restarting' | 'failed'
+export interface UpgradeProgress {
+  state?: UpgradeState
+  target?: string
+  received?: number
+  total?: number
+  error?: string
+}
+export interface SystemView {
+  // version 是运行中的版本；运行的是在线升级的程序时，base_version 是镜像、安装包自带的版本，installed_at 是在线升级的时间。
+  version: string
+  base_version?: string
+  installed_at?: number
+  deployment: 'docker' | 'systemd' | 'binary'
+  can_check: boolean
+  can_upgrade: boolean
+  unsupported_reason?: string
+  latest?: ReleaseInfo
+  update_available: boolean
+  checked_at?: number
+  check_error?: string
+  // failed 是停用的在线升级程序（连续起不来、文件和记录不符）。
+  failed?: { version: string; reason: string }
+  progress: UpgradeProgress
+  // new_migrations 是在线升级后新版本执行过的迁移数；unknown_migrations 是当前程序不认识的迁移（库被更新的版本改过）。
+  new_migrations?: number
+  unknown_migrations?: string[]
 }
 
 // fetchSession 读版本信息；传 password 时用它校验口令（登录页），口令不对抛 401，不触发跳转。

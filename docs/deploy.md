@@ -145,8 +145,26 @@ server {
   docker compose start
   ```
 
-- 升级：一键安装的再运行一次安装脚本（Docker 模式加 `--docker`）；手动部署的 Docker 执行 `docker compose pull && docker compose up -d`（从源码构建的 `git pull` 后加 `--build`）；systemd 换成
+- 升级：管理端可以在线升级（见下一节）；也可以手动升级：一键安装的再运行一次安装脚本（Docker 模式加 `--docker`）；手动部署的 Docker 执行 `docker compose pull && docker compose up -d`（从源码构建的 `git pull` 后加 `--build`）；systemd 换成
   新版本包里的 `agy2api` 后 `systemctl restart agy2api`。各版本的变化见 `CHANGELOG.md`。数据库迁移在启动时自动执行。升级前先备份，要回退时用旧版本加备份的数据。
+
+## 在线升级
+
+管理端"设置 → 版本"显示 GitHub 上最新的正式版和更新内容，可以一键升级。
+
+- 服务每天查一次 GitHub Releases（`api.github.com`），有新版本时侧边栏版本号旁出现小圆点。只看正式版，不看预发布版本。
+- 升级时下载当前平台的压缩包，按 `SHA256SUMS.txt` 校验，再运行一次新程序核对版本号；把数据库备份到数据目录的
+  `backups/agy2api-before-<版本>.db`（只留最近一份），然后把新程序放进数据目录的 `upgrade/`，服务原地重启换成它：
+  进程号不变，中断几秒，进行中的请求先完成。
+- 新程序放在数据目录，不替换镜像或安装的程序，启动时在两者中选版本较新的运行。所以 Docker 容器重建（改了 `.env` 后
+  `docker compose up -d`、`down` 再 `up`）、systemd 重启之后都还是新版本，`.env` 里固定的镜像版本不用跟着改。
+- 之后换上同版本或更新的镜像、安装包（改 `AGY2API_IMAGE` 后 `docker compose pull && docker compose up -d`，或重新运行安装
+  脚本），数据目录里的新程序会自动清理。
+- 新程序连续 3 次没能启动（开始监听之前就退出）时自动停用，退回原来的程序，管理端会提示。
+- "撤销在线升级"删掉新程序，重启回到镜像或安装的程序的版本。新版本改过数据库结构时，旧版本可能不兼容；要完全回退，
+  停服务后用 `backups/` 里的备份替换 `agy2api.db`（同时删掉 `agy2api.db-wal`、`agy2api.db-shm`）。
+- 支持 Linux、macOS 的 amd64、arm64。Windows 和自己编译的开发构建不支持，管理端会说明原因；Windows 上有新版本时给出下载链接。
+- `AGY2API_UPDATE=off` 关闭：不连 GitHub，也不运行数据目录里在线升级的程序。连 GitHub 走 `HTTPS_PROXY`。
 
 ## 环境变量
 
@@ -161,10 +179,12 @@ Docker Compose 写在 `.env` 里，systemd 写在 `/etc/agy2api/env` 里（模�
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理（IP 或 CIDR）：只有直连的对端在其中时才按 `X-Forwarded-For`、`X-Real-IP` 取客户端 IP；`none` 都不信 | 回环和内网地址 |
 | `AGY2API_ENCRYPTION_KEY` | 凭据加密密钥；留空时在数据目录生成 `agy2api.key` | 自动生成 |
 | `AGY2API_LOG_LEVEL` | 日志级别：`debug`、`info`、`warn`、`error`（debug 会记每次选号和上游响应） | `info` |
+| `AGY2API_UPDATE` | 在线升级：每天查一次新版本，管理端可以一键升级（见"在线升级"）；`off` 关闭 | 开启 |
 | `AGY2API_PRICE_SYNC` | 每天从官方价格页同步模型价格，用来估算用量的费用；`off` 关闭（只用已同步的价格和手动设的价格） | 开启 |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` | 全局出口代理：没绑代理的账号和价格同步走它；账号单独绑的代理在管理端"代理"页配置 | 不设 |
 | `AGY2API_UPSTREAM_BASES` | 上游基址（逗号分隔，按顺序回退），一般不用改 | 内置 |
 | `AGY2API_USER_AGENT` | 上游请求的 User-Agent，一般不用改；留空时按账号自动设置 | 按账号设置 |
 | `TZ` | 日志时区 | 系统时区（Docker 镜像里是 UTC） |
 | `AGY2API_ALLOW_NO_ADMIN_AUTH` | 跳过管理端鉴权，只用于本机开发 | `false` |
+| `AGY2API_UPDATE_API` | 查新版本用的 GitHub API 地址，只用于测试，只能是本机地址 | `https://api.github.com` |
 | `AGY2API_EMBED_MOCK`、`AGY2API_MOCK_ADDR` | 启动内置的模拟上游及其监听地址，只用于开发 | `false`、`127.0.0.1:8099` |

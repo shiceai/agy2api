@@ -38,6 +38,7 @@ import type {
   Subscription,
   SystemPrompt,
   SystemPromptResponse,
+  SystemView,
   TierFamily,
   UsageAttempt,
   UsageLog,
@@ -486,6 +487,25 @@ const routes: [string, RegExp, Handler][] = []
 const on = (method: string, pattern: string, h: Handler) => routes.push([method, new RegExp(`^${pattern}$`), h])
 
 on('GET', '/session', () => ({ version: import.meta.env.VITE_APP_VERSION || 'demo' }))
+
+// 版本：演示站已是最新版本，不演示升级（升级会重启服务、刷新页面）。
+const demoVersion = import.meta.env.VITE_APP_VERSION || 'demo'
+const systemView = (): SystemView => ({
+  version: demoVersion,
+  deployment: 'docker',
+  can_check: true,
+  can_upgrade: true,
+  latest: { version: demoVersion, notes: '', url: 'https://github.com/shiceai/agy2api/releases', published_at: start - DAY },
+  update_available: false,
+  checked_at: start,
+  progress: {},
+})
+on('GET', '/system', systemView)
+on('POST', '/system/check', async () => {
+  await sleep(600)
+  return { ...systemView(), checked_at: Date.now() }
+})
+on('POST', '/system/(upgrade|revert)', () => fail(409, '演示站不能升级'))
 on('GET', '/overview', () => overview())
 on('GET', '/live', () => tickLive())
 

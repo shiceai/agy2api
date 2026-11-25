@@ -1,8 +1,12 @@
 package store
 
 import (
+	"context"
+	"database/sql"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func sqlFile(query string) *fstest.MapFile {
@@ -88,5 +92,57 @@ func TestOpenWithEmbeddedMigrationsTwice(t *testing.T) {
 			}
 		}
 		s.Close()
+	}
+}
+
+// 库被更新的程序加过迁移时，旧程序打开它能报出不认识的迁移；MigrationsSince 按执行时间计数。
+func TestUnknownMigrationsAndMigrationsSince(t *testing.T) {
+	dir := t.TempDir()
+	v2 := fstest.MapFS{
+		"20260101_001_create_items.sql":  sqlFile(`CREATE TABLE items (id INTEGER PRIMARY KEY) STRICT;`),
+		"20260102_001_add_item_name.sql": sqlFile(`ALTER TABLE items ADD COLUMN name TEXT NOT NULL DEFAULT '';`),
+	}
+	s := mustOpen(t, dir, v2)
+	if u := s.UnknownMigrations(); len(u) != 0 {
+		t.Fatalf("迁移都认识时不应报不认识的：%v", u)
+	}
+	if n, err := s.MigrationsSince(context.Background(), 0); err != nil || n != 2 {
+		t.Fatalf("MigrationsSince(0) = %d, %v，应为 2", n, err)
+	}
+	if n, err := s.MigrationsSince(context.Background(), time.Now().Add(time.Hour).UnixMilli()); err != nil || n != 0 {
+		t.Fatalf("MigrationsSince(一小时后) = %d, %v，应为 0", n, err)
+	}
+	s.Close()
+
+	v1 := fstest.MapFS{"20260101_001_create_items.sql": v2["20260101_001_create_items.sql"]}
+	s = mustOpen(t, dir, v1)
+	defer s.Close()
+	if u := s.UnknownMigrations(); len(u) != 1 || u[0] != "20260102_001_add_item_name.sql" {
+		t.Fatalf("旧程序应报出 1 个不认识的迁移，实际 %v", u)
+	}
+}
+
+// BackupTo 导出一份能独立打开、数据一致的库。
+func TestBackupTo(t *testing.T) {
+	dir := t.TempDir()
+	s := mustOpen(t, dir, fstest.MapFS{
+		"20260101_001_create_items.sql": sqlFile(`CREATE TABLE items (id INTEGER PRIMARY KEY) STRICT; INSERT INTO items VALUES (1), (2);`),
+	})
+	defer s.Close()
+	dst := filepath.Join(t.TempDir(), "backup.db")
+	if err := s.BackupTo(context.Background(), dst); err != nil {
+		t.Fatalf("BackupTo: %v", err)
+	}
+	db, err := sql.Open("sqlite", "file:"+dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM items`).Scan(&n); err != nil || n != 2 {
+		t.Fatalf("备份里 items 有 %d 行，%v，应为 2", n, err)
+	}
+	if err := s.BackupTo(context.Background(), dst); err == nil {
+		t.Fatal("目标已存在时应报错，不覆盖")
 	}
 }

@@ -42,6 +42,8 @@ avoidance. It exposes the native Gemini `v1beta` API and comes with an admin con
 - **Usage and cost**: per-call details, cost estimated from official API prices
 - **Admin console**: works on desktop and mobile, light and dark themes; brute-force protection for the admin password,
   IP allowlist (the interface is in Chinese)
+- **Online upgrade**: upgrade to a new release from the admin console in one click; Docker containers keep the new
+  version after being recreated
 
 ## Architecture
 

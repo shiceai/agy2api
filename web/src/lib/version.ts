@@ -15,3 +15,8 @@ export function useVersion() {
   }
   return info
 }
+
+// setUpdate 在设置页查过新版本后更新侧边栏的提示。
+export function setUpdate(update: string | undefined) {
+  if (info.value) info.value = { ...info.value, update }
+}
