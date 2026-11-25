@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全问题 / Security vulnerability
+    url: https://github.com/shiceai/agy2api/security/advisories/new
+    about: 请私下报告，不要开公开 Issue / Report privately instead of opening a public issue
+  - name: 部署说明 / Deployment guide
+    url: https://github.com/shiceai/agy2api/blob/main/docs/deploy.md
+    about: 安装、升级、反向代理和环境变量 / Install, upgrade, reverse proxy and environment variables

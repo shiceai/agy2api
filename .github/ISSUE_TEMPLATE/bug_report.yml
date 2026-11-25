@@ -1,0 +1,56 @@
+name: 问题反馈 / Bug report
+description: 功能不正常、报错或和文档不符 / Something is broken or doesn't match the docs
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!WARNING]
+        > **不要贴凭据。** refresh token、API Key、管理口令、代理密码、导出的凭据 JSON 都不要贴，日志和截图也要先打码。安全问题请按[安全策略](https://github.com/shiceai/agy2api/security/policy)私下报告。
+        >
+        > **Never paste credentials** — refresh tokens, API keys, the admin password, proxy passwords or exported credential JSON. Redact logs and screenshots first. Report security issues privately as described in the [security policy](https://github.com/shiceai/agy2api/security/policy).
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / Version
+      description: 管理端侧边栏名称下面的版本号，或 `agy2api -version` 的输出 / Shown under the name in the sidebar, or printed by `agy2api -version`
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: 部署方式 / Deployment
+      options:
+        - 一键安装（systemd）/ Install script (systemd)
+        - Docker / Docker Compose
+        - 直接运行二进制 / Binary
+        - 从源码构建 / Built from source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 系统 / OS
+      placeholder: Debian 12 amd64
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述 / What happened
+      description: 做了什么、期望的结果、实际的结果 / What you did, what you expected and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: 相关的服务日志（打码后）。管理端用量记录里的请求 ID 能帮助定位 / Relevant server logs, redacted. The request ID from the usage log helps
+      render: text
