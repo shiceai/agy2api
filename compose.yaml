@@ -2,7 +2,7 @@
 # 从源码构建（在仓库根目录）：docker compose up -d --build
 #
 # 先把 deploy/env.example 复制成和本文件同目录的 .env，至少填上 AGY2API_ADMIN_PASSWORD（.env 不入库）。
-# 默认只在本机 8080 监听，由同机的反向代理（Caddy、nginx）对外提供 HTTPS，见 docs/deploy.md。
+# 默认只在本机 8249 监听，由同机的反向代理（Caddy、nginx）对外提供 HTTPS，见 docs/deploy.md。
 services:
   agy2api:
     # 默认用 ghcr.io 上最新的正式版；固定版本在 .env 里写 AGY2API_IMAGE=ghcr.io/shiceai/agy2api:0.1.0。
@@ -14,9 +14,9 @@ services:
         VERSION: ${VERSION:-dev}
     restart: unless-stopped
     env_file: .env
-    # 默认只在本机 8080 监听；要直接对外（不经反代），在 .env 里写 AGY2API_BIND=0.0.0.0:8080。
+    # 默认只在本机 8249 监听；要直接对外（不经反代），在 .env 里写 AGY2API_BIND=0.0.0.0:8249。
     ports:
-      - "${AGY2API_BIND:-127.0.0.1:8080}:8080"
+      - "${AGY2API_BIND:-127.0.0.1:8249}:8249"
     volumes:
       - data:/data
     # 关停时先等进行中的请求（最多 10 秒），再写完排队的用量记录（最多 5 秒）；默认 10 秒不够。

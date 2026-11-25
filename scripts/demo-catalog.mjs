@@ -2,12 +2,12 @@
 // 可选模型名和客户端过滤的预置名单。这些都是公开信息；不取账号、Key、代理、用量，写入前还会自检。
 //
 // 用法（服务里要有已同步的启用账号）：
-//   AGY2API_ADMIN_PASSWORD=<口令> node scripts/demo-catalog.mjs [http://127.0.0.1:8080]
+//   AGY2API_ADMIN_PASSWORD=<口令> node scripts/demo-catalog.mjs [http://127.0.0.1:8249]
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const base = (process.argv[2] ?? 'http://127.0.0.1:8080').replace(/\/$/, '') + '/api/admin'
+const base = (process.argv[2] ?? 'http://127.0.0.1:8249').replace(/\/$/, '') + '/api/admin'
 const password = process.env.AGY2API_ADMIN_PASSWORD
 if (!password) {
   console.error('先设置 AGY2API_ADMIN_PASSWORD')

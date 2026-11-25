@@ -5,7 +5,7 @@
 #
 #   curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash
 #   ... | sudo bash -s -- --version v0.2.0        安装指定版本
-#   ... | sudo bash -s -- --listen 0.0.0.0:8080   不经反向代理直接对外（只在首次安装、生成配置时生效）
+#   ... | sudo bash -s -- --listen 0.0.0.0:8249   不经反向代理直接对外（只在首次安装、生成配置时生效）
 #   ... | bash -s -- --docker                     在当前目录用 Docker Compose 部署，不装二进制
 #   ... | sudo bash -s -- --uninstall             卸载，保留配置和数据
 #
@@ -21,7 +21,7 @@ SERVICE=/etc/systemd/system/agy2api.service
 ENV_DIR=/etc/agy2api
 ENV_FILE=$ENV_DIR/env
 DATA_DIR=/var/lib/agy2api
-DEFAULT_LISTEN=127.0.0.1:8080
+DEFAULT_LISTEN=127.0.0.1:8249
 
 version=""
 listen=""
@@ -51,7 +51,7 @@ agy2api 一键安装
 
 选项（放在 bash -s -- 后面）：
   --version vX.Y.Z   安装指定版本，默认最新正式版
-  --listen 地址       监听地址，默认 127.0.0.1:8080（只在本机，由反向代理对外提供 HTTPS）
+  --listen 地址       监听地址，默认 127.0.0.1:8249（只在本机，由反向代理对外提供 HTTPS）
   --docker           在当前目录用 Docker Compose 部署
   --uninstall        卸载，保留配置和数据
   -h, --help         显示这段说明
@@ -66,7 +66,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --listen)
-      [ $# -ge 2 ] || die "--listen 后面要写地址，如 0.0.0.0:8080"
+      [ $# -ge 2 ] || die "--listen 后面要写地址，如 0.0.0.0:8249"
       listen="$2"
       shift 2
       ;;
@@ -90,7 +90,7 @@ if [ -n "$version" ] && [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.
   die "版本号格式不对：$version（应为 v0.2.0 这样）"
 fi
 if [ -n "$listen" ] && [[ ! "$listen" =~ ^(\[[0-9A-Fa-f:]+\]|[0-9A-Za-z.-]*):[0-9]{1,5}$ ]]; then
-  die "监听地址格式不对：$listen（应为 0.0.0.0:8080、127.0.0.1:8080 或 :8080）"
+  die "监听地址格式不对：$listen（应为 0.0.0.0:8249、127.0.0.1:8249 或 :8249）"
 fi
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -243,7 +243,7 @@ install_systemd() {
   case "${addr%:*}" in
     127.0.0.1 | localhost | "[::1]")
       echo "默认只在本机监听。对外提供服务请在前面放 HTTPS 反向代理（Caddy、nginx），见 deploy.md；"
-      echo "远程服务器上可以先用 SSH 隧道打开管理端：ssh -L 8080:127.0.0.1:${addr##*:} <服务器>"
+      echo "远程服务器上可以先用 SSH 隧道打开管理端：ssh -L 8249:127.0.0.1:${addr##*:} <服务器>"
       ;;
     *) warn "现在直接对外监听，管理口令和 API Key 会以明文在网络上传输；正式使用请改回本机监听，前面放 HTTPS 反向代理" ;;
   esac

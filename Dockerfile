@@ -37,10 +37,10 @@ RUN apk add --no-cache ca-certificates tzdata \
     && mkdir /data && chown agy2api:agy2api /data
 COPY --from=build /out/agy2api /usr/local/bin/agy2api
 USER agy2api
-ENV AGY2API_ADDR=:8080 \
+ENV AGY2API_ADDR=:8249 \
     AGY2API_DATA_DIR=/data
 VOLUME /data
-EXPOSE 8080
+EXPOSE 8249
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1
+    CMD wget -qO- http://127.0.0.1:8249/healthz >/dev/null || exit 1
 ENTRYPOINT ["agy2api"]

@@ -69,10 +69,10 @@ curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.s
 也可以从 [Releases](https://github.com/shiceai/agy2api/releases) 手动下载对应平台的压缩包，解压后运行
 `AGY2API_ADMIN_PASSWORD=<你的口令> ./agy2api`。
 
-打开 `http://127.0.0.1:8080`，用管理口令登录，在"账号"页添加账号，在"密钥"页新建 API Key，然后调用：
+打开 `http://127.0.0.1:8249`，用管理口令登录，在"账号"页添加账号，在"密钥"页新建 API Key，然后调用：
 
 ```bash
-curl http://127.0.0.1:8080/v1beta/models/gemini-2.5-flash:generateContent \
+curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
   -H "x-goog-api-key: agy-xxxxx" \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"role":"user","parts":[{"text":"你好"}]}]}'
@@ -96,7 +96,7 @@ curl http://127.0.0.1:8080/v1beta/models/gemini-2.5-flash:generateContent \
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `AGY2API_ADMIN_PASSWORD` | 管理口令，必填 | — |
-| `AGY2API_ADDR` | 监听地址 | `:8080` |
+| `AGY2API_ADDR` | 监听地址 | `:8249` |
 | `AGY2API_DATA_DIR` | 数据目录（数据库和加密密钥） | `./data` |
 | `AGY2API_ADMIN_ALLOW` | 只允许这些 IP 访问管理端（IP 或 CIDR，逗号分隔） | 不限 |
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理，只认它们转发来的客户端 IP | 回环和内网地址 |
@@ -118,7 +118,7 @@ CGO_ENABLED=0 go build -o bin/agy2api .
 # 用内置的模拟上游，不需要真实账号；跳过管理端鉴权
 AGY2API_EMBED_MOCK=true AGY2API_ALLOW_NO_ADMIN_AUTH=true AGY2API_DATA_DIR=./data_dev go run .
 
-cd web && pnpm dev       # 前端热更新，/api 和 /v1beta 转到 :8080
+cd web && pnpm dev       # 前端热更新，/api 和 /v1beta 转到 :8249
 bash scripts/check.sh    # 提交前检查
 ```
 

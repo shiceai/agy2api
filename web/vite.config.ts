@@ -38,9 +38,9 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     proxy: {
       // 开发态把 API 代理到 Go 后端，前后端同源，免 CORS。
-      '/api': 'http://127.0.0.1:8080',
-      '/v1beta': 'http://127.0.0.1:8080',
-      '/healthz': 'http://127.0.0.1:8080',
+      '/api': 'http://127.0.0.1:8249',
+      '/v1beta': 'http://127.0.0.1:8249',
+      '/healthz': 'http://127.0.0.1:8249',
     },
   },
 }))

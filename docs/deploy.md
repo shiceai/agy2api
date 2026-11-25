@@ -5,7 +5,7 @@ AGY2API 的数据（SQLite 库和凭据加密密钥）都在数据目录里。�
 - **Docker Compose**：仓库根目录的 `Dockerfile` 和 `compose.yaml`，数据在命名卷 `data` 里。
 - **systemd**：交叉编译出 Linux 二进制，用 `deploy/agy2api.service` 跑成服务，数据在 `/var/lib/agy2api`。
 
-两种方式默认都只在本机 8080 端口监听，由同一台机器上的反向代理对外提供 HTTPS。
+两种方式默认都只在本机 8249 端口监听（避开 8080 这类常用端口；249 是 AGY 在电话键盘上的位置），由同一台机器上的反向代理对外提供 HTTPS。
 
 ## 上公网前
 
@@ -26,7 +26,7 @@ Linux 有 systemd 时装成服务（就是下文 systemd 一节的做法）：
 
 - 程序在 `/usr/local/bin/agy2api`，配置在 `/etc/agy2api/env`（权限 600），数据在 `/var/lib/agy2api`。
 - 首次安装自动生成 24 位随机管理口令写进配置，只在安装结束时显示一次，之后到配置文件里查看。默认只监听
-  `127.0.0.1:8080`，对外请放 HTTPS 反向代理；远程服务器上可以先用 `ssh -L 8080:127.0.0.1:8080 <服务器>` 打开管理端。
+  `127.0.0.1:8249`，对外请放 HTTPS 反向代理；远程服务器上可以先用 `ssh -L 8249:127.0.0.1:8249 <服务器>` 打开管理端。
 - 再运行一次就是升级：只换程序和服务文件，配置和数据不动，旧程序备份成 `agy2api.old`，要回退时换回去重启即可。
 - 不改系统内核参数。
 
@@ -35,7 +35,7 @@ Linux 有 systemd 时装成服务（就是下文 systemd 一节的做法）：
 | 选项 | 作用 |
 | --- | --- |
 | `--version v0.2.0` | 安装指定版本，默认最新正式版 |
-| `--listen 0.0.0.0:8080` | 不经反向代理直接对外（只在首次安装、生成配置时生效；会提示明文传输的风险） |
+| `--listen 0.0.0.0:8249` | 不经反向代理直接对外（只在首次安装、生成配置时生效；会提示明文传输的风险） |
 | `--docker` | 不装程序，在当前目录放 `compose.yaml` 和 `.env`（随机口令）后启动容器；再运行一次换成新版本 |
 | `--uninstall` | 停止并删除服务和程序，配置和数据保留（会给出删除它们的命令） |
 
@@ -88,7 +88,7 @@ Caddy（自动申请 HTTPS 证书，SSE 会自动逐块转发）：
 
 ```
 api.example.com {
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:8249
 }
 ```
 
@@ -103,7 +103,7 @@ server {
     client_max_body_size 16m;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8249;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -174,7 +174,7 @@ Docker Compose 写在 `.env` 里，systemd 写在 `/etc/agy2api/env` 里（模�
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `AGY2API_ADMIN_PASSWORD` | 管理口令，必填 | — |
-| `AGY2API_ADDR` | 监听地址 | `:8080` |
+| `AGY2API_ADDR` | 监听地址 | `:8249` |
 | `AGY2API_DATA_DIR` | 数据目录（SQLite 库和凭据加密密钥） | `./data` |
 | `AGY2API_ADMIN_ALLOW` | 只允许这些客户端 IP 访问管理端（接口和页面），逗号分隔的 IP 或 CIDR；网关接口不受限 | 不限 |
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理（IP 或 CIDR）：只有直连的对端在其中时才按 `X-Forwarded-For`、`X-Real-IP` 取客户端 IP；`none` 都不信 | 回环和内网地址 |

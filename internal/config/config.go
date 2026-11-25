@@ -13,7 +13,8 @@ import (
 
 // Config 是进程级运行配置。
 type Config struct {
-	// Addr 是 HTTP 监听地址。
+	// Addr 是 HTTP 监听地址，默认 :8249：避开 8080 这类常用端口和同类工具的端口（8045、8317、7861），
+	// 249 是 AGY 在电话键盘上的位置，好记。
 	Addr string
 	// DataDir 存放 SQLite 数据库与自动生成的加密密钥。
 	DataDir string
@@ -65,7 +66,7 @@ type Config struct {
 // Load 读取环境变量构造 Config。
 func Load() Config {
 	return Config{
-		Addr:             env("AGY2API_ADDR", ":8080"),
+		Addr:             env("AGY2API_ADDR", ":8249"),
 		DataDir:          env("AGY2API_DATA_DIR", "./data"),
 		AdminPassword:    os.Getenv("AGY2API_ADMIN_PASSWORD"),
 		AllowNoAdminAuth: boolEnv("AGY2API_ALLOW_NO_ADMIN_AUTH"),

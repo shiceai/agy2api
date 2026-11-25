@@ -76,11 +76,11 @@ The script downloads and verifies SHA256 checksums; download it first if you wan
 (version, listen address, uninstall and more). You can also download the archive for your platform from
 [Releases](https://github.com/shiceai/agy2api/releases), extract it and run `AGY2API_ADMIN_PASSWORD=<your password> ./agy2api`.
 
-Open `http://127.0.0.1:8080`, sign in with the admin password, add accounts on the accounts page, create an API key on
+Open `http://127.0.0.1:8249`, sign in with the admin password, add accounts on the accounts page, create an API key on
 the keys page, then call:
 
 ```bash
-curl http://127.0.0.1:8080/v1beta/models/gemini-2.5-flash:generateContent \
+curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
   -H "x-goog-api-key: agy-xxxxx" \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}'
@@ -109,7 +109,7 @@ Common environment variables, set in `.env`; see the [deployment guide](docs/dep
 | Variable | Description | Default |
 | --- | --- | --- |
 | `AGY2API_ADMIN_PASSWORD` | Admin password, required | — |
-| `AGY2API_ADDR` | Listen address | `:8080` |
+| `AGY2API_ADDR` | Listen address | `:8249` |
 | `AGY2API_DATA_DIR` | Data directory (database and encryption key) | `./data` |
 | `AGY2API_ADMIN_ALLOW` | Only these IPs may access the admin console (IPs or CIDRs, comma-separated) | No restriction |
 | `AGY2API_TRUSTED_PROXIES` | Trusted reverse proxies; the client IP is taken only from what they forward | Loopback and private addresses |
@@ -132,7 +132,7 @@ Or use `./scripts/build.sh`, which also builds the frontend, injects the version
 # Use the built-in mock upstream (no real account needed) and skip admin auth
 AGY2API_EMBED_MOCK=true AGY2API_ALLOW_NO_ADMIN_AUTH=true AGY2API_DATA_DIR=./data_dev go run .
 
-cd web && pnpm dev       # frontend with hot reload; /api and /v1beta go to :8080
+cd web && pnpm dev       # frontend with hot reload; /api and /v1beta go to :8249
 bash scripts/check.sh    # pre-commit checks
 ```
 

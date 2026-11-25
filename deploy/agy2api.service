@@ -13,7 +13,7 @@ After=network-online.target
 [Service]
 ExecStart=/usr/local/bin/agy2api
 # 默认只在本机监听，由反向代理对外提供 HTTPS；/etc/agy2api/env 里的同名变量优先。
-Environment=AGY2API_ADDR=127.0.0.1:8080
+Environment=AGY2API_ADDR=127.0.0.1:8249
 Environment=AGY2API_DATA_DIR=/var/lib/agy2api
 EnvironmentFile=/etc/agy2api/env
 DynamicUser=yes
