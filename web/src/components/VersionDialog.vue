@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ArrowUpCircle, Download, ExternalLink, LoaderCircle, RefreshCw, TriangleAlert, Undo2 } from '@lucide/vue'
+import { ArrowUpCircle, Check, Download, ExternalLink, Info, LoaderCircle, RefreshCw, TriangleAlert, Undo2 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import { api, errorMessage, fetchSession, type SystemView, type UpgradeState } from '@/api/client'
 import { useConfirm } from '@/lib/confirm'
@@ -10,6 +10,7 @@ import { fmtAgo, fmtTime } from '@/lib/utils'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import ReleaseNotes from './ReleaseNotes.vue'
 
 // 版本弹窗：当前版本、GitHub 上最新的正式版和更新内容、一键在线升级和撤销。App.vue 里挂一次，点侧边栏的版本号、
@@ -161,25 +162,17 @@ const base = computed(() => {
   switch (view.value?.deployment) {
     case 'docker':
       return {
-        label: '镜像版本',
+        short: '镜像',
         noun: '镜像',
         hint: '想让镜像也是新版本：把 .env 里的 AGY2API_IMAGE 改成新版本，再执行 docker compose pull 和 docker compose up -d；或重新运行安装脚本加 --docker。',
       }
     case 'systemd':
-      return { label: '安装的版本', noun: '安装的程序', hint: '想让安装的程序也是新版本：重新运行一次安装脚本。' }
+      return { short: '原程序', noun: '安装的程序', hint: '想让安装的程序也是新版本：重新运行一次安装脚本。' }
     default:
-      return { label: '安装的版本', noun: '安装的程序', hint: '想让安装的程序也是新版本：把程序文件换成新版本。' }
+      return { short: '原程序', noun: '安装的程序', hint: '想让安装的程序也是新版本：把程序文件换成新版本。' }
   }
 })
 const deployments = { docker: 'Docker', systemd: 'systemd 服务', binary: '直接运行' }
-
-const headline = computed(() => {
-  const v = view.value
-  if (!v) return '查看版本和更新'
-  if (!v.can_check) return v.unsupported_reason
-  if (v.update_available) return `有新版本 ${v.latest?.version}`
-  return v.checked_at && !v.check_error ? '已是最新版本' : '查看版本和更新'
-})
 
 const progressText = computed(() => {
   const p = view.value?.progress
@@ -212,13 +205,14 @@ function fmtDate(ms: number): string {
 <template>
   <Dialog v-model:open="versionDialogOpen">
     <!-- 内容区单独滚动：更新内容很长时标题和底部按钮不动 -->
-    <DialogContent class="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
+    <DialogContent class="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
       <DialogHeader>
         <DialogTitle>版本</DialogTitle>
-        <DialogDescription>{{ headline }}</DialogDescription>
+        <!-- 状态都在下面的两格里，不用副标题重复；说明只给屏幕阅读器 -->
+        <DialogDescription class="sr-only">当前版本、最新版本和在线升级</DialogDescription>
       </DialogHeader>
 
-      <div class="-mx-6 min-h-0 space-y-4 overflow-y-auto px-6">
+      <div class="-mx-6 min-h-0 space-y-5 overflow-y-auto px-6">
         <p v-if="loadError" class="text-destructive">加载失败：{{ loadError }}</p>
         <template v-else-if="view">
           <Alert v-if="view.unknown_migrations?.length">
@@ -233,44 +227,71 @@ function fmtDate(ms: number): string {
             <AlertAction><Button size="xs" variant="outline" :disabled="acting || busy" @click="revert">清除</Button></AlertAction>
           </Alert>
 
-          <!-- 版本信息排成一行小卡片（手机上两列） -->
-          <div class="grid grid-cols-2 gap-2 sm:auto-cols-fr sm:grid-flow-col sm:grid-cols-none">
-            <div class="rounded-lg bg-muted/50 px-3 py-2.5">
+          <!-- 两格摘要，每格固定三行（标签、版本、补充说明），高度一致 -->
+          <div class="grid gap-2 sm:grid-cols-2">
+            <div class="rounded-lg bg-muted/50 px-4 py-3">
               <div class="text-xs text-muted-foreground">当前版本</div>
-              <div class="mt-1">{{ view.version }}</div>
-              <div v-if="view.installed_at" class="text-xs text-muted-foreground" :title="fmtTime(view.installed_at)">
-                {{ fmtAgo(view.installed_at) }}在线升级
+              <div class="mt-1 text-base font-semibold">{{ view.version }}</div>
+              <div v-if="view.base_version" class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                <span :title="view.installed_at ? `${fmtTime(view.installed_at)} 在线升级` : undefined">在线升级 · {{ base.short }} {{ view.base_version }}</span>
+                <Popover>
+                  <PopoverTrigger as-child>
+                    <button
+                      type="button"
+                      aria-label="在线升级：说明"
+                      class="inline-flex size-4 items-center justify-center rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                    >
+                      <Info class="size-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" class="w-72 space-y-2 text-sm leading-relaxed">
+                    <p>
+                      {{ view.installed_at ? fmtAgo(view.installed_at) : '' }}在线升级。新程序放在数据目录里，{{ view.deployment === 'docker' ? '重建容器' : '重启' }}后仍运行
+                      {{ view.version }}。
+                    </p>
+                    <p>{{ base.hint }}换上后在线升级的程序自动清理。</p>
+                  </PopoverContent>
+                </Popover>
               </div>
+              <div v-else class="mt-0.5 text-xs text-muted-foreground">{{ deployments[view.deployment] }}</div>
             </div>
-            <div v-if="view.base_version" class="rounded-lg bg-muted/50 px-3 py-2.5">
-              <div class="text-xs text-muted-foreground">{{ base.label }}</div>
-              <div class="mt-1">{{ view.base_version }}</div>
-              <div class="text-xs text-muted-foreground">{{ view.deployment === 'docker' ? '重建容器' : '重启' }}后仍运行 {{ view.version }}</div>
-            </div>
-            <div v-if="view.can_check" class="rounded-lg bg-muted/50 px-3 py-2.5">
-              <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                最新版本
-                <a v-if="view.latest?.url" :href="view.latest.url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-0.5 hover:text-foreground"
-                  >发布页<ExternalLink class="size-3"
-                /></a>
-              </div>
-              <div class="mt-1">{{ view.latest?.version ?? '—' }}</div>
-              <div v-if="view.latest?.published_at" class="text-xs text-muted-foreground">{{ fmtDate(view.latest.published_at) }} 发布</div>
-            </div>
-            <div class="rounded-lg bg-muted/50 px-3 py-2.5">
-              <div class="text-xs text-muted-foreground">部署</div>
-              <div class="mt-1">{{ deployments[view.deployment] }}</div>
+
+            <div class="rounded-lg bg-muted/50 px-4 py-3">
+              <template v-if="!view.can_check">
+                <div class="text-xs text-muted-foreground">在线升级</div>
+                <div class="mt-1 text-base font-semibold">不可用</div>
+                <div class="mt-0.5 text-xs text-muted-foreground">{{ view.unsupported_reason }}</div>
+              </template>
+              <template v-else-if="view.update_available && view.latest">
+                <div class="text-xs text-muted-foreground">新版本</div>
+                <div class="mt-1 text-base font-semibold text-emerald-700 dark:text-emerald-400">{{ view.latest.version }}</div>
+                <div class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                  <span v-if="view.latest.published_at">{{ fmtDate(view.latest.published_at) }} 发布</span>
+                  <template v-if="view.latest.url">
+                    <span v-if="view.latest.published_at">·</span>
+                    <a :href="view.latest.url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-0.5 hover:text-foreground"
+                      >发布页<ExternalLink class="size-3"
+                    /></a>
+                  </template>
+                </div>
+              </template>
+              <template v-else>
+                <div class="text-xs text-muted-foreground">最新版本</div>
+                <div v-if="view.checked_at && !view.check_error" class="mt-1 flex items-center gap-1 text-base font-semibold">
+                  已是最新<Check class="size-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div v-else class="mt-1 text-base font-semibold">{{ view.latest?.version ?? '—' }}</div>
+                <div v-if="view.check_error" class="mt-0.5 text-xs text-destructive">检查失败：{{ view.check_error }}</div>
+                <div v-else class="mt-0.5 text-xs text-muted-foreground" title="每天自动检查一次">
+                  {{ checking ? '检查中…' : view.checked_at ? `${fmtAgo(view.checked_at)}检查` : '还没检查' }}
+                </div>
+              </template>
             </div>
           </div>
 
-          <p v-if="view.can_check && view.check_error" class="text-destructive">{{ fmtAgo(view.checked_at ?? 0) }}检查失败：{{ view.check_error }}</p>
-          <p v-else-if="view.can_check" class="text-muted-foreground" :title="view.checked_at ? fmtTime(view.checked_at) : undefined">
-            {{ checking ? '检查中…' : view.checked_at ? `${fmtAgo(view.checked_at)}检查` : '还没检查过' }}，每天自动检查一次
-          </p>
           <p v-if="view.can_check && !view.can_upgrade" class="text-muted-foreground">{{ view.unsupported_reason }}</p>
-          <p v-if="view.base_version" class="text-muted-foreground">{{ base.hint }}</p>
 
-          <div v-if="progressText" class="space-y-2 rounded-lg border p-3">
+          <div v-if="progressText" class="space-y-2 rounded-lg border px-4 py-3">
             <div class="flex items-center gap-2"><LoaderCircle class="size-4 animate-spin text-muted-foreground" />{{ progressText }}</div>
             <div v-if="view.progress.state === 'downloading'" class="h-1.5 overflow-hidden rounded-full bg-muted">
               <div class="h-full rounded-full bg-primary transition-[width]" :style="{ width: `${percent}%` }" />
@@ -278,10 +299,10 @@ function fmtDate(ms: number): string {
           </div>
           <p v-else-if="view.progress.state === 'failed'" class="text-destructive">升级到 {{ view.progress.target }} 失败：{{ view.progress.error }}</p>
 
-          <div v-if="view.update_available && view.latest?.notes" class="space-y-2">
-            <div class="font-semibold">{{ view.latest.version }} 更新内容</div>
-            <div class="rounded-lg border p-3"><ReleaseNotes :notes="view.latest.notes" /></div>
-          </div>
+          <section v-if="view.update_available && view.latest?.notes">
+            <h3 class="mb-2 font-semibold">更新内容</h3>
+            <ReleaseNotes :notes="view.latest.notes" />
+          </section>
         </template>
       </div>
 
