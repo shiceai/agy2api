@@ -18,6 +18,8 @@
   <img src="https://img.shields.io/badge/API-Gemini%20v1beta-4285F4?style=flat-square" alt="Gemini v1beta">
 </p>
 
+<p align="center"><a href="https://agy2api.pages.dev"><strong>Live demo</strong></a> (password <code>demo</code>, simulated data)</p>
+
 <p align="center"><a href="README.md">简体中文</a> | English</p>
 
 agy2api manages multiple Antigravity accounts, handling account selection, cooldown recovery, failover and low-quota

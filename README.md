@@ -18,6 +18,8 @@
   <img src="https://img.shields.io/badge/API-Gemini%20v1beta-4285F4?style=flat-square" alt="Gemini v1beta">
 </p>
 
+<p align="center"><a href="https://agy2api.pages.dev"><strong>在线演示</strong></a>（口令 <code>demo</code>，数据是模拟的）</p>
+
 <p align="center">简体中文 | <a href="README_EN.md">English</a></p>
 
 管理多个 Antigravity 账号，负责选号、冷却恢复、失败换号和额度避让，对外提供 Gemini 原生 `v1beta` 接口，自带管理端。
