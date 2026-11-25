@@ -60,7 +60,7 @@ const itemClass =
             <TooltipContent side="right">有新版本 {{ version.update }}</TooltipContent>
           </Tooltip>
         </div>
-        <div class="grid min-w-0 flex-1 justify-items-start gap-0.5 group-data-[collapsible=icon]:hidden">
+        <div class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] justify-items-start gap-0.5 group-data-[collapsible=icon]:hidden">
           <span :title="appName" class="max-w-full truncate text-base leading-5 font-semibold tracking-tight">{{ appName }}</span>
           <!-- 版本号徽章（18px 高、11px 字）：平时灰色描边，有新版本时浅绿底绿字加向上箭头。
                开发构建的版本号很长（v0.1.0-3-gabc1234-dirty），放不下时截断，悬停看全 -->
