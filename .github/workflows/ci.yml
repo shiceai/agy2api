@@ -1,0 +1,46 @@
+# 检查：推送到 main 和收到 PR 时跑 scripts/check.sh（gofmt、go.mod 整洁、vet、staticcheck、带 -race 的测试、
+# 前端类型检查），再构建一次前端。发版流程（release.yml）也调用它。第三方 Action 按提交 SHA 固定，注释里是对应版本。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# 同一个 PR 推了新提交时取消旧的检查；main 和发版的检查都跑完。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PNPM_VERSION: 12.21.0
+  NODE_VERSION: '24'
+
+jobs:
+  check:
+    name: 检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: 完整检查（gofmt、vet、staticcheck、带 -race 的测试、前端类型检查）
+        run: bash scripts/check.sh
+      - name: 前端构建
+        working-directory: web
+        run: pnpm build
