@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,7 @@ type conversation struct {
 }
 
 func conversationFor(accountID int64, caller string, inner map[string]any) conversation {
-	seed := fmt.Sprintf("%d\x00%s\x00%s", accountID, caller, FirstUserContent(inner))
+	seed := conversationSeed(accountID, caller, inner)
 	return conversation{
 		cascadeID:    derivedUUID("cascade", seed),
 		trajectoryID: derivedUUID("trajectory", seed),
@@ -57,6 +58,11 @@ func (c conversation) labels(wireModel string, model *ModelInfo) map[string]any 
 		labels["model_enum"] = model.Enum
 	}
 	return labels
+}
+
+// conversationSeed 是派生对话内各种 ID 的种子：同一账号、同一调用方、同一首条用户消息视为同一对话。
+func conversationSeed(accountID int64, caller string, inner map[string]any) string {
+	return fmt.Sprintf("%d\x00%s\x00%s", accountID, caller, FirstUserContent(inner))
 }
 
 // FirstUserContent 返回第一条用户消息的规范 JSON（map 键有序），没有时返回空串。对话的会话 ID 和会话粘性都按它认对话。
@@ -96,4 +102,22 @@ func derivedUUID(kind, seed string) string {
 	b[6] = b[6]&0x0f | 0x40 // 版本 4
 	b[8] = b[8]&0x3f | 0x80 // RFC 4122 变体
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// base58Alphabet 是 Anthropic、Vertex 的 ID 用的字母表，不含 0、O、I、l。
+const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+// toolCallID 由对话种子派生第 n 个（从 1 开始）补出的工具调用 id。形态照上游实抓：Cloud Code 给 Claude
+// 工具调用分配的 id 是 toolu_vrtx_01 加 22 位 base58（2026-11-25 用真实账号抓的非流式、流式回包一致），
+// 官方客户端在历史里回传的就是这种 id。同一对话每轮补出的 id 相同，不同对话互不相同。
+func toolCallID(seed string, n int) string {
+	sum := sha256.Sum256([]byte(conversationSalt + "tool_call\x00" + seed + "\x00" + strconv.Itoa(n)))
+	v := new(big.Int).SetBytes(sum[:])
+	base, digit := big.NewInt(int64(len(base58Alphabet))), new(big.Int)
+	b := make([]byte, 22)
+	for i := range b {
+		v.DivMod(v, base, digit)
+		b[i] = base58Alphabet[digit.Int64()]
+	}
+	return "toolu_vrtx_01" + string(b)
 }

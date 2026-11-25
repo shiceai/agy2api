@@ -2,6 +2,8 @@ package antigravity
 
 import (
 	"encoding/json"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -57,34 +59,59 @@ func TestAdaptAssignsToolCallIDs(t *testing.T) {
 			{"functionResponse":{"name":"get_weather","response":{"temp":20}}}]},
 		{"role":"model","parts":[{"functionCall":{"name":"get_weather","args":{"city":"Oslo"}}}]},
 		{"role":"user","parts":[{"function_response":{"name":"get_weather","response":{"temp":5}}}]}]}`
-	contents := adaptedRequest(t, "claude-sonnet-5-5-low", body)["contents"].([]any)
-	id := func(content, part int, kind string) any {
+	claudeContents := func(body string) []any {
+		return adaptedRequest(t, "claude-sonnet-5-5-low", body)["contents"].([]any)
+	}
+	id := func(contents []any, content, part int, kind string) any {
 		parts := contents[content].(map[string]any)["parts"].([]any)
 		return parts[part].(map[string]any)[kind].(map[string]any)["id"]
 	}
+	contents := claudeContents(body)
+	call1, call2, call3 := id(contents, 1, 0, "functionCall"), id(contents, 1, 1, "functionCall"), id(contents, 3, 0, "functionCall")
+	// 形态照上游实抓：toolu_vrtx_01 加 22 位 base58。
+	upstreamID := regexp.MustCompile(`^toolu_vrtx_01[1-9A-HJ-NP-Za-km-z]{22}$`)
+	for _, v := range []any{call1, call2, call3} {
+		if s, _ := v.(string); !upstreamID.MatchString(s) {
+			t.Fatalf("补出的 id 形态不对：%v", v)
+		}
+	}
+	if call1 == call2 || call2 == call3 || call1 == call3 {
+		t.Fatalf("补出的 id 应互不相同：%v %v %v", call1, call2, call3)
+	}
 	checks := []struct {
 		content, part int
-		kind, want    string
+		kind          string
+		want          any
 	}{
-		{1, 0, "functionCall", "toolu_q2a_1"},
-		{1, 1, "functionCall", "toolu_q2a_2"},
 		{1, 2, "functionCall", "client_1"},
 		{2, 0, "functionResponse", "client_1"},
-		{2, 1, "functionResponse", "toolu_q2a_1"},
-		{2, 2, "functionResponse", "toolu_q2a_2"},
-		{3, 0, "functionCall", "toolu_q2a_3"},
-		{4, 0, "functionResponse", "toolu_q2a_3"}, // snake_case 也已归一
+		{2, 1, "functionResponse", call1},
+		{2, 2, "functionResponse", call2},
+		{4, 0, "functionResponse", call3}, // snake_case 也已归一
 	}
 	for _, c := range checks {
-		if got := id(c.content, c.part, c.kind); got != c.want {
-			t.Errorf("contents[%d].parts[%d].%s.id 应为 %s，实际 %v", c.content, c.part, c.kind, c.want, got)
+		if got := id(contents, c.content, c.part, c.kind); got != c.want {
+			t.Errorf("contents[%d].parts[%d].%s.id 应为 %v，实际 %v", c.content, c.part, c.kind, c.want, got)
 		}
 	}
 
-	// 同一段历史每次补出的 id 相同。
-	again := adaptedRequest(t, "claude-sonnet-5-5-low", body)["contents"]
-	if mustJSON(t, again) != mustJSON(t, contents) {
+	// 同一段历史每次补出的 id 相同；只到第一轮工具结果的历史（上一轮的请求）补出的 id 和完整历史里的一样。
+	if mustJSON(t, claudeContents(body)) != mustJSON(t, contents) {
 		t.Fatal("同一段历史应补出相同的 id")
+	}
+	var full map[string]any
+	if err := json.Unmarshal([]byte(body), &full); err != nil {
+		t.Fatal(err)
+	}
+	full["contents"] = full["contents"].([]any)[:3]
+	earlier := claudeContents(mustJSON(t, full))
+	if id(earlier, 1, 0, "functionCall") != call1 || id(earlier, 1, 1, "functionCall") != call2 {
+		t.Fatal("追加历史不应改变前面补出的 id")
+	}
+	// 不同对话（首条用户消息不同）补出的 id 不同。
+	other := claudeContents(strings.Replace(body, "weather in Paris and Rome", "weather in Oslo", 1))
+	if id(other, 1, 0, "functionCall") == call1 {
+		t.Fatal("不同对话应补出不同的 id")
 	}
 	// Gemini 不补 id。
 	gemini := adaptedRequest(t, "gemini-3.8-flash-low", body)["contents"].([]any)

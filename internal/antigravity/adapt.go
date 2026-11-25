@@ -1,9 +1,6 @@
 package antigravity
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 // adaptForModel 按上游实测结果调整请求（2026-11-23 用真实账号逐项验证）：
 //
@@ -14,8 +11,8 @@ import (
 //     functionResponse 配对。多轮对话不需要占位思考块，不加。
 //
 // 调用前请求体已经过 normalizeRequest，字段名都是 camelCase。
-func adaptForModel(inner map[string]any, wireModel string) {
-	lower := strings.ToLower(wireModel)
+func adaptForModel(inner map[string]any, p BuildParams) {
+	lower := strings.ToLower(p.WireModel)
 	switch {
 	case strings.HasPrefix(lower, "gemini"):
 		if gen, ok := inner["generationConfig"].(map[string]any); ok {
@@ -24,7 +21,7 @@ func adaptForModel(inner map[string]any, wireModel string) {
 		}
 	case strings.HasPrefix(lower, "claude"):
 		dropTrailingModelTurns(inner)
-		assignToolCallIDs(inner)
+		assignToolCallIDs(inner, conversationSeed(p.AccountID, p.Caller, inner))
 	}
 }
 
@@ -51,8 +48,9 @@ type pendingCall struct {
 
 // assignToolCallIDs 给缺 id 的 functionCall 按出现顺序补上 id，再把之后缺 id 的 functionResponse
 // 按名字依次配对到还没回应的调用（名字都对不上时配第一个）。Gemini 协议的客户端通常不带 id，
-// 而 Claude 的 tool_use 和 tool_result 要靠 id 对上。同一段历史每次补出的 id 相同。
-func assignToolCallIDs(inner map[string]any) {
+// 而 Claude 的 tool_use 和 tool_result 要靠 id 对上。id 由对话种子和序号派生（见 toolCallID），
+// 同一段历史每次补出的 id 相同，后续轮次追加历史也不改变前面的 id。
+func assignToolCallIDs(inner map[string]any, seed string) {
 	contents, _ := inner["contents"].([]any)
 	var pending []pendingCall
 	n := 0
@@ -71,7 +69,7 @@ func assignToolCallIDs(inner map[string]any) {
 				id, _ := call["id"].(string)
 				if id == "" {
 					n++
-					id = fmt.Sprintf("toolu_q2a_%d", n)
+					id = toolCallID(seed, n)
 					call["id"] = id
 				}
 				name, _ := call["name"].(string)

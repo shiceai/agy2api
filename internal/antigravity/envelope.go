@@ -80,7 +80,7 @@ func buildRequest(p BuildParams) map[string]any {
 	normalizeRequest(inner)
 	// CLI 不发送 safetySettings。
 	delete(inner, "safetySettings")
-	adaptForModel(inner, p.WireModel)
+	adaptForModel(inner, p)
 
 	sanitizeTools(inner)
 	stubToolThoughtSignatures(inner)
