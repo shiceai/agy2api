@@ -55,6 +55,7 @@ const columnDefs: ColumnDef[] = [
   { key: 'time', label: '时间', defaultVisible: true },
   { key: 'status', label: '状态', defaultVisible: true },
   { key: 'model', label: '模型', defaultVisible: true },
+  { key: 'protocol', label: '接口', defaultVisible: true },
   { key: 'reasoning', label: '推理强度', defaultVisible: true },
   { key: 'token', label: 'Token', defaultVisible: true },
   // 按官方价估算，悬停看算式。
@@ -94,6 +95,7 @@ interface DimFilter {
 }
 const status = ref<'all' | 'success' | 'error'>('all')
 const stream = ref<'all' | 'stream' | 'sync'>('all')
+const protocol = ref<'all' | 'gemini' | 'anthropic'>('all')
 const dimFilters = ref<Partial<Record<Dimension, DimFilter>>>({})
 const activeDims = computed(() => (['model', 'account', 'apiKey'] as const).filter((d) => dimFilters.value[d]))
 const requestIdInput = ref('')
@@ -105,7 +107,9 @@ const since = ref(0)
 const detailId = ref<number | null>(null)
 
 const pages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
-const hasFilter = computed(() => status.value !== 'all' || stream.value !== 'all' || activeDims.value.length > 0 || !!requestId.value)
+const hasFilter = computed(
+  () => status.value !== 'all' || stream.value !== 'all' || protocol.value !== 'all' || activeDims.value.length > 0 || !!requestId.value,
+)
 
 function handle(e: unknown) {
   error.value = errorMessage(e)
@@ -145,6 +149,7 @@ function logsQuery(): string {
   })
   if (status.value !== 'all') q.set('status', status.value)
   if (stream.value !== 'all') q.set('stream', stream.value)
+  if (protocol.value !== 'all') q.set('protocol', protocol.value)
   if (requestId.value) q.set('request_id', requestId.value)
   const f = dimFilters.value
   if (f.model) q.set('model', f.model.value)
@@ -212,6 +217,10 @@ function setStream(v: typeof stream.value) {
   stream.value = v
   applyFilters()
 }
+function setProtocol(v: typeof protocol.value) {
+  protocol.value = v
+  applyFilters()
+}
 function applyFilters() {
   page.value = 1
   loadLogs()
@@ -245,6 +254,7 @@ function clearRequestId() {
 function clearFilters() {
   status.value = 'all'
   stream.value = 'all'
+  protocol.value = 'all'
   dimFilters.value = {}
   requestId.value = ''
   requestIdInput.value = ''
@@ -270,6 +280,8 @@ const clickable = 'cursor-pointer decoration-dotted underline-offset-2 hover:und
 const dimLabels: Record<Dimension, string> = { model: '模型', account: '账号', apiKey: '密钥' }
 const statusOptions = [{ value: 'all', label: '全部' }, { value: 'success', label: '成功' }, { value: 'error', label: '错误' }] as const
 const streamOptions = [{ value: 'all', label: '全部' }, { value: 'stream', label: '流式' }, { value: 'sync', label: '非流式' }] as const
+const protocolOptions = [{ value: 'all', label: '全部' }, { value: 'gemini', label: 'Gemini' }, { value: 'anthropic', label: 'Anthropic' }] as const
+const protocolLabel = (p: string) => (p === 'anthropic' ? 'Anthropic' : 'Gemini')
 </script>
 
 <template>
@@ -282,6 +294,7 @@ const streamOptions = [{ value: 'all', label: '全部' }, { value: 'stream', lab
         <SegmentedControl :model-value="range" :options="ranges" label="时间范围" hide-label @update:model-value="setRange" />
         <SegmentedControl :model-value="status" :options="statusOptions" label="状态" @update:model-value="setStatus" />
         <SegmentedControl :model-value="stream" :options="streamOptions" label="类型" @update:model-value="setStream" />
+        <SegmentedControl :model-value="protocol" :options="protocolOptions" label="接口" @update:model-value="setProtocol" />
         <form class="relative min-w-0 flex-1 basis-48 sm:max-w-64" @submit.prevent="applyRequestId">
           <Search class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input v-model="requestIdInput" placeholder="按请求 ID 查找，回车确认" class="h-8 pl-8" aria-label="请求 ID" />
@@ -327,6 +340,7 @@ const streamOptions = [{ value: 'all', label: '全部' }, { value: 'stream', lab
               </button>
               <Badge v-if="r.reasoning" variant="outline" :class="reasoningClass(r.reasoning)">{{ reasoningText(r.reasoning) }}</Badge>
               <Badge v-if="r.stream || r.detail?.fake_stream" variant="outline" class="text-muted-foreground">{{ r.detail?.fake_stream ? '假流' : '流' }}</Badge>
+              <Badge v-if="r.protocol === 'anthropic'" variant="outline" class="text-muted-foreground">Anthropic</Badge>
             </div>
             <UsageStatus :record="r" inline class="shrink-0" />
           </div>
@@ -399,6 +413,8 @@ const streamOptions = [{ value: 'all', label: '全部' }, { value: 'stream', lab
                   </FilterButton>
                   <Badge v-if="r.stream || r.detail?.fake_stream" variant="outline" class="text-muted-foreground">{{ r.detail?.fake_stream ? '假流' : '流' }}</Badge>
                 </span>
+
+                <span v-else-if="key === 'protocol'" class="text-muted-foreground">{{ protocolLabel(r.protocol) }}</span>
 
                 <template v-else-if="key === 'reasoning'">
                   <Badge v-if="r.reasoning" variant="outline" :class="reasoningClass(r.reasoning)">{{ reasoningText(r.reasoning) }}</Badge>

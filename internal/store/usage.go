@@ -19,6 +19,8 @@ type UsageRecord struct {
 	ResolvedModel string `json:"resolved_model"`
 	// UpstreamModel 是上游响应里报告的模型（modelVersion）。
 	UpstreamModel string `json:"upstream_model"`
+	// Protocol 是入站接口：gemini 或 anthropic。
+	Protocol string `json:"protocol"`
 	// Reasoning 是推理强度：档位（low/medium/high/xhigh）、客户端的 thinkingLevel，或 "budget:<N>"。
 	Reasoning string `json:"reasoning"`
 	// PromptTokens 是输入 token 总数，含命中缓存的 CachedTokens。
@@ -42,6 +44,12 @@ type UsageRecord struct {
 	CostNanos *int64 `json:"cost_nanos"`
 }
 
+// 入站接口（UsageRecord.Protocol）。
+const (
+	ProtocolGemini    = "gemini"
+	ProtocolAnthropic = "anthropic"
+)
+
 // InsertUsage 在一个事务里写入若干条用量记录。CreatedAt 为 0 的记录用当前时间。
 func (s *Store) InsertUsage(ctx context.Context, records ...*UsageRecord) error {
 	if len(records) == 0 {
@@ -56,8 +64,8 @@ func (s *Store) InsertUsage(ctx context.Context, records ...*UsageRecord) error 
 		INSERT INTO usage_records
 		  (request_id,api_key_id,account_id,request_model,resolved_model,upstream_model,reasoning,
 		   prompt_tokens,output_tokens,cached_tokens,thoughts_tokens,total_tokens,status_code,stream,
-		   first_token_ms,latency_ms,created_at,client_ip,user_agent,detail_json,cost_nanos)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+		   first_token_ms,latency_ms,created_at,client_ip,user_agent,detail_json,cost_nanos,protocol)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		return err
 	}
@@ -72,9 +80,13 @@ func (s *Store) InsertUsage(ctx context.Context, records ...*UsageRecord) error 
 		if createdAt == 0 {
 			createdAt = now
 		}
+		protocol := r.Protocol
+		if protocol == "" {
+			protocol = ProtocolGemini
+		}
 		if _, err := stmt.ExecContext(ctx, r.RequestID, r.APIKeyID, r.AccountID, r.RequestModel, r.ResolvedModel,
 			r.UpstreamModel, r.Reasoning, r.PromptTokens, r.OutputTokens, r.CachedTokens, r.ThoughtsTokens,
-			r.TotalTokens, r.StatusCode, stream, r.FirstTokenMs, r.LatencyMs, createdAt, r.ClientIP, r.UserAgent, string(r.Detail), r.CostNanos); err != nil {
+			r.TotalTokens, r.StatusCode, stream, r.FirstTokenMs, r.LatencyMs, createdAt, r.ClientIP, r.UserAgent, string(r.Detail), r.CostNanos, protocol); err != nil {
 			return err
 		}
 	}
@@ -84,7 +96,7 @@ func (s *Store) InsertUsage(ctx context.Context, records ...*UsageRecord) error 
 // usageCols 是读用量记录的列，顺序与 scanUsage 一致；查询里 usage_records 的别名必须是 u。
 const usageCols = `u.id,u.request_id,u.api_key_id,u.account_id,u.request_model,u.resolved_model,u.upstream_model,
 	u.reasoning,u.prompt_tokens,u.output_tokens,u.cached_tokens,u.thoughts_tokens,u.total_tokens,u.status_code,
-	u.stream,u.first_token_ms,u.latency_ms,u.created_at,u.client_ip,u.user_agent,u.detail_json,u.cost_nanos`
+	u.stream,u.first_token_ms,u.latency_ms,u.created_at,u.client_ip,u.user_agent,u.detail_json,u.cost_nanos,u.protocol`
 
 // scanUsage 按 usageCols 的顺序读一行到 r，extra 是查询里跟在后面的附加列。
 func scanUsage(row interface{ Scan(...any) error }, r *UsageRecord, extra ...any) error {
@@ -93,7 +105,7 @@ func scanUsage(row interface{ Scan(...any) error }, r *UsageRecord, extra ...any
 	var detail string
 	dest := []any{&r.ID, &r.RequestID, &r.APIKeyID, &r.AccountID, &r.RequestModel, &r.ResolvedModel, &r.UpstreamModel,
 		&r.Reasoning, &r.PromptTokens, &r.OutputTokens, &cached, &thoughts, &r.TotalTokens, &r.StatusCode,
-		&stream, &firstToken, &r.LatencyMs, &r.CreatedAt, &r.ClientIP, &r.UserAgent, &detail, &cost}
+		&stream, &firstToken, &r.LatencyMs, &r.CreatedAt, &r.ClientIP, &r.UserAgent, &detail, &cost, &r.Protocol}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return err
 	}
@@ -217,6 +229,8 @@ type UsageFilter struct {
 	// Stream 为 "stream"、"sync"，或空。
 	Stream    string
 	RequestID string
+	// Protocol 是入站接口（ProtocolGemini、ProtocolAnthropic），空为不限。
+	Protocol string
 }
 
 func (f UsageFilter) where() (string, []any) {
@@ -235,6 +249,10 @@ func (f UsageFilter) where() (string, []any) {
 	if f.Model != "" {
 		conds = append(conds, "u.request_model = ?")
 		args = append(args, f.Model)
+	}
+	if f.Protocol != "" {
+		conds = append(conds, "u.protocol = ?")
+		args = append(args, f.Protocol)
 	}
 	if f.AccountID > 0 {
 		conds = append(conds, "u.account_id = ?")

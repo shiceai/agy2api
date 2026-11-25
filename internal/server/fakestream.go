@@ -35,9 +35,9 @@ type generateResult struct {
 	err  error
 }
 
-// handleFakeStream 处理假流式请求，model 是去掉前缀后的模型名。
-func (s *Service) handleFakeStream(w http.ResponseWriter, r *http.Request, model string, start time.Time) {
-	req := inboundRequest(r, model, false)
+// handleFakeStream 处理假流式请求，model 是去掉前缀并解析别名后的模型名，requested 是客户端原来的模型名。
+func (s *Service) handleFakeStream(w http.ResponseWriter, r *http.Request, model, requested string, start time.Time) {
+	req := inboundRequest(r, model, requested, false)
 	req.FakeStream = true
 	if s.quotaExceeded(w, r, req, start) {
 		return

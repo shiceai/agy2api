@@ -128,6 +128,13 @@ func (r *Relay) Models() []antigravity.ModelInfo {
 	return r.pool.Models()
 }
 
+// KnownModel 报告号池目录里有没有这个模型（精确 ID 或家族名），只查内存、不刷新目录。模型别名解析用它
+// 判断客户端的模型名要不要映射。
+func (r *Relay) KnownModel(requested string) bool {
+	_, ok := r.pool.Lookup(requested, r.config().configuredTier(requested))
+	return ok
+}
+
 // LookupModel 解析请求的模型名（支持家族名，按该家族的配置档位选档），返回解析后的模型信息。
 // 解析不出时先刷新模型目录（限频）再试一次。
 func (r *Relay) LookupModel(ctx context.Context, requested string) (antigravity.ModelInfo, bool) {
@@ -324,7 +331,12 @@ func controlCredential(a *pool.Account, token string) *antigravity.Credential {
 
 // Request 是一次生成请求。
 type Request struct {
+	// Model 是要用的模型名（精确 ID 或家族名，已经过模型别名解析）。
 	Model string
+	// RequestModel 是客户端请求的原始模型名，记进用量；为空时同 Model。
+	RequestModel string
+	// Protocol 是入站接口（store.ProtocolGemini、store.ProtocolAnthropic），记进用量；为空按 Gemini。
+	Protocol string
 	// Body 是 Gemini 原生请求体（contents、tools、generationConfig 等）。
 	Body     map[string]any
 	Stream   bool
@@ -334,6 +346,14 @@ type Request struct {
 	UserAgent string
 	// FakeStream 表示客户端请求的是假流式（Stream 为 false，结果由入站协议按流式返回），只记进用量详情。
 	FakeStream bool
+}
+
+// requestModel 返回记进用量的请求模型：客户端原始的模型名。
+func (req Request) requestModel() string {
+	if req.RequestModel != "" {
+		return req.RequestModel
+	}
+	return req.Model
 }
 
 // Response 是一次成功（2xx）的生成调用，Body 是标准 Gemini 形态（非流式为完整 JSON，流式为逐条解包的 SSE）。
@@ -760,8 +780,9 @@ func usageRecord(requestID string, req Request, tr *trace, c *call) *store.Usage
 		RequestID:     requestID,
 		APIKeyID:      req.APIKeyID,
 		AccountID:     c.lease.Account.ID,
-		RequestModel:  req.Model,
+		RequestModel:  req.requestModel(),
 		ResolvedModel: c.lease.Model,
+		Protocol:      req.Protocol,
 		Reasoning:     antigravity.ReasoningLabel(c.lease.Model, req.Body),
 		StatusCode:    c.up.Status,
 		Stream:        req.Stream,

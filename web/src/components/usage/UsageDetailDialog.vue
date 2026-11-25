@@ -56,6 +56,13 @@ interface Field {
   wide?: boolean // 占满一行
   mono?: boolean
 }
+// inboundAPI 描述客户端调用的接口：Anthropic 的 /v1/messages，或 Gemini 的方法名（假流式时上游实际用非流式）。
+function inboundAPI(r: UsageLog): string {
+  if (r.protocol === 'anthropic') return r.stream ? 'Anthropic /v1/messages（流式）' : 'Anthropic /v1/messages'
+  if (r.detail?.fake_stream) return 'Gemini streamGenerateContent（上游用非流式）'
+  return r.stream ? 'Gemini streamGenerateContent' : 'Gemini generateContent'
+}
+
 const sections = computed(() => {
   const r = record.value
   if (!r) return []
@@ -75,7 +82,7 @@ const sections = computed(() => {
         { label: '请求模型', value: r.request_model },
         { label: '实际发出', value: r.resolved_model || '—' },
         { label: '上游返回', value: r.upstream_model || '—' },
-        { label: '接口', value: r.detail?.fake_stream ? 'streamGenerateContent（上游用非流式）' : r.stream ? 'streamGenerateContent' : 'generateContent' },
+        { label: '接口', value: inboundAPI(r) },
       ] as Field[],
     },
     {

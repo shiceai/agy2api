@@ -16,23 +16,36 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/shiceai/agy2api/internal/anthropic"
 	"github.com/shiceai/agy2api/internal/antigravity"
 	"github.com/shiceai/agy2api/internal/logx"
 	"github.com/shiceai/agy2api/internal/relay"
+	"github.com/shiceai/agy2api/internal/store"
 )
 
 // inboundBodyLimit 是入站 Gemini 请求体上限（16 MiB）。
 const inboundBodyLimit = 16 << 20
 
-// listModels 返回启用账号目录的并集，Gemini models[] 形态；Key 限制了模型时只列允许的。
+// listModels 返回启用账号目录的并集，Gemini models[] 形态；Key 限制了模型时只列允许的。带 anthropic-version 头
+// （Anthropic SDK）时返回 Anthropic 格式。
 func (s *Service) listModels(w http.ResponseWriter, r *http.Request) {
 	key := apiKeyFromContext(r.Context())
 	catalog := s.relay.Models()
 	models := make([]map[string]any, 0, len(catalog))
+	anthropicFormat := isAnthropicRequest(r)
 	for _, m := range catalog {
-		if keyAllowsModel(key, m.ID) {
+		if !keyAllowsModel(key, m.ID) {
+			continue
+		}
+		if anthropicFormat {
+			models = append(models, anthropic.ModelRecord(m.ID, m.DisplayName))
+		} else {
 			models = append(models, geminiModelRecord(m.ID, m))
 		}
+	}
+	if anthropicFormat {
+		writeJSON(w, http.StatusOK, anthropic.ModelList(models))
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"models": models})
 }
@@ -54,15 +67,20 @@ func geminiModelRecord(id string, m antigravity.ModelInfo) map[string]any {
 func (s *Service) getModel(w http.ResponseWriter, r *http.Request) {
 	model := strings.TrimPrefix(modelPath(r), "models/")
 	base, _ := stripFakeStream(model)
+	base = s.resolveModel(base)
 	if !keyAllowsModel(apiKeyFromContext(r.Context()), base) {
-		modelNotAllowed(w, model)
+		modelNotAllowed(w, r, model)
 		return
 	}
 	if m, ok := s.relay.LookupModel(r.Context(), base); ok {
+		if isAnthropicRequest(r) {
+			writeJSON(w, http.StatusOK, anthropic.ModelRecord(model, m.DisplayName))
+			return
+		}
 		writeJSON(w, http.StatusOK, geminiModelRecord(model, m))
 		return
 	}
-	geminiError(w, http.StatusNotFound, "NOT_FOUND", "model not found: "+model)
+	inboundError(w, r, http.StatusNotFound, "NOT_FOUND", "model not found: "+model)
 }
 
 // handleModelAction 解析 {model}:{method} 并分派到生成/计数。
@@ -77,27 +95,30 @@ func (s *Service) handleModelAction(w http.ResponseWriter, r *http.Request) {
 	}
 	// 假流式前缀：流式请求走 handleFakeStream，其余方法只去掉前缀。允许的模型按去掉前缀的名字判断。
 	model, fake := stripFakeStream(model)
+	// 模型别名：之后都用解析出的模型名（含 Key 允许模型的判断），用量里记客户端原来的名字。
+	requested := model
+	model = s.resolveModel(model)
 	stream := method == "streamGenerateContent"
 	if !keyAllowsModel(apiKeyFromContext(r.Context()), model) {
 		// 生成请求被拒也记一条用量（计数请求不记）。
 		if stream || method == "generateContent" {
-			req := inboundRequest(r, model, stream && !fake)
+			req := inboundRequest(r, model, requested, stream && !fake)
 			req.FakeStream = stream && fake
 			s.relay.RecordRejected(r.Context(), req, start, http.StatusForbidden,
 				relay.KindModelNotAllowed, "model "+model+" is not allowed for this API key")
 		}
-		modelNotAllowed(w, model)
+		modelNotAllowed(w, r, model)
 		return
 	}
 	switch method {
 	case "streamGenerateContent":
 		if fake {
-			s.handleFakeStream(w, r, model, start)
+			s.handleFakeStream(w, r, model, requested, start)
 			return
 		}
-		s.handleGenerate(w, r, model, true, start)
+		s.handleGenerate(w, r, model, requested, true, start)
 	case "generateContent":
-		s.handleGenerate(w, r, model, false, start)
+		s.handleGenerate(w, r, model, requested, false, start)
 	case "countTokens":
 		s.handleCountTokens(w, r, model)
 	default:
@@ -106,8 +127,17 @@ func (s *Service) handleModelAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // modelNotAllowed 返回 Key 不允许使用该模型的 403。
-func modelNotAllowed(w http.ResponseWriter, model string) {
-	geminiError(w, http.StatusForbidden, "PERMISSION_DENIED", "model "+model+" is not allowed for this API key")
+func modelNotAllowed(w http.ResponseWriter, r *http.Request, model string) {
+	inboundError(w, r, http.StatusForbidden, "PERMISSION_DENIED", "model "+model+" is not allowed for this API key")
+}
+
+// inboundError 按入站接口的格式写错误：Anthropic 接口用 Messages 的错误格式，其余用 Gemini 的。
+func inboundError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
+	if isAnthropicRequest(r) {
+		writeJSON(w, status, anthropic.ErrorBody(status, msg))
+		return
+	}
+	geminiError(w, status, code, msg)
 }
 
 // quotaExceeded 检查 Key 本周期的 Token 是否已用完，用完时写回错误：每天、每月的周期返回 429 并带 Retry-After
@@ -129,13 +159,18 @@ func (s *Service) quotaExceeded(w http.ResponseWriter, r *http.Request, req rela
 		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(resetAt.Sub(now).Seconds()))))
 	}
 	s.relay.RecordRejected(r.Context(), req, start, status, relay.KindKeyQuota, msg)
-	geminiError(w, status, code, msg)
+	inboundError(w, r, status, code, msg)
 	return true
 }
 
-// inboundRequest 用入站请求的模型、调用方和 Key 构造执行层请求（请求体另填）。
-func inboundRequest(r *http.Request, model string, stream bool) relay.Request {
-	req := relay.Request{Model: model, Stream: stream, ClientIP: clientIP(r), UserAgent: r.UserAgent()}
+// inboundRequest 用入站请求的模型、调用方和 Key 构造执行层请求（请求体另填）。model 是别名解析后的模型名，
+// requested 是客户端原来的模型名（记进用量）。接口按请求判断（Gemini 或 Anthropic）。
+func inboundRequest(r *http.Request, model, requested string, stream bool) relay.Request {
+	req := relay.Request{Model: model, RequestModel: requested, Stream: stream, ClientIP: clientIP(r), UserAgent: r.UserAgent(),
+		Protocol: store.ProtocolGemini}
+	if isAnthropicRequest(r) {
+		req.Protocol = store.ProtocolAnthropic
+	}
 	if key := apiKeyFromContext(r.Context()); key != nil {
 		req.APIKeyID = key.ID
 	}
@@ -182,8 +217,8 @@ func readGeminiRequest(w http.ResponseWriter, r *http.Request) (map[string]any, 
 	return req, true
 }
 
-func (s *Service) handleGenerate(w http.ResponseWriter, r *http.Request, model string, stream bool, start time.Time) {
-	req := inboundRequest(r, model, stream)
+func (s *Service) handleGenerate(w http.ResponseWriter, r *http.Request, model, requested string, stream bool, start time.Time) {
+	req := inboundRequest(r, model, requested, stream)
 	if s.quotaExceeded(w, r, req, start) {
 		return
 	}
@@ -236,7 +271,7 @@ func writeRelayError(w http.ResponseWriter, r *http.Request, err error, model st
 	if re.Status >= 500 {
 		msg += " (request id: " + logx.RequestID(r.Context()) + ")"
 	}
-	geminiError(w, re.Status, re.Code, msg)
+	inboundError(w, r, re.Status, re.Code, msg)
 }
 
 // startSSE 写 SSE 响应头和 200。

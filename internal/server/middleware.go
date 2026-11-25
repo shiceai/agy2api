@@ -71,17 +71,17 @@ func (s *Service) apiKeyAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := extractAPIKey(r)
 		if key == "" {
-			geminiError(w, http.StatusUnauthorized, "UNAUTHENTICATED",
+			inboundError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED",
 				"missing API key: send x-goog-api-key, Authorization: Bearer, x-api-key, or ?key=")
 			return
 		}
 		rec, ok := s.keys.Lookup(key)
 		if !ok {
-			geminiError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "invalid API key")
+			inboundError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "invalid API key")
 			return
 		}
 		if keyExpired(rec, time.Now()) {
-			geminiError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "API key expired")
+			inboundError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "API key expired")
 			return
 		}
 		s.keys.Touch(rec.ID)

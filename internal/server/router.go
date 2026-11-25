@@ -19,7 +19,7 @@ func (s *Service) Router() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	})
 
-	// 入站 Gemini：API Key 鉴权。/v1 是 /v1beta 的别名。模型名里可以带 /（如 假流式/gemini-2.5-flash），
+	// 入站 Gemini 和 Anthropic：API Key 鉴权。/v1 是 /v1beta 的别名。模型名里可以带 /（如 假流式/gemini-2.5-flash），
 	// 所以模型部分用通配，见 modelPath。
 	r.Group(func(r chi.Router) {
 		r.Use(s.apiKeyAuth)
@@ -28,6 +28,9 @@ func (s *Service) Router() http.Handler {
 			r.Get(prefix+"/models/*", s.getModel)
 			r.Post(prefix+"/models/*", s.handleModelAction)
 		}
+		// 入站 Anthropic Messages（Claude Code 等），见 anthropic.go；模型列表和 Gemini 共用 /v1/models，按请求头区分格式。
+		r.Post("/v1/messages", s.handleMessages)
+		r.Post("/v1/messages/count_tokens", s.handleMessagesCountTokens)
 	})
 
 	// 管理端：先按 IP 白名单（AGY2API_ADMIN_ALLOW），再校验静态口令。
@@ -82,6 +85,9 @@ func (s *Service) Router() http.Handler {
 		r.Put("/settings/client-filter", s.adminUpdateClientFilter)
 		r.Get("/settings/system-prompt", s.adminGetSystemPrompt)
 		r.Put("/settings/system-prompt", s.adminUpdateSystemPrompt)
+		r.Get("/settings/model-aliases", s.adminGetModelAliases)
+		r.Put("/settings/model-aliases", s.adminUpdateModelAliases)
+		r.Post("/settings/model-aliases/test", s.adminTestModelAlias)
 		r.Get("/settings/request-handling", s.adminGetRequestHandling)
 		r.Put("/settings/request-handling", s.adminUpdateRequestHandling)
 		r.Get("/prices", s.adminGetPrices)

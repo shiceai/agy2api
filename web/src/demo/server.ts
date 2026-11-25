@@ -265,7 +265,11 @@ function fakeRecord(at: number): UsageRecord {
   const last = attempts.at(-1)
   return {
     id: nextUsageId++, request_id: hex(16), api_key_id: keyId, account_id: ok && last ? last.account_id : 0,
-    request_model: fam, resolved_model: resolved, upstream_model: resolved, reasoning: tier,
+    // Claude 的请求大约一半来自 Claude Code（Anthropic 接口），请求模型是官方名
+    ...(fam.startsWith('claude') && rand() < 0.5
+      ? { protocol: 'anthropic' as const, request_model: `${fam}-20261015` }
+      : { protocol: 'gemini' as const, request_model: fam }),
+    resolved_model: resolved, upstream_model: resolved, reasoning: tier,
     prompt_tokens: ok ? prompt : 0, output_tokens: output, cached_tokens: cached, thoughts_tokens: thoughts, total_tokens: totalTokens,
     status_code: status, stream, first_token_ms: stream && ok ? header + between(20, 400) : null, latency_ms: ok ? total : between(40, 3000),
     created_at: at, client_ip: ip, user_agent: ua,
@@ -501,6 +505,42 @@ const systemView = (): SystemView => ({
   progress: {},
 })
 on('GET', '/system', systemView)
+
+// 模型别名：演示站只存在内存里，试解析用简化的规则（先看目录，再去掉后缀，最后按规则通配）。
+const aliasPresets = [
+  { pattern: 'claude-*opus*', target: 'claude-opus-5-5' },
+  { pattern: 'claude-*sonnet*', target: 'claude-sonnet-5-5' },
+  { pattern: 'claude-*haiku*', target: 'claude-sonnet-5-5-low' },
+]
+let aliasSettings = { use_presets: true, rules: '' }
+const aliasView = () => ({ settings: aliasSettings, presets: aliasPresets })
+const escapeRegExp = (x: string) => x.replace(/[.+?^${}()|[\]\\]/g, (c) => '\\' + c)
+on('GET', '/settings/model-aliases', aliasView)
+on('PUT', '/settings/model-aliases', (_m, _q, b) => {
+  aliasSettings = { use_presets: b.use_presets !== false, rules: String(b.rules ?? '') }
+  return aliasView()
+})
+on('POST', '/settings/model-aliases/test', (_m, _q, b) => {
+  const model = String(b.model ?? '')
+  const known = (id: string) => catalog.models.some((m) => m.id === id) || catalog.families.some((f) => f.family === id)
+  const glob = (p: string, x: string) => new RegExp('^' + p.split('*').map(escapeRegExp).join('.*') + '$').test(x)
+  const custom = aliasSettings.rules
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#') && l.includes('=>'))
+    .map((l) => ({ pattern: l.split('=>')[0].trim().toLowerCase(), target: l.split('=>')[1].trim() }))
+  const rules = [...custom, ...(aliasSettings.use_presets ? aliasPresets : [])]
+  const normalized = model.trim().toLowerCase().replace(/\[[^\]]*\]$/, '').replace(/-\d{8}$/, '')
+  let target = known(model) ? model : normalized
+  let rule: { pattern: string; target: string } | null = null
+  if (!known(target)) {
+    rule = rules.find((r) => glob(r.pattern, normalized)) ?? null
+    if (rule) target = rule.target
+  }
+  const family = catalog.families.find((f) => f.family === target)
+  const resolved = family ? `${target}-${family.tiers.includes('medium') ? 'medium' : family.tiers[0]}` : catalog.models.some((m) => m.id === target) ? target : undefined
+  return { model, target, rule, ...(resolved ? { resolved } : {}) }
+})
 on('POST', '/system/check', async () => {
   await sleep(600)
   return { ...systemView(), checked_at: Date.now() }
@@ -681,6 +721,7 @@ on('GET', '/usage/logs', (_m, q) => {
   const since = Number(q.get('since')) || 0
   const status = q.get('status')
   const stream = q.get('stream')
+  const protocol = q.get('protocol')
   const requestId = q.get('request_id')
   const model = q.get('model')
   const accountId = Number(q.get('account_id')) || 0
@@ -689,6 +730,7 @@ on('GET', '/usage/logs', (_m, q) => {
     .filter((r) => r.created_at >= since)
     .filter((r) => !status || (status === 'success') === (r.status_code >= 200 && r.status_code < 300))
     .filter((r) => !stream || (stream === 'stream') === r.stream)
+    .filter((r) => !protocol || r.protocol === protocol)
     .filter((r) => !requestId || r.request_id.startsWith(requestId))
     .filter((r) => !model || r.request_model === model || r.resolved_model === model)
     .filter((r) => !accountId || r.account_id === accountId)

@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import TierSettings from '@/components/settings/TierSettings.vue'
+import ModelAliasSettings from '@/components/settings/ModelAliasSettings.vue'
 import SchedulingSettings from '@/components/settings/SchedulingSettings.vue'
 import PriceSettings from '@/components/settings/PriceSettings.vue'
 import DataSettings from '@/components/settings/DataSettings.vue'
@@ -15,7 +16,7 @@ import { openVersionDialog, useVersion } from '@/lib/version'
 // 当前标签记在地址的 tab 参数里，刷新、分享链接都停在同一个标签。
 const route = useRoute()
 const router = useRouter()
-const tabs = ['tiers', 'scheduling', 'client-filter', 'system-prompt', 'request', 'prices', 'data']
+const tabs = ['tiers', 'aliases', 'scheduling', 'client-filter', 'system-prompt', 'request', 'prices', 'data']
 const tab = computed({
   get: () => (tabs.includes(String(route.query.tab)) ? String(route.query.tab) : 'tiers'),
   set: (v: string | number) => router.replace({ query: v === 'tiers' ? {} : { tab: String(v) } }),
@@ -41,6 +42,7 @@ const version = useVersion()
     <div ref="tabBar" class="-mx-4 scroll-px-4 overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:px-0 [&::-webkit-scrollbar]:hidden">
       <TabsList>
         <TabsTrigger value="tiers">思考档位</TabsTrigger>
+        <TabsTrigger value="aliases">模型别名</TabsTrigger>
         <TabsTrigger value="scheduling">账号调度</TabsTrigger>
         <TabsTrigger value="client-filter">客户端过滤</TabsTrigger>
         <TabsTrigger value="system-prompt">系统提示词</TabsTrigger>
@@ -50,6 +52,7 @@ const version = useVersion()
       </TabsList>
     </div>
     <TabsContent value="tiers"><TierSettings /></TabsContent>
+    <TabsContent value="aliases"><ModelAliasSettings /></TabsContent>
     <TabsContent value="scheduling"><SchedulingSettings /></TabsContent>
     <TabsContent value="client-filter"><ClientFilterSettings /></TabsContent>
     <TabsContent value="system-prompt"><SystemPromptSettings /></TabsContent>

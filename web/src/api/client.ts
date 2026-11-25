@@ -101,6 +101,29 @@ export interface Session {
   update?: string
 }
 
+// --- 模型别名（设置页"模型别名"） ---
+export interface ModelAliasSettings {
+  use_presets: boolean
+  // rules 是自定义规则：每行一条 别名 => 目标，别名可以用 * 通配，# 开头是注释。
+  rules: string
+}
+export interface AliasRule {
+  pattern: string
+  target: string
+}
+export interface ModelAliasResponse {
+  settings: ModelAliasSettings
+  presets: AliasRule[]
+}
+// AliasTestResult 是试解析的结果：target 是交给号池的名字，rule 是命中的规则（没走规则时为 null），
+// resolved 是按家族和档位最终用的模型（号池里没有时不出现）。
+export interface AliasTestResult {
+  model: string
+  target: string
+  rule: AliasRule | null
+  resolved?: string
+}
+
 // --- 版本与在线升级（版本弹窗） ---
 export interface ReleaseInfo {
   version: string
@@ -306,6 +329,8 @@ export interface UsageRecord {
   request_model: string
   resolved_model: string
   upstream_model: string
+  // protocol 是入站接口：gemini（Gemini 原生接口）或 anthropic（Anthropic Messages 接口）。
+  protocol: 'gemini' | 'anthropic'
   reasoning: string
   prompt_tokens: number
   output_tokens: number

@@ -44,9 +44,14 @@ func (s *Service) adminUsageLogs(w http.ResponseWriter, r *http.Request) {
 		Model:     strings.TrimSpace(q.Get("model")),
 		Stream:    q.Get("stream"),
 		RequestID: strings.TrimSpace(q.Get("request_id")),
+		Protocol:  q.Get("protocol"),
 	}
 	if f.Status != "" && f.Status != "success" && f.Status != "error" {
 		adminError(w, http.StatusBadRequest, "status must be success or error")
+		return
+	}
+	if f.Protocol != "" && f.Protocol != store.ProtocolGemini && f.Protocol != store.ProtocolAnthropic {
+		adminError(w, http.StatusBadRequest, "protocol must be gemini or anthropic")
 		return
 	}
 	if f.Stream != "" && f.Stream != "stream" && f.Stream != "sync" {
