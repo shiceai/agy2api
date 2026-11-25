@@ -9,7 +9,9 @@
 
 ## 项目概况
 
-agy2api 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v1beta` 接口，自带管理端。上游是 Antigravity 使用的 Google Cloud Code 内部接口。
+AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v1beta` 接口，自带管理端。上游是 Antigravity 使用的 Google Cloud Code 内部接口。
+
+名称写法：界面和文档里指代产品时写 AGY2API；命令、路径、网址、仓库、程序、镜像、服务、文件名等标识符保持小写 agy2api。
 
 技术栈：Go（chi、`modernc.org/sqlite` 纯 Go 无 CGO），管理端 Vue 3 + shadcn-vue（reka-ui，Tailwind 4），构建产物 `go:embed` 进二进制。
 

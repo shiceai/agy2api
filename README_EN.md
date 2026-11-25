@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-    <img src="docs/assets/logo.svg" width="96" height="96" alt="agy2api">
+    <img src="docs/assets/logo.svg" width="96" height="96" alt="AGY2API">
   </picture>
 </p>
 
-<h1 align="center">agy2api</h1>
+<h1 align="center">AGY2API</h1>
 
 <p align="center"><strong>Turn a pool of Antigravity accounts into a schedulable, observable Gemini-compatible API gateway</strong></p>
 
@@ -22,7 +22,7 @@
 
 <p align="center"><a href="README.md">简体中文</a> | English</p>
 
-agy2api manages multiple Antigravity accounts, handling account selection, cooldown recovery, failover and low-quota
+AGY2API manages multiple Antigravity accounts, handling account selection, cooldown recovery, failover and low-quota
 avoidance. It exposes the native Gemini `v1beta` API and comes with an admin console.
 
 > **Risk notice**: this project reaches Google Cloud Code's internal API through Antigravity accounts. This kind of use
@@ -50,7 +50,7 @@ avoidance. It exposes the native Gemini `v1beta` API and comes with an admin con
 ```mermaid
 flowchart LR
     client["Gemini clients<br/>google-genai, etc."] -->|Gemini v1beta| auth
-    subgraph gw["agy2api"]
+    subgraph gw["AGY2API"]
         auth["API key auth and limits"] --> pool["Account pool scheduling<br/>cooldown · failover · low-quota avoidance"]
         pool -.-> usage["Usage and cost records"]
         admin["Admin console"] -.->|accounts · keys · proxies| pool

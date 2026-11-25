@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
 import { computed } from 'vue'
-import { ArrowUp, LogOut, PanelLeftClose, PanelLeftOpen } from '@lucide/vue'
+import { ArrowUp, ChevronsLeft, ChevronsRight, LogOut } from '@lucide/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
 import { appName } from '@/lib/brand'
@@ -102,13 +102,14 @@ const itemClass =
     </SidebarContent>
     <SidebarFooter>
       <!-- 主题、GitHub、退出做成图标按钮排一行，收起按钮靠右（顶栏左侧也有一个，这里离侧边栏近、容易发现），悬停出说明；
-           收起成图标栏时放不下，竖着排，展开按钮在最下面。图标中心和上面菜单的图标对齐。 -->
+           收起成图标栏时放不下，竖着排，展开按钮在最下面。收起、展开用双尖角（« »），不用带方框的侧边栏图标，免得和退出的门框图标
+           混淆。图标中心和上面菜单的图标对齐。 -->
       <div class="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
         <ThemeToggle placement="sidebar" />
         <IconAction label="GitHub" as="a" href="https://github.com/shiceai/agy2api" target="_blank" rel="noopener noreferrer"><GitHubIcon class="size-3.5" /></IconAction>
         <IconAction label="退出" @click="logout"><LogOut /></IconAction>
         <IconAction :label="toggleLabel" class="ml-auto group-data-[collapsible=icon]:ml-0" @click="toggleSidebar">
-          <PanelLeftClose v-if="state === 'expanded'" /><PanelLeftOpen v-else />
+          <ChevronsLeft v-if="state === 'expanded'" /><ChevronsRight v-else />
         </IconAction>
       </div>
     </SidebarFooter>

@@ -1,6 +1,6 @@
 # 部署
 
-agy2api 的数据（SQLite 库和凭据加密密钥）都在数据目录里。最简单的是用一键安装脚本（见下文），它装好的就是下面两种方式之一：
+AGY2API 的数据（SQLite 库和凭据加密密钥）都在数据目录里。最简单的是用一键安装脚本（见下文），它装好的就是下面两种方式之一：
 
 - **Docker Compose**：仓库根目录的 `Dockerfile` 和 `compose.yaml`，数据在命名卷 `data` 里。
 - **systemd**：交叉编译出 Linux 二进制，用 `deploy/agy2api.service` 跑成服务，数据在 `/var/lib/agy2api`。

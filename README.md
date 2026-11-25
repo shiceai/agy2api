@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-    <img src="docs/assets/logo.svg" width="96" height="96" alt="agy2api">
+    <img src="docs/assets/logo.svg" width="96" height="96" alt="AGY2API">
   </picture>
 </p>
 
-<h1 align="center">agy2api</h1>
+<h1 align="center">AGY2API</h1>
 
 <p align="center"><strong>把 Antigravity 账号池变成可调度、可观测的 Gemini 兼容 API 网关</strong></p>
 
@@ -43,7 +43,7 @@
 ```mermaid
 flowchart LR
     client["Gemini 客户端<br/>google-genai 等"] -->|Gemini v1beta| auth
-    subgraph gw["agy2api"]
+    subgraph gw["AGY2API"]
         auth["API Key 鉴权与限额"] --> pool["号池调度<br/>冷却 · 换号 · 额度避让"]
         pool -.-> usage["用量与费用记录"]
         admin["管理端"] -.->|账号 · Key · 代理| pool
