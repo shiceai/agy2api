@@ -145,6 +145,8 @@ jobs:
               tar -C package -czf "dist/$name.tar.gz" "$name"
             fi
           done
+          # 一键安装脚本和 Docker 模式用的 compose.yaml 也作为附件，和这个版本对应。
+          cp scripts/install.sh compose.yaml dist/
           (cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
       - name: 二进制包来源证明

@@ -58,22 +58,21 @@ flowchart LR
 
 ## Quick start
 
-With Docker (images for linux/amd64 and linux/arm64):
+One-line install (Linux, installs a systemd service and generates the admin password; run it again to upgrade):
 
 ```bash
-mkdir agy2api && cd agy2api
-curl -fsSLO https://raw.githubusercontent.com/shiceai/agy2api/main/compose.yaml
-curl -fsSL https://raw.githubusercontent.com/shiceai/agy2api/main/deploy/env.example -o .env
-# edit .env and set AGY2API_ADMIN_PASSWORD
-docker compose up -d
+curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash
 ```
 
-Without Docker, download the archive for your platform from [Releases](https://github.com/shiceai/agy2api/releases),
-extract it and run:
+With Docker (images for linux/amd64 and linux/arm64), in an empty directory:
 
 ```bash
-AGY2API_ADMIN_PASSWORD=<your password> ./agy2api
+curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | bash -s -- --docker
 ```
+
+The script downloads and verifies SHA256 checksums; download it first if you want to read it. `--help` lists all options
+(version, listen address, uninstall and more). You can also download the archive for your platform from
+[Releases](https://github.com/shiceai/agy2api/releases), extract it and run `AGY2API_ADMIN_PASSWORD=<your password> ./agy2api`.
 
 Open `http://127.0.0.1:8080`, sign in with the admin password, add accounts on the accounts page, create an API key on
 the keys page, then call:

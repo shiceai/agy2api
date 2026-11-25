@@ -14,8 +14,9 @@ services:
         VERSION: ${VERSION:-dev}
     restart: unless-stopped
     env_file: .env
+    # 默认只在本机 8080 监听；要直接对外（不经反代），在 .env 里写 AGY2API_BIND=0.0.0.0:8080。
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${AGY2API_BIND:-127.0.0.1:8080}:8080"
     volumes:
       - data:/data
     # 关停时先等进行中的请求（最多 10 秒），再写完排队的用量记录（最多 5 秒）；默认 10 秒不够。

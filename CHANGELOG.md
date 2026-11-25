@@ -19,6 +19,7 @@
 
 ### 部署
 
+- **一键安装**：`curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash`。Linux 上装成 systemd 服务，首次安装自动生成管理口令，默认只在本机监听；再运行一次就是升级，加 `--docker` 用 Docker 部署，`--uninstall` 卸载。
 - **二进制包**：从本页下载对应平台的压缩包，用随附的 `SHA256SUMS.txt` 核对；也可以运行 `gh attestation verify <压缩包> -R shiceai/agy2api`，核验压缩包确实由本仓库的发布流程构建。
 - **容器镜像**：`ghcr.io/shiceai/agy2api:0.1.0`，支持 linux/amd64 和 linux/arm64。
 - 部署步骤见包里的 `deploy.md`。使用前请先阅读 README 里的风险提示。

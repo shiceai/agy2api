@@ -1,6 +1,6 @@
 # 部署
 
-agy2api 的数据（SQLite 库和凭据加密密钥）都在数据目录里。目前有两种部署方式：
+agy2api 的数据（SQLite 库和凭据加密密钥）都在数据目录里。最简单的是用一键安装脚本（见下文），它装好的就是下面两种方式之一：
 
 - **Docker Compose**：仓库根目录的 `Dockerfile` 和 `compose.yaml`，数据在命名卷 `data` 里。
 - **systemd**：交叉编译出 Linux 二进制，用 `deploy/agy2api.service` 跑成服务，数据在 `/var/lib/agy2api`。
@@ -14,6 +14,30 @@ agy2api 的数据（SQLite 库和凭据加密密钥）都在数据目录里。�
 - 只通过 HTTPS 访问：管理口令和 API Key 都放在请求头里，明文 HTTP 会被中途看到。
 - 设 `AGY2API_ADMIN_ALLOW`，只让自己的 IP 访问管理端（见下文"客户端 IP 和管理端访问限制"）。
 - 备份数据目录里的 `agy2api.db` 和 `agy2api.key`：凭据用这个密钥加密，丢了密钥库里的账号就用不了。
+
+## 一键安装
+
+```bash
+curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash
+```
+
+脚本从 Releases 下载对应平台（Linux、macOS，amd64、arm64）的压缩包，按 `SHA256SUMS.txt` 校验，不一致就停下。
+Linux 有 systemd 时装成服务（就是下文 systemd 一节的做法）：
+
+- 程序在 `/usr/local/bin/agy2api`，配置在 `/etc/agy2api/env`（权限 600），数据在 `/var/lib/agy2api`。
+- 首次安装自动生成 24 位随机管理口令写进配置，只在安装结束时显示一次，之后到配置文件里查看。默认只监听
+  `127.0.0.1:8080`，对外请放 HTTPS 反向代理；远程服务器上可以先用 `ssh -L 8080:127.0.0.1:8080 <服务器>` 打开管理端。
+- 再运行一次就是升级：只换程序和服务文件，配置和数据不动，旧程序备份成 `agy2api.old`，要回退时换回去重启即可。
+- 不改系统内核参数。
+
+没有 systemd 的系统（macOS、部分精简发行版）只装程序，并给出运行命令。选项放在 `bash -s --` 后面：
+
+| 选项 | 作用 |
+| --- | --- |
+| `--version v0.2.0` | 安装指定版本，默认最新正式版 |
+| `--listen 0.0.0.0:8080` | 不经反向代理直接对外（只在首次安装、生成配置时生效；会提示明文传输的风险） |
+| `--docker` | 不装程序，在当前目录放 `compose.yaml` 和 `.env`（随机口令）后启动容器；再运行一次换成新版本 |
+| `--uninstall` | 停止并删除服务和程序，配置和数据保留（会给出删除它们的命令） |
 
 ## Docker Compose
 
@@ -53,6 +77,8 @@ journalctl -u agy2api -f
 - 服务用 `DynamicUser` 跑在临时的非 root 用户下，只能写自己的数据目录 `/var/lib/agy2api`
   （实际在 `/var/lib/private/agy2api`），其余文件系统只读。
 - `/etc/agy2api/env` 里的变量优先于服务文件里的默认值（监听地址、数据目录）。
+- 连接数：服务文件把文件描述符上限定成 524288（Go 启动时会把软限制提到这个值），够网关用；不需要改内核参数。
+  客户端离服务器很远、流式响应慢时，可以自己评估是否开启 BBR 拥塞控制，这属于整台机器的设置，安装脚本不会动。
 
 ## 反向代理
 
@@ -119,7 +145,7 @@ server {
   docker compose start
   ```
 
-- 升级：Docker 执行 `docker compose pull && docker compose up -d`（从源码构建的 `git pull` 后加 `--build`）；systemd 换成
+- 升级：一键安装的再运行一次安装脚本（Docker 模式加 `--docker`）；手动部署的 Docker 执行 `docker compose pull && docker compose up -d`（从源码构建的 `git pull` 后加 `--build`）；systemd 换成
   新版本包里的 `agy2api` 后 `systemctl restart agy2api`。各版本的变化见 `CHANGELOG.md`。数据库迁移在启动时自动执行。升级前先备份，要回退时用旧版本加备份的数据。
 
 ## 环境变量
