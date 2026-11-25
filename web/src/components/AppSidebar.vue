@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { ArrowUp, LogOut } from '@lucide/vue'
+import { computed } from 'vue'
+import { ArrowUp, LogOut, PanelLeftClose, PanelLeftOpen } from '@lucide/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
 import { appName } from '@/lib/brand'
@@ -19,11 +20,16 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar'
 
 const route = useRoute()
 const logout = useLogout()
 const version = useVersion()
+const { state, toggleSidebar } = useSidebar()
+// 收起按钮的说明带上快捷键（Mac 上是 ⌘B）。
+const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘B' : 'Ctrl+B'
+const toggleLabel = computed(() => `${state.value === 'expanded' ? '收起' : '展开'}侧边栏（${shortcut}）`)
 
 // 菜单项层级靠颜色拉开（Windows 中文字体没有 500 字重，不能像 shadcn 那样靠加粗区分选中）：
 // 平时文字和图标是浅一档的灰，悬停出浅灰底、文字变深，选中是深一档的灰底；选中项悬停不变色（shadcn 的做法）。
@@ -32,7 +38,7 @@ const itemClass =
   'text-sidebar-foreground/70 hover:text-sidebar-foreground data-active:bg-sidebar-border/70 data-active:text-sidebar-foreground data-active:hover:bg-sidebar-border/70'
 </script>
 
-<!-- 桌面侧边栏（md 及以上），可收起成图标栏（顶栏按钮或 Ctrl/⌘ + B）；移动端改用顶栏 + 底部标签栏。 -->
+<!-- 桌面侧边栏（md 及以上），可收起成图标栏（顶栏按钮、底部按钮或 Ctrl/⌘ + B）；移动端改用顶栏 + 底部标签栏。 -->
 <template>
   <Sidebar variant="inset" collapsible="icon">
     <SidebarHeader>
@@ -95,11 +101,15 @@ const itemClass =
       </SidebarGroup>
     </SidebarContent>
     <SidebarFooter>
-      <!-- 主题、GitHub、退出做成图标按钮排一行，悬停出说明；收起成图标栏时放不下，竖着排。图标中心和上面菜单的图标对齐。 -->
+      <!-- 主题、GitHub、退出做成图标按钮排一行，收起按钮靠右（顶栏左侧也有一个，这里离侧边栏近、容易发现），悬停出说明；
+           收起成图标栏时放不下，竖着排，展开按钮在最下面。图标中心和上面菜单的图标对齐。 -->
       <div class="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
         <ThemeToggle placement="sidebar" />
         <IconAction label="GitHub" as="a" href="https://github.com/shiceai/agy2api" target="_blank" rel="noopener noreferrer"><GitHubIcon class="size-3.5" /></IconAction>
         <IconAction label="退出" @click="logout"><LogOut /></IconAction>
+        <IconAction :label="toggleLabel" class="ml-auto group-data-[collapsible=icon]:ml-0" @click="toggleSidebar">
+          <PanelLeftClose v-if="state === 'expanded'" /><PanelLeftOpen v-else />
+        </IconAction>
       </div>
     </SidebarFooter>
     <!-- 不放 SidebarRail：它在边缘显示左右调整光标却只能点击，和顶栏的收起按钮重复 -->
