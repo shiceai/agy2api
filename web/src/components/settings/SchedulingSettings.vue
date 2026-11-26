@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check } from '@lucide/vue'
-import { api, errorMessage, type Scheduling, type SchedulingResponse, type StickyMode } from '@/api/client'
+import { api, errorMessage, type Scheduling, type SchedulingResponse, type StickyMode, type Strategy } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import SegmentedControl from '@/components/SegmentedControl.vue'
@@ -33,6 +33,7 @@ interface Form {
   idleOn: boolean
   idleSecs: number
   requireProxy: boolean
+  strategy: Strategy
   stickyMode: StickyMode
   stickyMin: number
 }
@@ -40,14 +41,24 @@ const MIN = 60
 const QUOTA_DEFAULT_MIN = 15
 const IDLE_DEFAULT_SECS = 120
 
-// 会话粘性的三种方式和各自的一行说明。
+// 选号方式、会话粘性的选项和各自的一行说明。
+const strategyOptions: { value: Strategy; label: string }[] = [
+  { value: 'round_robin', label: '轮询' },
+  { value: 'smart', label: '智能' },
+  { value: 'reset_first', label: '重置优先' },
+]
+const strategyHints: Record<Strategy, string> = {
+  round_robin: '能用的账号轮流用',
+  smart: '按负载、额度、失败率和延迟打分',
+  reset_first: '先用额度最快重置的账号',
+}
 const stickyOptions: { value: StickyMode; label: string }[] = [
   { value: 'off', label: '关闭' },
   { value: 'preferred', label: '优先' },
   { value: 'strict', label: '严格' },
 ]
 const stickyHints: Record<StickyMode, string> = {
-  off: '每个请求轮询选号',
+  off: '每个请求按选号方式选',
   preferred: '原账号暂时接不了时临时借号',
   strict: '原账号并发满时先等它，再借号',
 }
@@ -73,6 +84,7 @@ function toForm(s: Scheduling): Form {
     idleOn: s.stream_idle > 0,
     idleSecs: s.stream_idle > 0 ? s.stream_idle : IDLE_DEFAULT_SECS,
     requireProxy: s.require_proxy,
+    strategy: s.strategy,
     stickyMode: s.sticky_mode,
     stickyMin: s.sticky_ttl / MIN,
   }
@@ -96,6 +108,7 @@ function toApi(f: Form): Scheduling {
     low_quota: r(f.lowQuota),
     stream_idle: f.idleOn ? r(f.idleSecs) : 0,
     require_proxy: f.requireProxy,
+    strategy: f.strategy,
     sticky: f.stickyMode !== 'off',
     sticky_mode: f.stickyMode,
     sticky_ttl: r(f.stickyMin * MIN),
@@ -179,12 +192,33 @@ function restoreDefaults() {
 }
 </script>
 
-<!-- 设置页"账号调度"标签：令牌刷新、并发、会话粘性、代理、流式、额度、重试与冷却。 -->
+<!-- 设置页"账号调度"标签：选号（选号方式、会话粘性）、令牌刷新、并发、代理、流式、额度、重试与冷却。 -->
 <template>
   <div v-if="form" class="space-y-6">
     <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
 
     <SettingGrid>
+      <SettingCard title="选号">
+        <template #info>
+          <p>先排除冷却中、并发已满的账号，额度低于避让阈值的先不选。同一对话优先用绑定的账号，没有或它接不了时按选号方式选。</p>
+          <p>轮询：能用的账号按顺序轮流。</p>
+          <p>智能：按负载、这个模型的剩余额度、近期失败率和流式首字延迟打分，分数接近的轮流用。失败率和延迟只在内存里统计，重启后清零。</p>
+          <p>重置优先：先用这个模型额度最快重置的账号，没用过的额度窗口排在后面；开了每周额度的账号也看每周额度的重置时间。</p>
+          <p>会话粘性按同一密钥、同一模型、同一会话标识认对话，没有标识时按首条用户消息。上游缓存按账号，换号就命中不了。</p>
+          <p>优先：原账号 5 分钟内能恢复时只临时借号，下个请求回到它；停用、额度耗尽、冷却较长或额度低时才改绑。</p>
+          <p>严格：原账号并发满时先等它的名额（最多等"并发满时最多等待"），等不到再临时借号。绑定只在内存里，重启后清空。</p>
+        </template>
+        <SettingRow label="选号方式" :description="strategyHints[form.strategy]">
+          <SegmentedControl v-model="form.strategy" :options="strategyOptions" label="选号方式" hide-label />
+        </SettingRow>
+        <SettingRow label="会话粘性" :description="stickyHints[form.stickyMode]">
+          <SegmentedControl v-model="form.stickyMode" :options="stickyOptions" label="会话粘性" hide-label />
+        </SettingRow>
+        <SettingRow label="闲置多久后不再粘" description="超过后当作新对话" input-id="sched-sticky-ttl">
+          <UnitInput id="sched-sticky-ttl" v-model="form.stickyMin" unit="分钟" :min="5" :max="1440" :disabled="form.stickyMode === 'off'" />
+        </SettingRow>
+      </SettingCard>
+
       <SettingCard title="令牌刷新">
         <template #info>
           <p>access token 有效期 1 小时。提前刷新时每个账号在提前量范围里取一个固定值，同一批导入的账号不会同时刷新。</p>
@@ -209,27 +243,6 @@ function restoreDefaults() {
         </SettingRow>
         <SettingRow label="并发满时最多等待" description="超时返回 429，0 表示不等" input-id="sched-wait">
           <UnitInput id="sched-wait" v-model="form.slotWait" unit="秒" :min="0" :max="120" />
-        </SettingRow>
-      </SettingCard>
-
-      <SettingCard title="会话粘性" description="同一对话优先用上次的账号">
-        <template #info>
-          <p>
-            同一对话指同一密钥、同一模型、同一会话标识（Claude Code 会话、X-Session-Id、prompt_cache_key），没有标识时按首条用户消息。
-            上游缓存按账号，换号就命中不了。
-          </p>
-          <p>
-            优先：原账号 5 分钟内能恢复（并发满、短冷却、代理暂停）时只临时借号，下个请求回到原账号；停用、额度耗尽、冷却较长或额度低于避让阈值时，
-            才改绑到新账号。
-          </p>
-          <p>严格：在优先的基础上，原账号并发满时先等它的名额，最多等"并发满时最多等待"的时长，等不到再临时借号。</p>
-          <p>记录只在内存里，重启后清空。</p>
-        </template>
-        <SettingRow label="粘性方式" :description="stickyHints[form.stickyMode]">
-          <SegmentedControl v-model="form.stickyMode" :options="stickyOptions" label="粘性方式" hide-label />
-        </SettingRow>
-        <SettingRow label="闲置多久后不再粘" description="超过后当作新对话" input-id="sched-sticky-ttl">
-          <UnitInput id="sched-sticky-ttl" v-model="form.stickyMin" unit="分钟" :min="5" :max="1440" :disabled="form.stickyMode === 'off'" />
         </SettingRow>
       </SettingCard>
 

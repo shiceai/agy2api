@@ -334,7 +334,7 @@ const schedulingDefaults: Scheduling = {
   token_refresh_early: true, token_refresh_min_lead: 300, token_refresh_max_lead: 900, concurrency: 15, slot_wait: 30,
   max_attempts: 3, cooldown_wait: 30, rate_limit_base: 60, rate_limit_max: 300, server_error_cooldown: 30,
   validation_cooldown: 600, model_forbidden_cooldown: 300, quota_refresh: 900, low_quota: 10, stream_idle: 120,
-  require_proxy: false, sticky: true, sticky_mode: 'strict', sticky_ttl: 3600, weekly_quota: false,
+  require_proxy: false, strategy: 'round_robin', sticky: true, sticky_mode: 'strict', sticky_ttl: 3600, weekly_quota: false,
 }
 let scheduling: Scheduling = { ...schedulingDefaults }
 let clientFilter: ClientFilter = { enabled: false, mode: 'rewrite', use_default_keywords: true, rules: '' }

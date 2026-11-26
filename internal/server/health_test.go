@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/shiceai/agy2api/internal/mockupstream"
+	"github.com/shiceai/agy2api/internal/pool"
 	"github.com/shiceai/agy2api/internal/relay"
 	"github.com/shiceai/agy2api/internal/store"
 )
@@ -107,7 +108,7 @@ func TestSchedulingSettings(t *testing.T) {
 	decode(t, doReq(t, srv, http.MethodGet, "/api/admin/settings/scheduling", nil, ""), &got)
 	if got.Settings != got.Defaults || got.Defaults.Concurrency != 15 || !got.Defaults.TokenRefreshEarly ||
 		got.Defaults.TokenRefreshMinLead != 300 || got.Defaults.TokenRefreshMaxLead != 900 ||
-		got.Defaults.QuotaRefresh != 900 || got.Defaults.LowQuota != 10 {
+		got.Defaults.QuotaRefresh != 900 || got.Defaults.LowQuota != 10 || got.Defaults.Strategy != pool.StrategyRoundRobin {
 		t.Fatalf("未配置时应为默认值：%+v", got)
 	}
 
@@ -120,6 +121,7 @@ func TestSchedulingSettings(t *testing.T) {
 		`{"quota_refresh":60}`,
 		`{"quota_refresh":7201}`,
 		`{"low_quota":51}`,
+		`{"strategy":"random"}`,
 	} {
 		if resp := doReq(t, srv, http.MethodPut, "/api/admin/settings/scheduling", nil, bad); resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("%s 应返回 400，实际 %d %s", bad, resp.StatusCode, readBody(resp))
@@ -127,13 +129,13 @@ func TestSchedulingSettings(t *testing.T) {
 	}
 
 	resp := doReq(t, srv, http.MethodPut, "/api/admin/settings/scheduling", nil,
-		`{"token_refresh_early":false,"concurrency":4,"server_error_cooldown":0,"quota_refresh":0,"low_quota":20}`)
+		`{"token_refresh_early":false,"concurrency":4,"server_error_cooldown":0,"quota_refresh":0,"low_quota":20,"strategy":"smart"}`)
 	decode(t, resp, &got)
 	if got.Settings.Concurrency != 4 || got.Settings.TokenRefreshEarly || got.Settings.ServerErrorCooldown != 0 || got.Settings.MaxAttempts != 3 {
 		t.Fatalf("应只改给出的字段：%+v", got.Settings)
 	}
 	p := svc.relay.Policy()
-	if p.Concurrency != 4 || p.TokenRefresh.Early || p.ServerErrorCooldown != 0 || p.QuotaRefresh != 0 || p.LowQuota != 0.2 {
+	if p.Concurrency != 4 || p.TokenRefresh.Early || p.ServerErrorCooldown != 0 || p.QuotaRefresh != 0 || p.LowQuota != 0.2 || p.Strategy != pool.StrategySmart {
 		t.Fatalf("修改应立即生效：%+v", p)
 	}
 

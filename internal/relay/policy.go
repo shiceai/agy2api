@@ -37,6 +37,8 @@ type Policy struct {
 	LowQuota float64
 	// StreamIdleTimeout 是流式响应中途两次从上游读到数据的最长间隔，超过就断开；0 表示不断开。
 	StreamIdleTimeout time.Duration
+	// Strategy 是选号方式（pool.Strategy*）：会话粘性的优先账号接不了或没有时怎么从能用的账号里选。
+	Strategy string
 	// RequireProxy 为 true 时只用绑定了代理的账号，没绑的不参与调度。
 	RequireProxy bool
 	// Sticky 是会话粘性的方式（StickyOff、StickyPreferred、StickyStrict）：同一对话优先用上次的账号；
@@ -65,6 +67,7 @@ func DefaultPolicy() Policy {
 		QuotaRefresh:           15 * time.Minute,
 		LowQuota:               0.1,
 		StreamIdleTimeout:      120 * time.Second,
+		Strategy:               pool.StrategyRoundRobin,
 		Sticky:                 StickyStrict,
 		StickyTTL:              time.Hour,
 	}
@@ -80,6 +83,7 @@ func (r *Relay) SetPolicy(p Policy) {
 		r.pool.SetLowQuota(p.LowQuota)
 		r.pool.SetRequireProxy(p.RequireProxy)
 		r.pool.SetWeeklyQuota(p.WeeklyQuota)
+		r.pool.SetStrategy(p.Strategy)
 	})
 }
 

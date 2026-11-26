@@ -96,7 +96,7 @@ func (r *Relay) probe(ctx context.Context, lease *pool.Lease, req Request, tr *t
 	c := &call{try: 1, started: started, lease: lease, up: up, tokenDur: tokenDur}
 	res.Status = up.Status
 	if up.Status >= 200 && up.Status < 300 {
-		r.pool.NoteSuccess(lease.Account.ID)
+		r.pool.NoteSuccess(lease.Account.ID, 0)
 		// 和正常请求一样经 Response.Close 记用量（成功的尝试耗时算到读完）。
 		resp := &Response{Status: up.Status, Body: up.Body, relay: r, cfg: cfg, req: req, requestID: logx.RequestID(ctx), trace: tr, call: c}
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLimit))

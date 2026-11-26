@@ -39,8 +39,9 @@ APIs (Claude Code, Codex, the OpenAI SDK and others connect directly), and comes
   can connect directly; official model names are mapped to models in the pool by model aliases
 - **OpenAI API**: `/v1/chat/completions` and `/v1/responses` (both with streaming) and model listing, with tool calls,
   images, thinking content and structured output; the OpenAI SDK, Cherry Studio, Codex and other clients can connect directly
-- **Pool scheduling**: cooldowns per account and model, automatic failover, avoids accounts with low quota, keeps a
-  conversation on the same account (recognizes Claude Code and Codex sessions and `X-Session-Id`), per-account
+- **Pool scheduling**: round-robin, scored (smart) or reset-first account selection, cooldowns per account and model,
+  automatic failover, avoids accounts with low quota, keeps a conversation on the same account (recognizes Claude Code
+  and Codex sessions and `X-Session-Id`; a short detour to another account keeps the binding), per-account
   concurrency limits
 - **Account management**: add accounts with Google sign-in or bulk import, automatic token refresh, automatic disabling
   of revoked accounts, per-account testing; per-model quota display, with optional weekly quota

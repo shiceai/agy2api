@@ -334,7 +334,7 @@ func TestRateLimitStrikes(t *testing.T) {
 			t.Fatalf("第 %d 次应返回 %d，实际 %d", want, want, got)
 		}
 	}
-	f.pool.NoteSuccess(7)
+	f.pool.NoteSuccess(7, 0)
 	if got := f.pool.NoteRateLimit(7); got != 1 {
 		t.Fatalf("成功后应从 1 算，实际 %d", got)
 	}

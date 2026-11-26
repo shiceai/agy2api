@@ -499,6 +499,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 				return nil, tooLarge
 			}
 			kind := r.transportFailure(ctx, lease.Account.ID, err)
+			r.pool.NoteFailure(lease.Account.ID)
 			log.WarnContext(ctx, "上游调用失败，换号重试", "kind", kind, "err", err)
 			tr.add(try, lease, attemptStart, 0, kind, err.Error(), 0)
 			last = &failure{err: err}
@@ -509,7 +510,12 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 		if up.Status >= 200 && up.Status < 300 {
 			body, err := firstFrame(up, req.Stream)
 			if err == nil {
-				r.pool.NoteSuccess(lease.Account.ID)
+				// 流式的首字延迟：从发出请求（选号、取令牌之后）到收到第一帧，智能选号用；非流式整段生成完才返回，不计。
+				var firstByte time.Duration
+				if req.Stream {
+					firstByte = time.Since(attemptStart) - acquireDur - tokenDur
+				}
+				r.pool.NoteSuccess(lease.Account.ID, firstByte)
 				if stickyKey != "" {
 					// 临时借号成功时绑定不变、只续期；其余（新对话、沿用、改绑）绑到这次的账号。
 					if tr.affinity.Result == AffinityDiverted {
@@ -536,6 +542,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 				if !errors.Is(err, ErrStreamIdle) {
 					kind = r.transportFailure(ctx, lease.Account.ID, err)
 				}
+				r.pool.NoteFailure(lease.Account.ID)
 				log.WarnContext(ctx, "流式第一帧之前读取失败，换号重试", "kind", kind, "err", err)
 				tr.add(try, lease, attemptStart, up.Status, kind, err.Error(), 0)
 				last = &failure{err: err}
@@ -551,6 +558,9 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 		now := time.Now()
 		d := decide(ue, p, now)
 		cooldown := r.applyDecision(ctx, lease.Account, lease.Model, ue, d, p)
+		if ue.Kind == antigravity.KindServerError || ue.Kind == antigravity.KindRateLimit {
+			r.pool.NoteFailure(lease.Account.ID) // 账号近期的失败率，智能选号用
+		}
 		lease.Release()
 		log.WarnContext(ctx, "上游返回错误",
 			"status", ue.Status, "kind", ue.Kind, "reason", ue.Reason, "action", d.action,

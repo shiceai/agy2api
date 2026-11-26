@@ -228,6 +228,10 @@ type Pool struct {
 	strikes   map[int64]strike
 	// paused 是整个账号暂停调度到什么时候（代理连不上时），只在内存里，不落库。
 	paused map[int64]time.Time
+	// health 是各账号近期的失败率和首字延迟，智能选号用，只在内存里。
+	health map[int64]*health
+	// strategy 是选号方式（Strategy*），空串按轮询。
+	strategy atomic.Value
 }
 
 // New 构造一个空号池，使用前需调用 Reload（和 LoadCooldowns）。
@@ -240,6 +244,7 @@ func New(st *store.Store, enc store.Encryptor) *Pool {
 		freed:     make(chan struct{}),
 		strikes:   map[int64]strike{},
 		paused:    map[int64]time.Time{},
+		health:    map[int64]*health{},
 	}
 	p.defaultLimit.Store(DefaultConcurrency)
 	return p
@@ -275,6 +280,12 @@ func (p *Pool) LoadCooldowns(ctx context.Context) error {
 		p.setCooldownLocked(cooldownKey{c.AccountID, c.Model}, time.UnixMilli(c.Until), c.Reason)
 	}
 	return nil
+}
+
+// candidate 是选号时一个能用的账号和它解析出的模型。
+type candidate struct {
+	account *Account
+	model   string
 }
 
 // SetDefaultConcurrency 设置账号没有单独设置时的并发上限，立即生效。
@@ -398,10 +409,6 @@ func (p *Pool) Acquire(ctx context.Context, requested, tier string, exclude map[
 // waitPrefer 为 true 且它只是并发已满（额度也不低）时不选别的，返回 preferBusy 的 *UnavailableError 让调用方等它。
 // 返回的 freed 是选号时刻的释放通道，并发已满时可等它，不会漏掉中间的释放。
 func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64, waitPrefer bool) (*Lease, <-chan struct{}, error) {
-	type candidate struct {
-		account *Account
-		model   string
-	}
 	// 解析模型不需要锁。
 	accounts := p.snapshot()
 	supported := make([]candidate, 0, len(accounts))
@@ -511,7 +518,7 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 			candidates = healthy
 		}
 	}
-	// 会话粘性：优先账号能接就用它；否则轮询，每次推进游标，分散到不同账号。
+	// 会话粘性：优先账号能接就用它；否则按选号方式选（见 strategy.go）。
 	var c candidate
 	found := false
 	for _, x := range candidates {
@@ -521,7 +528,7 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 		}
 	}
 	if !found {
-		c = candidates[(p.cursor.Add(1)-1)%uint64(len(candidates))]
+		c = p.chooseLocked(candidates, now)
 	}
 	p.inflight[c.account.ID]++
 	return &Lease{Account: c.account, Model: c.model, InUse: p.inflight[c.account.ID], Limit: p.Limit(c.account.Account),
@@ -787,9 +794,11 @@ func (p *Pool) Paused() map[int64]time.Time {
 	return out
 }
 
-// NoteSuccess 清零账号的瞬时限流连续次数。
-func (p *Pool) NoteSuccess(accountID int64) {
+// NoteSuccess 记一次成功：清零账号的瞬时限流连续次数，计入近期失败率（见 strategy.go）。firstByte 是流式请求
+// 从发出到收到第一帧的时间，计入首字延迟；非流式和账号检测传 0（整段生成完才返回，不可比）。
+func (p *Pool) NoteSuccess(accountID int64, firstByte time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.strikes, accountID)
+	p.healthLocked(accountID).note(false, firstByte, time.Now())
 }

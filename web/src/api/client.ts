@@ -514,6 +514,8 @@ export interface Scheduling {
   low_quota: number
   stream_idle: number
   require_proxy: boolean
+  // strategy 是选号方式：round_robin 轮询、smart 智能、reset_first 重置优先。
+  strategy: Strategy
   // sticky_mode 是会话粘性的方式：off 关闭、preferred 优先、strict 严格；sticky 是旧的开关（不是关闭时为 true），
   // 服务端照它写，撤销升级后的旧版本照样能读。sticky_ttl 是对话闲置多久后不再粘（秒）。
   sticky: boolean
@@ -523,6 +525,7 @@ export interface Scheduling {
   weekly_quota: boolean
 }
 export type StickyMode = 'off' | 'preferred' | 'strict'
+export type Strategy = 'round_robin' | 'smart' | 'reset_first'
 export interface SchedulingResponse {
   settings: Scheduling
   defaults: Scheduling
