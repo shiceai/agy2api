@@ -34,6 +34,8 @@ avoidance. It exposes the native Gemini `v1beta` API and comes with an admin con
 
 - **Native Gemini API**: `generateContent`, `streamGenerateContent`, `countTokens` and model listing; works with SDKs
   such as `google-genai`
+- **Anthropic API**: `/v1/messages` (streaming and non-streaming) and `count_tokens`, so Claude Code and other Anthropic clients
+  can connect directly; official model names are mapped to models in the pool by model aliases
 - **Pool scheduling**: cooldowns per account and model, automatic failover, avoids accounts with low quota, keeps a
   conversation on the same account, per-account concurrency limits
 - **Account management**: add accounts with Google sign-in or bulk import, automatic token refresh, automatic disabling
@@ -51,6 +53,7 @@ avoidance. It exposes the native Gemini `v1beta` API and comes with an admin con
 ```mermaid
 flowchart LR
     client["Gemini clients<br/>google-genai, etc."] -->|Gemini v1beta| auth
+    claude["Claude Code and other<br/>Anthropic clients"] -->|Anthropic Messages| auth
     subgraph gw["AGY2API"]
         auth["API key auth and limits"] --> pool["Account pool scheduling<br/>cooldown · failover · low-quota avoidance"]
         pool -.-> usage["Usage and cost records"]
@@ -89,6 +92,28 @@ curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
 
 Before exposing it to the internet, read the [deployment guide](docs/deploy.md) (in Chinese): HTTPS reverse proxy,
 admin access control, backup and upgrade, and deployment with systemd.
+
+## Use with Claude Code
+
+Create an API key on the keys page of the admin console, then:
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8249
+export ANTHROPIC_AUTH_TOKEN=agy-xxxxx
+claude
+```
+
+- Official model names sent by Claude Code (such as `claude-sonnet-5-5`, with or without a date or `[1m]`) are mapped to models
+  in the pool by model aliases; Haiku, used for background tasks, maps to `claude-sonnet-5-5-low` by default and can be
+  changed under Settings → Model aliases in the admin console.
+- Other models in the pool work too, including Gemini, e.g. `claude --model gemini-3-flash`.
+- Claude on Antigravity does not return its thinking, so Claude Code shows no thinking content; Anthropic server tools
+  (such as WebSearch) are not supported.
+- **Claude Code compatibility (on by default)**: the upstream flags client fingerprints such as Claude Code's in the
+  system prompt and returns a 429 that looks like quota exhaustion. The gateway moves the client's system into a leading
+  user message (only the system prompt is inspected, not the conversation), which gets the request through; the cost is
+  that the client's system drops from system to user level and may slightly change how the model follows it. Turn it off
+  under Settings -> Model aliases -> Claude Code compatibility.
 
 ## Upgrade
 

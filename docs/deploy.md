@@ -167,6 +167,27 @@ server {
 - 支持 Linux、macOS 的 amd64、arm64。Windows 和自己编译的开发构建不支持，管理端会说明原因；Windows 上有新版本时给出下载链接。
 - `AGY2API_UPDATE=off` 关闭：不连 GitHub，也不运行数据目录里在线升级的程序。连 GitHub 走 `HTTPS_PROXY`。
 
+## Anthropic 接口
+
+除了 Gemini 原生接口，网关还提供 Anthropic Messages 接口，Claude Code 等客户端可以直接接入（用法见 README）：
+
+- `POST /v1/messages`（流式和非流式）、`POST /v1/messages/count_tokens`；带 `anthropic-version` 请求头的 `GET /v1/models`
+  返回 Anthropic 格式的模型列表。API Key 放在 `x-api-key` 或 `Authorization: Bearer` 里。
+- 请求转成 Gemini 格式后走同一套号池：选号、冷却、换号、会话粘性、Key 的限额和允许的模型、客户端过滤、系统提示词伪装都一样。
+  工具调用、图片和 PDF、思考参数（`thinking`、`output_config.effort`）都会转换；Claude Code 加在 system 里的计费信息块不会发给上游。
+- **模型别名**：客户端的模型名不在号池目录里时，先去掉末尾的 `[1m]` 和 `-YYYYMMDD` 日期，还不在就按规则映射（自定义规则在前、
+  预置规则在后）。预置规则把 Claude 的官方名映射到号池里的 `claude-opus-5-5`、`claude-sonnet-5-5` 家族，Haiku 映射到
+  `claude-sonnet-5-5-low`。在管理端"设置 → 模型别名"里可以关掉预置规则、加自定义规则（每行 `别名 => 目标`，可用 `*` 通配），
+  并试解析一个模型名。Gemini 接口同样生效。
+- 不支持：Anthropic 的服务端工具（如 `web_search`，请求里有时去掉，其它工具照常）、文件 API（`file_id`）、批处理 API。
+  Antigravity 上的 Claude 不返回思考内容。
+- **Claude Code 兼容**（默认开，只作用于 Anthropic 入站）：上游按系统提示里的客户端特征（Claude Code 等）拦截，返回
+  伪装成额度耗尽的 429（实测与模型、入站协议无关，与措辞无关，删改单段也躲不掉；但上游只检查系统提示、不看对话内容）。
+  开启后把客户端 system 整体降为开头的一条用户消息、系统提示留空即可放行，代价是客户端 system 从 system 级降到 user 级、
+  可能略微改变模型遵循方式。在"设置 → 模型别名 → Claude Code 兼容"里开关。用别的中间服务以 Gemini 协议转发 Claude Code
+  的请求时不走这个开关，可用"系统提示词伪装"的"客户端转用户"模式达到同样效果。
+- 用量页的"接口"一列区分 Gemini 和 Anthropic 的请求，请求模型记客户端原来的名字，"实际发出"是映射后的模型。
+
 ## 环境变量
 
 Docker Compose 写在 `.env` 里，systemd 写在 `/etc/agy2api/env` 里（模板是 `deploy/env.example`）。

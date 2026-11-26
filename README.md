@@ -31,6 +31,7 @@
 ## 功能
 
 - **Gemini 原生接口**：`generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，可直接用 `google-genai` 等 SDK
+- **Anthropic 接口**：`/v1/messages`（流式和非流式）和 `count_tokens`，Claude Code 等客户端可以直接接入；官方模型名按模型别名映射到号池里的模型
 - **号池调度**：按账号和模型冷却，失败自动换号，额度低的账号避让，同一对话优先用同一账号，每个账号有并发上限
 - **账号管理**：Google 登录添加或批量导入，令牌自动刷新，失效自动停用，可单独检测
 - **出口代理**：每个账号绑定固定的出口代理（http、https、socks5）
@@ -44,6 +45,7 @@
 ```mermaid
 flowchart LR
     client["Gemini 客户端<br/>google-genai 等"] -->|Gemini v1beta| auth
+    claude["Claude Code 等<br/>Anthropic 客户端"] -->|Anthropic Messages| auth
     subgraph gw["AGY2API"]
         auth["API Key 鉴权与限额"] --> pool["号池调度<br/>冷却 · 换号 · 额度避让"]
         pool -.-> usage["用量与费用记录"]
@@ -80,6 +82,24 @@ curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
 ```
 
 上公网前请看[部署说明](docs/deploy.md)：HTTPS 反向代理、管理端访问限制、备份和升级，以及 systemd 部署方式。
+
+## 在 Claude Code 中使用
+
+在管理端"密钥"页新建一个 API Key，然后：
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8249
+export ANTHROPIC_AUTH_TOKEN=agy-xxxxx
+claude
+```
+
+- Claude Code 发来的官方模型名（如 `claude-sonnet-5-5`，或带日期、`[1m]` 的写法）按模型别名映射到号池里的模型；后台小任务用的
+  Haiku 默认映射到 `claude-sonnet-5-5-low`，可以在管理端"设置 → 模型别名"里改。
+- 也可以直接用号池里的其它模型，包括 Gemini，如 `claude --model gemini-3-flash`。
+- Antigravity 上的 Claude 不返回思考过程，Claude Code 里看不到思考内容；Anthropic 的服务端工具（如 WebSearch）不支持。
+- **Claude Code 兼容（默认开）**：上游会识别写在系统提示里的 Claude Code 等客户端特征，返回伪装成额度耗尽的 429。
+  网关默认把客户端的 system 降为开头的一条用户消息（上游只检查系统提示、不看对话内容）即可放行，代价是客户端 system
+  从 system 级降到 user 级、可能略改模型遵循方式。可在"设置 → 模型别名 → Claude Code 兼容"里关掉。
 
 ## 升级
 

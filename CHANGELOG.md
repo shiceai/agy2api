@@ -2,6 +2,15 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+### 功能
+
+- **Anthropic Messages 接口。** 提供 `/v1/messages`（流式和非流式）和 `/v1/messages/count_tokens`，带 `anthropic-version` 头的 `/v1/models` 返回 Anthropic 格式。Claude Code 设好 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_AUTH_TOKEN` 就能用。工具调用、图片和文档、思考参数都会转换，Gemini 模型的思考签名能在多轮对话里来回传递；选号、换号、用量记录等和 Gemini 接口一样。
+- **模型别名。** 客户端发的模型名不在号池里时，自动去掉 `[1m]` 和日期后缀，再按规则映射：预置规则把 Claude 的官方名映射到号池里的 Claude 家族，Haiku 映射到 `claude-sonnet-5-5-low`。可以在"设置 → 模型别名"里加自定义规则并试解析，两个接口都生效。
+- **用量区分接口。** 用量页新增"接口"列和筛选，详情里写明调用的接口；请求模型记客户端原来的名字。
+- **Claude Code 兼容（默认开）。** 上游会按系统提示里的客户端特征拦截 Claude Code 等，返回伪装成额度耗尽的 429。网关默认把 Anthropic 入站客户端的 system 降为开头的一条用户消息（上游只检查系统提示）即可放行，可在"设置 → 模型别名"里关掉。
+
 ## v1.0.0 - 2026-11-25
 
 首个公开版本。
