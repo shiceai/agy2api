@@ -2,7 +2,9 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## 未发布
+## v1.1.0 - 2026-11-25
+
+新增 Anthropic Messages 接口，Claude Code 等 Anthropic 客户端可以直接接入。
 
 ### 功能
 

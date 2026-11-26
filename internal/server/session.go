@@ -2,8 +2,8 @@ package server
 
 import "net/http"
 
-// buildInfo 是管理端显示的版本信息。版本号由构建注入（git describe：正式版是 v1.0.0 这样的标签，之后的开发构建是
-// v1.0.0-3-gabc1234，有未提交的改动时带 -dirty）。
+// buildInfo 是管理端显示的版本信息。版本号由构建注入（git describe：正式版是 v1.1.0 这样的标签，之后的开发构建是
+// v1.1.0-3-gabc1234，有未提交的改动时带 -dirty）。
 type buildInfo struct {
 	Version string `json:"version"`
 }
