@@ -54,7 +54,7 @@ agy2api/
 | 选项 | 作用 |
 | --- | --- |
 | `--dir /opt/agy2api` | 安装目录，默认当前目录下的 `agy2api`；升级、卸载时会自己找到原来的目录 |
-| `--version v1.6.0` | 安装指定版本，默认最新正式版 |
+| `--version v1.6.1` | 安装指定版本，默认最新正式版 |
 | `--listen 0.0.0.0:8249` | 不经反向代理直接对外（只在首次安装、生成配置时生效；会提示明文传输的风险） |
 | `--docker` | 不装程序，在安装目录放 `compose.yaml` 和 `.env`（随机口令），数据在 `data/`，然后启动容器；不需要 sudo；再运行一次换成新版本 |
 | `--uninstall` | 卸载，见下文"卸载" |
@@ -72,7 +72,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-- 默认用最新的正式版（`latest`）。要固定版本，在 `.env` 里写 `AGY2API_IMAGE=ghcr.io/shiceai/agy2api:1.6.0`。
+- 默认用最新的正式版（`latest`）。要固定版本，在 `.env` 里写 `AGY2API_IMAGE=ghcr.io/shiceai/agy2api:1.6.1`。
 - 从源码构建：在仓库根目录 `VERSION=$(git describe --tags --always --dirty) docker compose up -d --build`。
   构建出的镜像也叫 `ghcr.io/shiceai/agy2api:latest`，要换回发布的镜像时执行 `docker compose pull`。挂的是仓库里的 `data/`，
   和本地直接运行的默认数据目录是同一个，不要同时运行两份。

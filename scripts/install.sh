@@ -7,7 +7,7 @@
 #
 #   curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash
 #   ... | sudo bash -s -- --dir /opt/agy2api      装到指定目录
-#   ... | sudo bash -s -- --version v1.6.0        安装指定版本
+#   ... | sudo bash -s -- --version v1.6.1        安装指定版本
 #   ... | sudo bash -s -- --listen 0.0.0.0:8249   不经反向代理直接对外（只在首次安装、生成配置时生效）
 #   ... | sudo bash -s -- --listen 127.0.0.1:8249,10.8.0.1:8249   同时在本机和内网（如 WireGuard）地址上监听
 #   ... | bash -s -- --docker                     用 Docker Compose 部署，不装程序
@@ -75,7 +75,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --version)
-      [ $# -ge 2 ] || die "--version 后面要写版本，如 v1.6.0"
+      [ $# -ge 2 ] || die "--version 后面要写版本，如 v1.6.1"
       version="$2"
       shift 2
       ;;
@@ -101,7 +101,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -n "$version" ] && [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-  die "版本号格式不对：$version（应为 v1.6.0 这样）"
+  die "版本号格式不对：$version（应为 v1.6.1 这样）"
 fi
 if [ -n "$listen" ]; then
   listen="${listen// /}"
