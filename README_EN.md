@@ -7,7 +7,7 @@
 
 <h1 align="center">AGY2API</h1>
 
-<p align="center"><strong>Turn a pool of Antigravity accounts into a schedulable, observable Gemini-compatible API gateway</strong></p>
+<p align="center"><strong>Turn a pool of Antigravity accounts into a schedulable, observable API gateway that speaks the Gemini and Anthropic APIs</strong></p>
 
 <p align="center">
   <a href="https://github.com/shiceai/agy2api/releases/latest"><img src="https://img.shields.io/github/v/release/shiceai/agy2api?style=flat-square" alt="Latest release"></a>
@@ -24,7 +24,8 @@
 <p align="center"><a href="README.md">简体中文</a> | English</p>
 
 AGY2API manages multiple Antigravity accounts, handling account selection, cooldown recovery, failover and low-quota
-avoidance. It exposes the native Gemini `v1beta` API and comes with an admin console.
+avoidance. It exposes the native Gemini `v1beta` API and the Anthropic Messages API (Claude Code connects directly), and
+comes with an admin console.
 
 > **Risk notice**: this project reaches Google Cloud Code's internal API through Antigravity accounts. This kind of use
 > may violate Google's Terms of Service; accounts may be restricted or banned, and paid subscriptions will not be

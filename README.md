@@ -7,7 +7,7 @@
 
 <h1 align="center">AGY2API</h1>
 
-<p align="center"><strong>把 Antigravity 账号池变成可调度、可观测的 Gemini 兼容 API 网关</strong></p>
+<p align="center"><strong>把 Antigravity 账号池变成可调度、可观测的 Gemini、Anthropic 兼容 API 网关</strong></p>
 
 <p align="center">
   <a href="https://github.com/shiceai/agy2api/releases/latest"><img src="https://img.shields.io/github/v/release/shiceai/agy2api?style=flat-square" alt="Latest release"></a>
@@ -23,7 +23,7 @@
 
 <p align="center">简体中文 | <a href="README_EN.md">English</a></p>
 
-管理多个 Antigravity 账号，负责选号、冷却恢复、失败换号和额度避让，对外提供 Gemini 原生 `v1beta` 接口，自带管理端。
+管理多个 Antigravity 账号，负责选号、冷却恢复、失败换号和额度避让，对外提供 Gemini 原生 `v1beta` 和 Anthropic Messages 接口（Claude Code 可直接接入），自带管理端。
 
 > **风险提示**：本项目经 Antigravity 账号访问 Google Cloud Code 的内部接口，这种用法可能违反 Google 的服务条款，
 > 账号可能被限制或封禁，已付费的订阅不会因此退款。仅供学习和技术研究，风险自负。
