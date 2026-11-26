@@ -118,6 +118,37 @@ func TestConversationIdentity(t *testing.T) {
 	}
 }
 
+// 客户端 system 转成的开头用户消息不参与认对话：system 相同、真正的首条消息不同是两个对话，
+// 首条消息相同时和没转之前是同一个对话。两种转法（兼容开关、"客户端转用户"模式）都一样。
+func TestFirstUserContentSkipsMovedSystem(t *testing.T) {
+	body := func(first string) map[string]any {
+		var b map[string]any
+		if err := json.Unmarshal([]byte(`{"systemInstruction":{"parts":[{"text":"You are Claude Code."}]},`+
+			`"contents":[{"role":"user","parts":[{"text":"`+first+`"}]}]}`), &b); err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	plain := FirstUserContent(body("fix the bug"))
+	moved := body("fix the bug")
+	MoveSystemToUser(moved)
+	asUser := body("fix the bug")
+	ApplySystemPrompt(asUser, SystemPromptAsUser, "template")
+	other := body("write docs")
+	MoveSystemToUser(other)
+	if FirstUserContent(moved) != plain || FirstUserContent(asUser) != plain {
+		t.Fatalf("moved system should be skipped: %s / %s, want %s", FirstUserContent(moved), FirstUserContent(asUser), plain)
+	}
+	if FirstUserContent(other) == plain {
+		t.Fatal("different first messages should stay different after moving the system")
+	}
+	only := map[string]any{"systemInstruction": map[string]any{"parts": []any{map[string]any{"text": "sys"}}}}
+	MoveSystemToUser(only)
+	if got := FirstUserContent(only); got != "" {
+		t.Fatalf("only the moved system: %q", got)
+	}
+}
+
 func TestLabelsModelFlags(t *testing.T) {
 	cases := []struct {
 		model                      string

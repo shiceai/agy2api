@@ -66,12 +66,13 @@ func conversationSeed(accountID int64, caller string, inner map[string]any) stri
 }
 
 // FirstUserContent 返回第一条用户消息的规范 JSON（map 键有序），没有时返回空串。对话的会话 ID 和会话粘性都按它认对话。
-// 用整条消息而不只是文字，只有图片的对话也能区分开。
+// 用整条消息而不只是文字，只有图片的对话也能区分开。网关把客户端 system 转成的开头用户消息（见 MoveSystemToUser、
+// "客户端转用户"模式）跳过：那是客户端的系统提示，同一客户端的不同对话基本一样，拿它认对话会把不同对话认成一个。
 func FirstUserContent(inner map[string]any) string {
 	contents, _ := inner["contents"].([]any)
 	for _, c := range contents {
 		content, ok := c.(map[string]any)
-		if !ok || content["role"] != "user" {
+		if !ok || content["role"] != "user" || isMovedSystem(content) {
 			continue
 		}
 		raw, err := json.Marshal(content["parts"])
@@ -81,6 +82,17 @@ func FirstUserContent(inner map[string]any) string {
 		return string(raw)
 	}
 	return ""
+}
+
+// isMovedSystem 报告这条消息是不是网关把客户端 system 转成的用户消息：第一个 part 是网关加的桥接说明。
+func isMovedSystem(content map[string]any) bool {
+	parts, _ := content["parts"].([]any)
+	if len(parts) == 0 {
+		return false
+	}
+	first, _ := parts[0].(map[string]any)
+	text, _ := first["text"].(string)
+	return text == systemToUserBridge || text == systemAsUserBridge
 }
 
 // countModelTurns 统计历史里模型回复的条数。
