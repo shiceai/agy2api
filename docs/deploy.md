@@ -1,9 +1,10 @@
 # 部署
 
-AGY2API 的数据（SQLite 库和凭据加密密钥）都在数据目录里。最简单的是用一键安装脚本（见下文），它装好的就是下面两种方式之一：
+AGY2API 的数据（SQLite 库和凭据加密密钥）都在数据目录里。最简单的是用一键安装脚本（见下文），它把程序、配置和数据放在
+一个目录里，装成下面两种方式之一：
 
-- **Docker Compose**：仓库根目录的 `Dockerfile` 和 `compose.yaml`，数据在命名卷 `data` 里。
-- **systemd**：交叉编译出 Linux 二进制，用 `deploy/agy2api.service` 跑成服务，数据在 `/var/lib/agy2api`。
+- **systemd**：Linux 二进制跑成系统服务。
+- **Docker Compose**：用发布的镜像，`compose.yaml`、`.env` 和数据目录 `data/` 在一起。
 
 两种方式默认都只在本机 8249 端口监听（避开 8080 这类常用端口；249 是 AGY 在电话键盘上的位置），由同一台机器上的反向代理对外提供 HTTPS。
 各接口的细节（转换规则、限制、会话粘性）见[接口说明](api.md)。
@@ -23,46 +24,70 @@ curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.s
 ```
 
 脚本从 Releases 下载对应平台（Linux、macOS，amd64、arm64）的压缩包，按 `SHA256SUMS.txt` 校验，不一致就停下。
-Linux 有 systemd 时装成服务（就是下文 systemd 一节的做法）：
+所有文件放在一个目录里，默认是当前目录下新建的 `agy2api`，用 `--dir` 指定别处：
 
-- 程序在 `/usr/local/bin/agy2api`，配置在 `/etc/agy2api/env`（权限 600），数据在 `/var/lib/agy2api`。
-- 首次安装自动生成 24 位随机管理口令写进配置，只在安装结束时显示一次，之后到配置文件里查看。默认只监听
+```text
+agy2api/
+  agy2api        程序
+  agy2api.old    升级前的旧程序
+  .env           配置（权限 600）
+  data/          数据：库、加密密钥，以及在线升级下载的新程序和备份
+```
+
+- Linux 有 systemd 时装成服务 `agy2api`，以安装目录所有者的身份运行：用 sudo 的普通用户装就是这个用户，直接用 root
+  装就是 root。服务没有任何特权，系统和家目录只读，只能写 `data/`。服务文件按安装目录生成在
+  `/etc/systemd/system/agy2api.service`。
+- 安装目录不能在 `/tmp`、`/var/tmp` 下（会被清理，服务也看不到），服务的用户要进得去（普通用户装到 `/root` 下会被拒）；
+  已经存在、里面有别的文件的目录也不用。
+- 没有 systemd 的系统（macOS、部分精简发行版）不装成服务，目录里多一个 `run.sh`：读 `.env` 后在前台运行。
+- 首次安装自动生成 24 位随机管理口令写进 `.env`，只在安装结束时显示一次，之后到 `.env` 里查看。默认只监听
   `127.0.0.1:8249`，对外请放 HTTPS 反向代理；远程服务器上可以先用 `ssh -L 8249:127.0.0.1:8249 <服务器>` 打开管理端。
-- 再运行一次就是升级：只换程序和服务文件，配置和数据不动，旧程序备份成 `agy2api.old`，要回退时换回去重启即可。
+- 再运行一次就是升级：脚本会找到原来的安装（systemd 服务记的目录，或者当前目录就是安装目录），只换程序，配置和数据
+  不动，旧程序备份成 `agy2api.old`，要回退时换回去重启即可。没有 systemd 时到安装目录或它的上级目录里运行，或用 `--dir`。
+- 1.4.0 及以前的一键安装把文件放在系统目录（程序 `/usr/local/bin/agy2api`、数据 `/var/lib/private/agy2api`），新脚本
+  不会原地升级它：先 `--uninstall`，再重新安装，要沿用旧数据就把旧数据目录里的 `agy2api.db`、`agy2api.key` 复制到新的
+  `data/` 里，改成安装目录的所有者后重启服务。
 - 不改系统内核参数。
 
-没有 systemd 的系统（macOS、部分精简发行版）只装程序，并给出运行命令。选项放在 `bash -s --` 后面：
+选项放在 `bash -s --` 后面：
 
 | 选项 | 作用 |
 | --- | --- |
-| `--version v0.2.0` | 安装指定版本，默认最新正式版 |
+| `--dir /opt/agy2api` | 安装目录，默认当前目录下的 `agy2api`；升级、卸载时会自己找到原来的目录 |
+| `--version v1.5.0` | 安装指定版本，默认最新正式版 |
 | `--listen 0.0.0.0:8249` | 不经反向代理直接对外（只在首次安装、生成配置时生效；会提示明文传输的风险） |
-| `--docker` | 不装程序，在当前目录放 `compose.yaml` 和 `.env`（随机口令）后启动容器；再运行一次换成新版本 |
-| `--uninstall` | 停止并删除服务和程序，配置和数据保留（会给出删除它们的命令） |
+| `--docker` | 不装程序，在安装目录放 `compose.yaml` 和 `.env`（随机口令），数据在 `data/`，然后启动容器；不需要 sudo；再运行一次换成新版本 |
+| `--uninstall` | 卸载，见下文"卸载" |
 
 ## Docker Compose
 
 用发布的镜像（`ghcr.io/shiceai/agy2api`，linux/amd64、linux/arm64），只需要 `compose.yaml` 和 `.env`：
 
 ```bash
+mkdir agy2api && cd agy2api
 curl -fsSLO https://raw.githubusercontent.com/shiceai/agy2api/main/compose.yaml
 curl -fsSL https://raw.githubusercontent.com/shiceai/agy2api/main/deploy/env.example -o .env   # 至少填上 AGY2API_ADMIN_PASSWORD
+mkdir -p data && sudo chown 10001:10001 data   # 容器以 UID 10001 运行，数据目录要归它
 docker compose up -d
 docker compose logs -f
 ```
 
 - 默认用最新的正式版（`latest`）。要固定版本，在 `.env` 里写 `AGY2API_IMAGE=ghcr.io/shiceai/agy2api:1.4.0`。
 - 从源码构建：在仓库根目录 `VERSION=$(git describe --tags --always --dirty) docker compose up -d --build`。
-  构建出的镜像也叫 `ghcr.io/shiceai/agy2api:latest`，要换回发布的镜像时执行 `docker compose pull`。
+  构建出的镜像也叫 `ghcr.io/shiceai/agy2api:latest`，要换回发布的镜像时执行 `docker compose pull`。挂的是仓库里的 `data/`，
+  和本地直接运行的默认数据目录是同一个，不要同时运行两份。
 - 核验镜像确实由本仓库的发布流程构建：`gh attestation verify oci://ghcr.io/shiceai/agy2api:<版本> -R shiceai/agy2api`。
 - 镜像分三段构建：前端（Node + pnpm）→ Go 单二进制（无 CGO）→ Alpine 运行镜像，以非 root 用户（UID 10001）运行。
-- 数据在命名卷 `agy2api_data`（项目名取目录名）里。改用宿主机目录挂载时，目录要归 UID 10001 所有：
-  `chown 10001:10001 ./data`。
+- 数据在 `compose.yaml` 同目录的 `data/`，要归 UID 10001 所有（一键安装用临时容器改，不需要 sudo）。备份时连 `.env` 一起。
+  1.4.0 及以前的 `compose.yaml` 把数据放在命名卷 `<目录名>_data` 里，换成新的 `compose.yaml` 前先把卷里的数据复制出来：
+  `docker compose down && docker run --rm -v <目录名>_data:/from -v "$PWD/data":/to alpine sh -c 'cp -a /from/. /to/ && chown -R 10001:10001 /to'`。
 - 镜像带健康检查（请求 `/healthz`）。改了 `AGY2API_ADDR` 的端口时，健康检查也要跟着改。
 - 关停时网关先等进行中的请求（最多 10 秒），再写完排队的用量记录（最多 5 秒），`compose.yaml` 已把
   `stop_grace_period` 设成 30 秒。
 
 ## systemd
+
+不用一键安装时，可以手动装成服务，程序、配置和数据放在系统目录：
 
 ```bash
 # 从 Releases 下载对应平台的压缩包，解压后在包目录里执行（包里有二进制、env.example 和 agy2api.service）。
@@ -137,13 +162,14 @@ server {
 
 ## 备份和升级
 
-- 备份：停服务后复制整个数据目录（`agy2api.db` 和 `agy2api.key` 一起），或者用 `sqlite3 agy2api.db ".backup 备份路径"`
-  在线备份数据库，密钥文件另外复制一份。Docker 卷可以这样打包：
+- 备份：停服务后复制整个数据目录（`agy2api.db` 和 `agy2api.key` 一起）和配置，或者用 `sqlite3 agy2api.db ".backup 备份路径"`
+  在线备份数据库，密钥文件另外复制一份。一键安装的直接打包安装目录里的 `.env` 和 `data/`：
 
   ```bash
-  docker compose stop
-  docker run --rm -v agy2api_data:/data -v "$PWD":/backup alpine tar czf /backup/agy2api-data.tgz -C /data .
-  docker compose start
+  cd agy2api
+  sudo systemctl stop agy2api        # Docker 方式：docker compose stop
+  sudo tar czf ../agy2api-backup.tgz .env data
+  sudo systemctl start agy2api       # Docker 方式：docker compose start
   ```
 
 - 升级：管理端可以在线升级（见下一节）；也可以手动升级：一键安装的再运行一次安装脚本（Docker 模式加 `--docker`）；手动部署的 Docker 执行 `docker compose pull && docker compose up -d`（从源码构建的 `git pull` 后加 `--build`）；systemd 换成
@@ -168,9 +194,39 @@ server {
 - 支持 Linux、macOS 的 amd64、arm64。Windows 和自己编译的开发构建不支持，管理端会说明原因；Windows 上有新版本时给出下载链接。
 - `AGY2API_UPDATE=off` 关闭：不连 GitHub，也不运行数据目录里在线升级的程序。连 GitHub 走 `HTTPS_PROXY`。
 
+## 卸载
+
+一键安装的，在任意目录运行（Docker 方式在安装目录或它的上级目录里运行，不需要 sudo；也可以加 `--dir` 指定）：
+
+```bash
+curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash -s -- --uninstall
+```
+
+- systemd：停掉并删除服务，安装目录里的程序、配置和数据都保留。
+- Docker 方式：删除容器（`docker compose down`），安装目录保留。
+- 没有 systemd 的：先 Ctrl+C 停掉 `run.sh`，脚本只给出删除命令。
+- 确认不要了再删除安装目录：`rm -rf <安装目录>`（Docker 方式的 `data/` 归 UID 10001，要 sudo）。想留数据先备份 `.env` 和 `data/`。
+- 1.4.0 及以前的一键安装也用这条命令卸载：删除服务和 `/usr/local/bin/agy2api`，配置和数据留在 `/etc/agy2api`、
+  `/var/lib/private/agy2api`，确认不要了再删。
+
+手动部署的：
+
+- Docker Compose：在 `compose.yaml` 所在目录执行 `docker compose down`，再删除这个目录（`data/` 要 sudo）。1.4.0 及以前的
+  `compose.yaml` 用命名卷，`docker compose down -v` 会连数据卷一起删掉，确认不要数据才加 `-v`。
+- systemd：
+
+  ```bash
+  sudo systemctl disable --now agy2api
+  sudo rm /etc/systemd/system/agy2api.service /usr/local/bin/agy2api
+  sudo systemctl daemon-reload
+  sudo rm -rf /etc/agy2api /var/lib/private/agy2api   # 确认不要配置和数据了再删
+  ```
+
 ## 环境变量
 
-Docker Compose 写在 `.env` 里，systemd 写在 `/etc/agy2api/env` 里（模板是 `deploy/env.example`）。
+一键安装的写在安装目录的 `.env` 里（Docker 方式也是），手动部署的 Docker 写在 `compose.yaml` 同目录的 `.env` 里，手动装的
+systemd 写在 `/etc/agy2api/env` 里（模板是 `deploy/env.example`）。改完重启生效：systemd 是 `systemctl restart agy2api`，
+Docker 是 `docker compose up -d`，`run.sh` 重新运行。
 
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |

@@ -2,6 +2,22 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+### 改动
+
+- **一键安装改成装在一个目录里。** 默认在运行命令的目录下新建 `agy2api`，程序、配置 `.env` 和数据 `data/` 都在里面，`--dir` 可以指定别处。再运行一次就是升级，在哪个目录运行都能找到原来的安装。systemd 服务以安装目录所有者的身份运行（没有任何特权，只能写 `data/`）；没有 systemd 的系统在目录里生成 `run.sh`。`--uninstall` 也能卸载 Docker 方式的安装。
+- **Docker 的数据改放在 `compose.yaml` 同目录的 `data/`。** 不再用命名卷，备份、迁移直接复制整个目录。一键安装会自动把 `data/` 改成容器里的用户（UID 10001）所有，不需要 sudo。
+
+### 文档
+
+- **部署说明加了"卸载"一节，各接口的细节移到单独的接口说明（`docs/api.md`）。**
+
+### 升级说明
+
+- **1.4.0 及以前用一键安装装成 systemd 服务的**：新脚本不原地升级旧的安装，会提示先 `--uninstall` 再重新安装。要沿用旧数据，把 `/var/lib/private/agy2api` 里的 `agy2api.db`、`agy2api.key` 复制到新目录的 `data/`，改成安装目录的所有者后执行 `systemctl restart agy2api`。
+- **用 Docker 的**：换成新的 `compose.yaml` 前，先把命名卷里的数据复制到 `data/`（命令见部署说明的"Docker Compose"一节）。一键安装遇到旧的 `compose.yaml` 会停下并给出这条命令。
+
 ## v1.4.0 - 2026-11-25
 
 新增 OpenAI Responses 接口，Codex 可以直接接入；"客户端兼容"也作用于 Codex。

@@ -69,13 +69,14 @@ flowchart LR
 
 ## Quick start
 
-One-line install (Linux, installs a systemd service and generates the admin password; run it again to upgrade):
+One-line install (Linux, installs a systemd service and generates the admin password; run it again to upgrade). The
+program, configuration and data all go into a new `agy2api` directory under the current directory; `--dir` picks another:
 
 ```bash
 curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash
 ```
 
-With Docker (images for linux/amd64 and linux/arm64), in an empty directory:
+With Docker (images for linux/amd64 and linux/arm64), likewise in an `agy2api` directory under the current directory:
 
 ```bash
 curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | bash -s -- --docker
@@ -96,8 +97,8 @@ curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
 ```
 
 Before exposing it to the internet, read the [deployment guide](docs/deploy.md) (in Chinese): HTTPS reverse proxy,
-admin access control, backup and upgrade, and deployment with systemd. The conversion rules and limits of each API are
-in the [API notes](docs/api.md) (in Chinese).
+admin access control, backup and upgrade, uninstalling, and manual deployment. The conversion rules and limits of each
+API are in the [API notes](docs/api.md) (in Chinese).
 
 ## Use with Claude Code
 

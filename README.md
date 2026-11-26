@@ -59,13 +59,14 @@ flowchart LR
 
 ## 快速开始
 
-一键安装（Linux，装成 systemd 服务，自动生成管理口令；再运行一次就是升级）：
+一键安装（Linux，装成 systemd 服务，自动生成管理口令；再运行一次就是升级）。程序、配置和数据都放在当前目录下新建的
+`agy2api` 目录里，`--dir` 可以指定别处：
 
 ```bash
 curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash
 ```
 
-用 Docker（镜像支持 linux/amd64、linux/arm64），在一个空目录里：
+用 Docker（镜像支持 linux/amd64、linux/arm64），同样放在当前目录下的 `agy2api` 目录里：
 
 ```bash
 curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | bash -s -- --docker
@@ -84,7 +85,7 @@ curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
   -d '{"contents":[{"role":"user","parts":[{"text":"你好"}]}]}'
 ```
 
-上公网前请看[部署说明](docs/deploy.md)：HTTPS 反向代理、管理端访问限制、备份和升级，以及 systemd 部署方式。
+上公网前请看[部署说明](docs/deploy.md)：HTTPS 反向代理、管理端访问限制、备份和升级、卸载，以及手动部署方式。
 各接口的转换规则和限制见[接口说明](docs/api.md)。
 
 ## 在 Claude Code 中使用
