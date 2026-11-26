@@ -318,7 +318,7 @@ function fakeRecord(at: number): UsageRecord {
       slot: ok ? { in_use: between(1, 3), limit: 15 } : undefined,
       attempts: attempts.length ? attempts : undefined,
       error,
-      affinity: ok ? { result: weighted<'hit' | 'new' | 'switched'>([['hit', 70], ['new', 25], ['switched', 5]]), source: affinitySource } : undefined,
+      affinity: ok ? { result: weighted<'hit' | 'new' | 'diverted' | 'switched'>([['hit', 70], ['new', 22], ['diverted', 5], ['switched', 3]]), source: affinitySource } : undefined,
       cost: price && nanos !== null ? { nanos, model: price.model, source: price.source, input: price.price.input, cache_read: price.price.cache_read ?? price.price.input, output: price.price.output } : undefined,
     },
     cost_nanos: nanos,
@@ -334,7 +334,7 @@ const schedulingDefaults: Scheduling = {
   token_refresh_early: true, token_refresh_min_lead: 300, token_refresh_max_lead: 900, concurrency: 15, slot_wait: 30,
   max_attempts: 3, cooldown_wait: 30, rate_limit_base: 60, rate_limit_max: 300, server_error_cooldown: 30,
   validation_cooldown: 600, model_forbidden_cooldown: 300, quota_refresh: 900, low_quota: 10, stream_idle: 120,
-  require_proxy: false, sticky: true, sticky_ttl: 3600, weekly_quota: false,
+  require_proxy: false, sticky: true, sticky_mode: 'strict', sticky_ttl: 3600, weekly_quota: false,
 }
 let scheduling: Scheduling = { ...schedulingDefaults }
 let clientFilter: ClientFilter = { enabled: false, mode: 'rewrite', use_default_keywords: true, rules: '' }
@@ -822,6 +822,7 @@ on('PUT', '/settings', (_m, _q, b): SettingsResponse => {
 on('GET', '/settings/scheduling', (): SchedulingResponse => ({ settings: scheduling, defaults: schedulingDefaults }))
 on('PUT', '/settings/scheduling', (_m, _q, b): SchedulingResponse => {
   scheduling = { ...scheduling, ...(b as Partial<Scheduling>) }
+  scheduling.sticky = scheduling.sticky_mode !== 'off'
   return { settings: scheduling, defaults: schedulingDefaults }
 })
 on('GET', '/settings/client-filter', (): ClientFilterResponse => ({ settings: clientFilter, default_keywords: catalog.default_keywords }))

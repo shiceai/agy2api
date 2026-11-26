@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/shiceai/agy2api/internal/mockupstream"
+	"github.com/shiceai/agy2api/internal/relay"
 	"github.com/shiceai/agy2api/internal/store"
 )
 
@@ -144,6 +145,51 @@ func TestSchedulingSettings(t *testing.T) {
 	defer other.Close(context.Background())
 	if p := other.relay.Policy(); p.Concurrency != 4 || p.TokenRefresh.Early {
 		t.Fatalf("重启后应从库加载：%+v", p)
+	}
+}
+
+// 会话粘性的方式：默认严格；升级前存的设置只有 sticky 开关时，开着的换成严格、关着的换成关闭；
+// 保存时 sticky 跟着方式写，撤销升级后的旧版本照样能读；方式取值校验。
+func TestSchedulingStickyMode(t *testing.T) {
+	svc, st := newTestService(t)
+	srv := httptest.NewServer(svc.Router())
+	defer srv.Close()
+	ctx := context.Background()
+
+	if p := svc.relay.Policy(); p.Sticky != relay.StickyStrict {
+		t.Fatalf("默认应为严格：%q", p.Sticky)
+	}
+	for raw, want := range map[string]string{
+		`{"sticky":false}`:                          relay.StickyOff,
+		`{"sticky":true}`:                           relay.StickyStrict,
+		`{"sticky":true,"sticky_mode":"preferred"}`: relay.StickyPreferred,
+		`{"concurrency":4}`:                         relay.StickyStrict,
+	} {
+		if err := st.SetSetting(ctx, schedulingSetting.key, raw); err != nil {
+			t.Fatal(err)
+		}
+		other, err := NewService(ctx, svc.cfg, st, svc.enc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p := other.relay.Policy(); p.Sticky != want {
+			t.Errorf("%s 加载后应为 %q，实际 %q", raw, want, p.Sticky)
+		}
+		other.Close(ctx)
+	}
+
+	var got struct {
+		Settings schedulingView `json:"settings"`
+	}
+	decode(t, doReq(t, srv, http.MethodPut, "/api/admin/settings/scheduling", nil, `{"sticky_mode":"off"}`), &got)
+	if got.Settings.StickyMode != relay.StickyOff || got.Settings.Sticky || svc.relay.Policy().Sticky != relay.StickyOff {
+		t.Fatalf("关闭后 sticky 应为 false：%+v", got.Settings)
+	}
+	if raw, _, _ := st.GetSetting(ctx, schedulingSetting.key); !strings.Contains(raw, `"sticky":false`) || !strings.Contains(raw, `"sticky_mode":"off"`) {
+		t.Fatalf("库里应同时写 sticky 和 sticky_mode：%s", raw)
+	}
+	if resp := doReq(t, srv, http.MethodPut, "/api/admin/settings/scheduling", nil, `{"sticky_mode":"always"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("不认识的方式应返回 400，实际 %d", resp.StatusCode)
 	}
 }
 

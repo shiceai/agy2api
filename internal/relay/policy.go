@@ -39,8 +39,9 @@ type Policy struct {
 	StreamIdleTimeout time.Duration
 	// RequireProxy 为 true 时只用绑定了代理的账号，没绑的不参与调度。
 	RequireProxy bool
-	// Sticky 开启会话粘性：同一对话优先用上次的账号；StickyTTL 是对话闲置多久后不再粘。见 affinity.go。
-	Sticky    bool
+	// Sticky 是会话粘性的方式（StickyOff、StickyPreferred、StickyStrict）：同一对话优先用上次的账号；
+	// StickyTTL 是对话闲置多久后不再粘。见 affinity.go。
+	Sticky    string
 	StickyTTL time.Duration
 	// WeeklyQuota 是每周额度的全局开关：开启后后台刷新额度时顺带拉分组额度（retrieveUserQuotaSummary），
 	// 账号可以单独开、关（store.Account.WeeklyQuota）。默认关：官方客户端抓包里没见过这个请求。
@@ -64,7 +65,7 @@ func DefaultPolicy() Policy {
 		QuotaRefresh:           15 * time.Minute,
 		LowQuota:               0.1,
 		StreamIdleTimeout:      120 * time.Second,
-		Sticky:                 true,
+		Sticky:                 StickyStrict,
 		StickyTTL:              time.Hour,
 	}
 }

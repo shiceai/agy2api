@@ -150,9 +150,10 @@ func (r *Relay) LookupModel(ctx context.Context, requested string) (antigravity.
 
 // acquire 选号并占用并发名额，并发都满时最多等 wait。没有账号能解析该模型，或选中的模型在目录里缺枚举名
 // （升级前存下的旧目录）时，先刷新模型目录（限频）再选一次。refreshed 记录本次请求是否已经尝试过刷新，
-// 避免换号重试时重复刷新。tried 是本次请求已经试过的账号，prefer 是会话粘性优先的账号（0 表示没有）。
-func (r *Relay) acquire(ctx context.Context, requested, tier string, tried map[int64]bool, prefer int64, refreshed *bool, wait time.Duration) (*pool.Lease, error) {
-	lease, err := r.pool.Acquire(ctx, requested, tier, tried, prefer, wait)
+// 避免换号重试时重复刷新。tried 是本次请求已经试过的账号，prefer 是会话粘性优先的账号（0 表示没有），
+// waitPrefer 为 true（严格粘性）时它只是并发已满就先等它的名额。
+func (r *Relay) acquire(ctx context.Context, requested, tier string, tried map[int64]bool, prefer int64, waitPrefer bool, refreshed *bool, wait time.Duration) (*pool.Lease, error) {
+	lease, err := r.pool.Acquire(ctx, requested, tier, tried, prefer, waitPrefer, wait)
 	reason := ""
 	switch {
 	case errors.Is(err, ErrModelNotFound):
@@ -166,7 +167,7 @@ func (r *Relay) acquire(ctx context.Context, requested, tier string, tried map[i
 			if lease != nil {
 				lease.Release()
 			}
-			lease, err = r.pool.Acquire(ctx, requested, tier, tried, prefer, wait)
+			lease, err = r.pool.Acquire(ctx, requested, tier, tried, prefer, waitPrefer, wait)
 		}
 	}
 	return lease, err
@@ -410,10 +411,10 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 	refreshed := false
 	tried := map[int64]bool{}
 	tr := &trace{start: start, fakeStream: req.FakeStream}
-	// 会话粘性：同一对话优先用上次成功服务它的账号。
+	// 会话粘性：同一对话优先用绑定的账号。
 	stickyKey, stickySource := "", ""
 	var prefer int64
-	if p.Sticky {
+	if p.Sticky != StickyOff {
 		if stickyKey, stickySource = affinityKey(req); stickyKey != "" {
 			prefer = r.affinity.get(stickyKey, start, p.StickyTTL)
 		}
@@ -443,13 +444,13 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 	}
 	for try := 1; try <= p.MaxAttempts; try++ {
 		attemptStart := time.Now()
-		lease, err := r.acquire(ctx, req.Model, tier, tried, prefer, &refreshed, p.SlotWait)
+		lease, err := r.acquire(ctx, req.Model, tier, tried, prefer, p.Sticky == StickyStrict, &refreshed, p.SlotWait)
 		// 选不到账号、而最早恢复的账号很快就能用：等到那时再选一轮，试过的账号也重新参与。
 		for err != nil && waitCooldown(ctx, err, readyAt, &waitLeft, tr, req.Model) {
 			clear(tried)
 			readyAt = time.Time{}
 			attemptStart = time.Now()
-			lease, err = r.acquire(ctx, req.Model, tier, tried, prefer, &refreshed, p.SlotWait)
+			lease, err = r.acquire(ctx, req.Model, tier, tried, prefer, p.Sticky == StickyStrict, &refreshed, p.SlotWait)
 		}
 		acquireDur := time.Since(attemptStart)
 		if err != nil {
@@ -465,7 +466,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 		}
 		tried[lease.Account.ID] = true
 		if stickyKey != "" {
-			tr.affinity = r.affinityDetail(prefer, lease, stickySource)
+			tr.affinity = r.affinityDetail(prefer, lease, stickySource, req.Model, tier)
 		}
 		log := slog.With("account_id", lease.Account.ID, "model", req.Model, "resolved_model", lease.Model, "stream", req.Stream, "try", try)
 		log.DebugContext(ctx, "选号", "affinity", lease.Affinity)
@@ -510,7 +511,12 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 			if err == nil {
 				r.pool.NoteSuccess(lease.Account.ID)
 				if stickyKey != "" {
-					r.affinity.set(stickyKey, lease.Account.ID, time.Now(), p.StickyTTL)
+					// 临时借号成功时绑定不变、只续期；其余（新对话、沿用、改绑）绑到这次的账号。
+					if tr.affinity.Result == AffinityDiverted {
+						r.affinity.touch(stickyKey, time.Now())
+					} else {
+						r.affinity.set(stickyKey, lease.Account.ID, time.Now(), p.StickyTTL)
+					}
 				}
 				log.DebugContext(ctx, "上游响应", "status", up.Status, "proto", up.Proto, "latency_ms", time.Since(start).Milliseconds())
 				return &Response{Status: up.Status, Body: body, relay: r, cfg: cfg, req: req, requestID: logx.RequestID(ctx), trace: tr, call: c}, nil
@@ -709,7 +715,7 @@ func (r *Relay) callAccount(ctx context.Context, cfg *runtimeConfig, lease *pool
 func (r *Relay) CountTokens(ctx context.Context, requested string, body map[string]any) ([]byte, error) {
 	cfg := r.config()
 	refreshed := false
-	lease, err := r.acquire(ctx, requested, cfg.tier(requested, body), nil, 0, &refreshed, 0)
+	lease, err := r.acquire(ctx, requested, cfg.tier(requested, body), nil, 0, false, &refreshed, 0)
 	if err != nil {
 		return nil, err
 	}

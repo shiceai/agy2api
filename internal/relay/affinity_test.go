@@ -21,7 +21,7 @@ func stickyEnv(t *testing.T, accounts ...string) *env {
 	t.Helper()
 	e := newEnv(t, accounts...)
 	p := e.relay.Policy()
-	p.Sticky, p.StickyTTL = true, time.Hour
+	p.Sticky, p.StickyTTL = StickyPreferred, time.Hour
 	e.relay.SetPolicy(p)
 	return e
 }
@@ -63,9 +63,12 @@ func TestStickyConversation(t *testing.T) {
 	}
 }
 
-// 上次的账号这次失败（限流）时换号重试，之后粘到新账号；用量详情记下换号和原因。
-func TestStickyMovesAfterFailure(t *testing.T) {
+// 绑定的账号这次失败（5xx，不休息）时换号重试，只是临时借号：绑定不变，下一轮回到原账号。
+func TestStickyDivertKeepsBinding(t *testing.T) {
 	e := stickyEnv(t, "a", "b")
+	p := e.relay.Policy()
+	p.ServerErrorCooldown = 0
+	e.relay.SetPolicy(p)
 	e.setCatalog("a", "m1")
 	e.setCatalog("b", "m1")
 	_, _, owner, err := e.generateBody("m1", false, turn("hello", 1))
@@ -76,14 +79,34 @@ func TestStickyMovesAfterFailure(t *testing.T) {
 	e.up.script[owner] = []int{http.StatusServiceUnavailable}
 	_, _, rt, err := e.generateBody("m1", false, turn("hello", 2))
 	if err != nil || rt != other {
-		t.Fatalf("after failure should move to %s, got %s %v", other, rt, err)
+		t.Fatalf("after failure should borrow %s, got %s %v", other, rt, err)
 	}
-	if _, _, rt, _ := e.generateBody("m1", false, turn("hello", 3)); rt != other {
-		t.Fatalf("should stick to the new account %s, got %s", other, rt)
+	if _, _, rt, _ := e.generateBody("m1", false, turn("hello", 3)); rt != owner {
+		t.Fatalf("should go back to the bound account %s, got %s", owner, rt)
 	}
 }
 
-// 用量详情：新对话、沿用上次的账号、换号（原账号冷却）。
+// 绑定的账号恢复不了（长冷却）时改绑：之后一直用新账号，原账号恢复了也不回去。
+func TestStickySwitchRebinds(t *testing.T) {
+	e := stickyEnv(t, "a", "b")
+	e.setCatalog("a", "m1")
+	e.setCatalog("b", "m1")
+	_, _, owner, err := e.generateBody("m1", false, turn("hello", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := map[string]string{"a": "b", "b": "a"}[owner]
+	e.relay.pool.Cooldown(withRequestID("x"), e.ids[owner], time.Now().Add(time.Hour), "quota_exhausted", "m1")
+	if _, _, rt, err := e.generateBody("m1", false, turn("hello", 2)); err != nil || rt != other {
+		t.Fatalf("should switch to %s, got %s %v", other, rt, err)
+	}
+	key, _ := affinityKey(Request{Model: "m1", Body: turn("hello", 1)})
+	if got := e.relay.affinity.get(key, time.Now(), time.Hour); got != e.ids[other] {
+		t.Fatalf("binding should move to %s, got %d", other, got)
+	}
+}
+
+// 用量详情：新对话、沿用绑定的账号、临时借号（原账号短冷却）、改绑（原账号长冷却）。
 func TestStickyUsageDetail(t *testing.T) {
 	e := stickyEnv(t, "a", "b")
 	e.setCatalog("a", "m1")
@@ -106,7 +129,9 @@ func TestStickyUsageDetail(t *testing.T) {
 		}
 	}
 	e.relay.pool.Cooldown(withRequestID("x"), e.ids[owner], time.Now().Add(time.Minute), "rate_limit", "m1")
-	gen("r-switch", 3)
+	gen("r-divert", 3)
+	e.relay.pool.Cooldown(withRequestID("x"), e.ids[owner], time.Now().Add(time.Hour), "quota_exhausted", "m1")
+	gen("r-switch", 4)
 
 	if _, d := e.usageByRequest("r-new"); d.Affinity == nil || d.Affinity.Result != AffinityNew || d.Affinity.Source != store.SessionFirstMessage {
 		t.Fatalf("new: %+v", d.Affinity)
@@ -114,10 +139,12 @@ func TestStickyUsageDetail(t *testing.T) {
 	if _, d := e.usageByRequest("r-hit"); d.Affinity == nil || d.Affinity.Result != AffinityHit {
 		t.Fatalf("hit: %+v", d.Affinity)
 	}
-	_, d := e.usageByRequest("r-switch")
-	if d.Affinity == nil || d.Affinity.Result != AffinitySwitched || d.Affinity.Reason != pool.AffinityCooldown ||
-		d.Affinity.FromAccountID != e.ids[owner] || d.Affinity.FromAccount == "" {
-		t.Fatalf("switched: %+v", d.Affinity)
+	for id, want := range map[string]string{"r-divert": AffinityDiverted, "r-switch": AffinitySwitched} {
+		_, d := e.usageByRequest(id)
+		if d.Affinity == nil || d.Affinity.Result != want || d.Affinity.Reason != pool.AffinityCooldown ||
+			d.Affinity.FromAccountID != e.ids[owner] || d.Affinity.FromAccount == "" {
+			t.Fatalf("%s: %+v", id, d.Affinity)
+		}
 	}
 }
 

@@ -425,11 +425,11 @@ export interface UsageDetail {
   cost?: UsageCost
   affinity?: UsageAffinity
 }
-// UsageAffinity 是会话粘性的结果：hit 沿用上次的账号，switched 换了账号（reason 是原账号这次不能接的原因，
-// from_account 是原账号），new 新对话。source 是按什么认的对话（Claude Code 会话头、X-Session-Id、prompt_cache_key、
+// UsageAffinity 是会话粘性的结果：hit 沿用绑定的账号，diverted 原账号暂时接不了、临时借了别的账号（绑定不变），
+// switched 原账号恢复不了、换号并改绑（reason 是原账号这次不能接的原因，from_account 是原账号），new 新对话。source 是按什么认的对话（Claude Code 会话头、X-Session-Id、prompt_cache_key、
 // 首条消息），老记录没有。
 export interface UsageAffinity {
-  result: 'hit' | 'switched' | 'new'
+  result: 'hit' | 'diverted' | 'switched' | 'new'
   reason?: string
   from_account_id?: number
   from_account?: string
@@ -514,12 +514,15 @@ export interface Scheduling {
   low_quota: number
   stream_idle: number
   require_proxy: boolean
-  // sticky 开启会话粘性，sticky_ttl 是对话闲置多久后不再粘（秒）。
+  // sticky_mode 是会话粘性的方式：off 关闭、preferred 优先、strict 严格；sticky 是旧的开关（不是关闭时为 true），
+  // 服务端照它写，撤销升级后的旧版本照样能读。sticky_ttl 是对话闲置多久后不再粘（秒）。
   sticky: boolean
+  sticky_mode: StickyMode
   sticky_ttl: number
   // weekly_quota 是每周额度的全局开关：开启后后台刷新额度时顺带拉每周额度，账号可单独开关。
   weekly_quota: boolean
 }
+export type StickyMode = 'off' | 'preferred' | 'strict'
 export interface SchedulingResponse {
   settings: Scheduling
   defaults: Scheduling

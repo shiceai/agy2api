@@ -34,6 +34,8 @@ type UnavailableError struct {
 	RetryAt time.Time
 	// Busy 表示至少有一个账号是因为并发已满被跳过的，等一等可能就有空位。
 	Busy bool
+	// preferBusy 表示要等的是优先账号的名额（严格粘性），别的账号可能有空位：等不到时改为临时借别的账号。
+	preferBusy bool
 }
 
 func (e *UnavailableError) Error() string {
@@ -356,30 +358,35 @@ const (
 // tier 用于家族名选档；exclude 是本次请求已经试过的账号，不再选；prefer 是优先的账号（会话粘性，0 表示没有）。
 // 冷却按解析后的模型判断。
 func (p *Pool) Select(requested, tier string, exclude map[int64]bool, prefer int64) (*Lease, error) {
-	lease, _, err := p.pick(requested, tier, exclude, prefer)
+	lease, _, err := p.pick(requested, tier, exclude, prefer, false)
 	return lease, err
 }
 
 // Acquire 同 Select，但支持该模型的账号有因为并发已满而不可用的，就等名额释放，最多 wait。
-// 等不到时返回最后一次的 *UnavailableError；ctx 取消时返回 ctx.Err()。
-func (p *Pool) Acquire(ctx context.Context, requested, tier string, exclude map[int64]bool, prefer int64, wait time.Duration) (*Lease, error) {
+// waitPrefer 为 true 时（严格粘性）优先账号只是并发已满，就先等它的名额，不借别的账号；等到 wait 用完还没空位，
+// 再按 Select 借别的账号。等不到时返回最后一次的 *UnavailableError；ctx 取消时返回 ctx.Err()。
+func (p *Pool) Acquire(ctx context.Context, requested, tier string, exclude map[int64]bool, prefer int64, waitPrefer bool, wait time.Duration) (*Lease, error) {
 	deadline := time.Now().Add(wait)
 	for {
-		lease, freed, err := p.pick(requested, tier, exclude, prefer)
+		lease, freed, err := p.pick(requested, tier, exclude, prefer, waitPrefer)
 		var ue *UnavailableError
 		if err == nil || !errors.As(err, &ue) || !ue.Busy {
 			return lease, err
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
+			if ue.preferBusy {
+				waitPrefer = false // 等不到优先账号的名额：临时借别的账号
+				continue
+			}
 			return nil, err
 		}
+		// 有名额释放或等到时限都再选一次：到时限后的这一次不再等（见上），严格粘性在这时改为借别的账号。
 		timer := time.NewTimer(remaining)
 		select {
 		case <-freed:
 			timer.Stop()
 		case <-timer.C:
-			return nil, err
 		case <-ctx.Done():
 			timer.Stop()
 			return nil, ctx.Err()
@@ -387,9 +394,10 @@ func (p *Pool) Acquire(ctx context.Context, requested, tier string, exclude map[
 	}
 }
 
-// pick 选号并占用名额。prefer 不为 0 时它能接就选它（会话粘性），不能接时按轮询选别的，Lease.Affinity 记下原因。
+// pick 选号并占用名额。prefer 不为 0 时它能接就选它（会话粘性），不能接时按轮询选别的，Lease.Affinity 记下原因；
+// waitPrefer 为 true 且它只是并发已满（额度也不低）时不选别的，返回 preferBusy 的 *UnavailableError 让调用方等它。
 // 返回的 freed 是选号时刻的释放通道，并发已满时可等它，不会漏掉中间的释放。
-func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64) (*Lease, <-chan struct{}, error) {
+func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64, waitPrefer bool) (*Lease, <-chan struct{}, error) {
 	type candidate struct {
 		account *Account
 		model   string
@@ -426,6 +434,7 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 	defer p.mu.Unlock()
 	var retryAt time.Time
 	busy := false
+	var preferBusy *candidate // 优先账号只是并发已满时是它
 	// affinity 是优先账号的结果，先假定它不在号池里或不支持这个模型，下面逐项判断。
 	affinity := ""
 	if prefer != 0 {
@@ -470,16 +479,26 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 		if p.inflight[c.account.ID] >= p.Limit(c.account.Account) {
 			busy = true
 			note(c.account.ID, AffinityBusy)
+			if c.account.ID == prefer {
+				preferBusy = &c
+			}
 			continue
 		}
 		candidates = append(candidates, c)
+	}
+	threshold := math.Float64frombits(p.lowQuota.Load())
+	// 严格粘性：优先账号只是并发已满就等它，额度低于避让阈值的不等（空出来也会先避开它）。
+	if waitPrefer && preferBusy != nil {
+		if rem, ok := p.quotaLeft(preferBusy.account, preferBusy.model, now); threshold <= 0 || !ok || rem >= threshold {
+			return nil, p.freed, &UnavailableError{RetryAt: retryAt, Busy: true, preferBusy: true}
+		}
 	}
 	if len(candidates) == 0 {
 		return nil, p.freed, &UnavailableError{RetryAt: retryAt, Busy: busy}
 	}
 	// 额度避让：先排除这个模型剩余额度低于阈值的账号；都低时不避让。没有额度信息的视为正常。
 	// 开了每周额度的账号按 5 小时和每周额度的较低值算。
-	if threshold := math.Float64frombits(p.lowQuota.Load()); threshold > 0 {
+	if threshold > 0 {
 		healthy := candidates[:0:0]
 		for _, c := range candidates {
 			if rem, ok := p.quotaLeft(c.account, c.model, now); !ok || rem >= threshold {
@@ -507,6 +526,48 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 	p.inflight[c.account.ID]++
 	return &Lease{Account: c.account, Model: c.model, InUse: p.inflight[c.account.ID], Limit: p.Limit(c.account.Account),
 		Affinity: affinity, pool: p}, nil, nil
+}
+
+// HoldWindow 是会话粘性临时借号时保留原绑定的上限：原账号在这段时间内能恢复，就只是临时借号、不改绑。
+const HoldWindow = 5 * time.Minute
+
+// Recoverable 报告账号能否在 within 内重新接这个模型的请求：还在号池里、能调度、目录里有这个模型，冷却和代理暂停
+// 在 within 内结束，每周额度没用完，额度不低于避让阈值。并发已满不影响（名额很快会释放）。会话粘性换号后据此
+// 决定临时借号（保留原绑定）还是改绑。
+func (p *Pool) Recoverable(accountID int64, requested, tier string, within time.Duration) bool {
+	var a *Account
+	for _, x := range p.snapshot() {
+		if x.ID == accountID {
+			a = x
+			break
+		}
+	}
+	if a == nil || a.ProjectID == "" || a.ProxyDisabled || (p.requireProxy.Load() && a.ProxyURL == "") {
+		return false
+	}
+	model, ok := a.resolve(requested, tier)
+	if !ok {
+		return false
+	}
+	now := time.Now()
+	limit := now.Add(within)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if until, ok := p.paused[accountID]; ok && until.After(limit) {
+		return false
+	}
+	if cd, ok := p.activeCooldownLocked(cooldownKey{accountID, model}, now); ok && cd.until.After(limit) {
+		return false
+	}
+	if l, ok := p.weekly(a, model, now); ok && l.Remaining <= 0 {
+		return false
+	}
+	if threshold := math.Float64frombits(p.lowQuota.Load()); threshold > 0 {
+		if rem, ok := p.quotaLeft(a, model, now); ok && rem < threshold {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *Pool) release(accountID int64) {

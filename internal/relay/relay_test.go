@@ -334,7 +334,7 @@ func newEnv(t *testing.T, accounts ...string) *env {
 	// 这些测试发的是同样的请求，靠轮询分散到不同账号；会话粘性另有测试（affinity_test.go）。
 	// 换号次数用完时立即返回，不等冷却；等冷却另有测试（TestCooldownWait）。
 	p := e.relay.Policy()
-	p.Sticky = false
+	p.Sticky = StickyOff
 	p.CooldownWait = 0
 	e.relay.SetPolicy(p)
 	if err := e.relay.Reload(context.Background()); err != nil {

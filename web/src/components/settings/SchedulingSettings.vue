@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check } from '@lucide/vue'
-import { api, errorMessage, type Scheduling, type SchedulingResponse } from '@/api/client'
+import { api, errorMessage, type Scheduling, type SchedulingResponse, type StickyMode } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import SegmentedControl from '@/components/SegmentedControl.vue'
 import SettingGrid from './SettingGrid.vue'
 import SettingCard from './SettingCard.vue'
 import SettingRow from './SettingRow.vue'
@@ -32,12 +33,24 @@ interface Form {
   idleOn: boolean
   idleSecs: number
   requireProxy: boolean
-  sticky: boolean
+  stickyMode: StickyMode
   stickyMin: number
 }
 const MIN = 60
 const QUOTA_DEFAULT_MIN = 15
 const IDLE_DEFAULT_SECS = 120
+
+// 会话粘性的三种方式和各自的一行说明。
+const stickyOptions: { value: StickyMode; label: string }[] = [
+  { value: 'off', label: '关闭' },
+  { value: 'preferred', label: '优先' },
+  { value: 'strict', label: '严格' },
+]
+const stickyHints: Record<StickyMode, string> = {
+  off: '每个请求轮询选号',
+  preferred: '原账号暂时接不了时临时借号',
+  strict: '原账号并发满时先等它，再借号',
+}
 
 function toForm(s: Scheduling): Form {
   return {
@@ -60,7 +73,7 @@ function toForm(s: Scheduling): Form {
     idleOn: s.stream_idle > 0,
     idleSecs: s.stream_idle > 0 ? s.stream_idle : IDLE_DEFAULT_SECS,
     requireProxy: s.require_proxy,
-    sticky: s.sticky,
+    stickyMode: s.sticky_mode,
     stickyMin: s.sticky_ttl / MIN,
   }
 }
@@ -83,7 +96,8 @@ function toApi(f: Form): Scheduling {
     low_quota: r(f.lowQuota),
     stream_idle: f.idleOn ? r(f.idleSecs) : 0,
     require_proxy: f.requireProxy,
-    sticky: f.sticky,
+    sticky: f.stickyMode !== 'off',
+    sticky_mode: f.stickyMode,
     sticky_ttl: r(f.stickyMin * MIN),
     weekly_quota: f.weekly,
   }
@@ -200,14 +214,22 @@ function restoreDefaults() {
 
       <SettingCard title="会话粘性" description="同一对话优先用上次的账号">
         <template #info>
-          <p>同一对话指同一密钥、同一模型、同一首条用户消息。上游缓存按账号，换号就命中不了。</p>
-          <p>原账号冷却、并发满、额度低或失败时才换号，之后粘到新账号上。记录只在内存里，重启后清空。</p>
+          <p>
+            同一对话指同一密钥、同一模型、同一会话标识（Claude Code 会话、X-Session-Id、prompt_cache_key），没有标识时按首条用户消息。
+            上游缓存按账号，换号就命中不了。
+          </p>
+          <p>
+            优先：原账号 5 分钟内能恢复（并发满、短冷却、代理暂停）时只临时借号，下个请求回到原账号；停用、额度耗尽、冷却较长或额度低于避让阈值时，
+            才改绑到新账号。
+          </p>
+          <p>严格：在优先的基础上，原账号并发满时先等它的名额，最多等"并发满时最多等待"的时长，等不到再临时借号。</p>
+          <p>记录只在内存里，重启后清空。</p>
         </template>
-        <SettingRow label="开启会话粘性" description="关闭后每个请求轮询选号" input-id="sched-sticky">
-          <Switch id="sched-sticky" v-model="form.sticky" />
+        <SettingRow label="粘性方式" :description="stickyHints[form.stickyMode]">
+          <SegmentedControl v-model="form.stickyMode" :options="stickyOptions" label="粘性方式" hide-label />
         </SettingRow>
         <SettingRow label="闲置多久后不再粘" description="超过后当作新对话" input-id="sched-sticky-ttl">
-          <UnitInput id="sched-sticky-ttl" v-model="form.stickyMin" unit="分钟" :min="5" :max="1440" :disabled="!form.sticky" />
+          <UnitInput id="sched-sticky-ttl" v-model="form.stickyMin" unit="分钟" :min="5" :max="1440" :disabled="form.stickyMode === 'off'" />
         </SettingRow>
       </SettingCard>
 

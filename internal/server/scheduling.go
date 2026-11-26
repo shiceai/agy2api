@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -30,8 +31,11 @@ type schedulingView struct {
 	LowQuota               int  `json:"low_quota"`
 	StreamIdle             int  `json:"stream_idle"`
 	RequireProxy           bool `json:"require_proxy"`
-	Sticky                 bool `json:"sticky"`
-	StickyTTL              int  `json:"sticky_ttl"`
+	// Sticky 是旧的会话粘性开关，保留给撤销在线升级后的旧版本读：StickyMode 不是关闭时为 true。
+	// StickyMode 是会话粘性的方式（relay.Sticky*），旧库里没有时按 Sticky 换算，见 UnmarshalJSON。
+	Sticky     bool   `json:"sticky"`
+	StickyMode string `json:"sticky_mode"`
+	StickyTTL  int    `json:"sticky_ttl"`
 	// WeeklyQuota 是每周额度的全局开关（账号可单独开关），见 relay.Policy.WeeklyQuota。
 	WeeklyQuota bool `json:"weekly_quota"`
 }
@@ -67,7 +71,8 @@ func schedulingFromPolicy(p relay.Policy) schedulingView {
 		LowQuota:               int(math.Round(p.LowQuota * 100)),
 		StreamIdle:             secs(p.StreamIdleTimeout),
 		RequireProxy:           p.RequireProxy,
-		Sticky:                 p.Sticky,
+		Sticky:                 p.Sticky != relay.StickyOff,
+		StickyMode:             p.Sticky,
 		StickyTTL:              secs(p.StickyTTL),
 		WeeklyQuota:            p.WeeklyQuota,
 	}
@@ -93,10 +98,35 @@ func (v schedulingView) policy() relay.Policy {
 		LowQuota:               float64(v.LowQuota) / 100,
 		StreamIdleTimeout:      dur(v.StreamIdle),
 		RequireProxy:           v.RequireProxy,
-		Sticky:                 v.Sticky,
+		Sticky:                 v.StickyMode,
 		StickyTTL:              dur(v.StickyTTL),
 		WeeklyQuota:            v.WeeklyQuota,
 	}
+}
+
+// UnmarshalJSON 在已有值上解码，并让 Sticky 和 StickyMode 一致：给了 sticky_mode 时按它设 Sticky；
+// 只有旧的 sticky 时（升级前存的设置）按它换算，开着的是严格（新的默认），关着的是关闭。
+func (v *schedulingView) UnmarshalJSON(b []byte) error {
+	type plain schedulingView
+	var given struct {
+		Sticky     *bool   `json:"sticky"`
+		StickyMode *string `json:"sticky_mode"`
+	}
+	if err := json.Unmarshal(b, (*plain)(v)); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &given); err != nil {
+		return err
+	}
+	switch {
+	case given.StickyMode != nil:
+		v.Sticky = v.StickyMode != relay.StickyOff
+	case given.Sticky != nil && *given.Sticky:
+		v.StickyMode = relay.StickyStrict
+	case given.Sticky != nil:
+		v.StickyMode = relay.StickyOff
+	}
+	return nil
 }
 
 // validate 检查取值范围。access token 有效期 1 小时，提前量最多 50 分钟。额度刷新间隔 0 表示关闭，
@@ -126,6 +156,11 @@ func (v schedulingView) validate() error {
 		if c.val < c.min || c.val > c.max {
 			return fmt.Errorf("%s must be between %d and %d", c.name, c.min, c.max)
 		}
+	}
+	switch v.StickyMode {
+	case relay.StickyOff, relay.StickyPreferred, relay.StickyStrict:
+	default:
+		return fmt.Errorf("sticky_mode must be off, preferred or strict")
 	}
 	if v.QuotaRefresh != 0 && (v.QuotaRefresh < 300 || v.QuotaRefresh > 7200) {
 		return fmt.Errorf("quota_refresh must be 0 (off) or between 300 and 7200")

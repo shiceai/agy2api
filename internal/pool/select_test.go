@@ -289,19 +289,19 @@ func TestAcquireWaitsForSlot(t *testing.T) {
 		held.Release()
 	}()
 	start := time.Now()
-	l, err := f.pool.Acquire(context.Background(), "gemini-2.5-flash", "medium", nil, 0, 2*time.Second)
+	l, err := f.pool.Acquire(context.Background(), "gemini-2.5-flash", "medium", nil, 0, false, 2*time.Second)
 	if err != nil || time.Since(start) < 40*time.Millisecond {
 		t.Fatalf("应等到名额释放后选到：%v（等了 %v）", err, time.Since(start))
 	}
 	start = time.Now()
-	if _, err := f.pool.Acquire(context.Background(), "gemini-2.5-flash", "medium", nil, 0, 100*time.Millisecond); !errors.Is(err, ErrNoAccount) || time.Since(start) < 90*time.Millisecond {
+	if _, err := f.pool.Acquire(context.Background(), "gemini-2.5-flash", "medium", nil, 0, false, 100*time.Millisecond); !errors.Is(err, ErrNoAccount) || time.Since(start) < 90*time.Millisecond {
 		t.Fatalf("等不到时应在超时后返回：%v（等了 %v）", err, time.Since(start))
 	}
 	l.Release()
 
 	f.cooldown(a, "gemini-2.5-flash", time.Minute)
 	start = time.Now()
-	if _, err := f.pool.Acquire(context.Background(), "gemini-2.5-flash", "medium", nil, 0, time.Second); !errors.Is(err, ErrNoAccount) || time.Since(start) > 100*time.Millisecond {
+	if _, err := f.pool.Acquire(context.Background(), "gemini-2.5-flash", "medium", nil, 0, false, time.Second); !errors.Is(err, ErrNoAccount) || time.Since(start) > 100*time.Millisecond {
 		t.Fatalf("只是冷却时不应等：%v（等了 %v）", err, time.Since(start))
 	}
 }
