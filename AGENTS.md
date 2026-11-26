@@ -26,7 +26,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 | `internal/cryptox` | 凭据加解密（AES-256-GCM） |
 | `internal/logx` | slog 初始化，按 ctx 自动附加请求 ID |
 | `internal/store` | SQLite 打开、迁移执行、DAO；数据库访问只在这里 |
-| `internal/antigravity` | Antigravity 上游：OAuth 刷新与控制面（loadCodeAssist、onboardUser、fetchAvailableModels），数据面（信封构造、生成与计数调用、SSE 解包、上游错误分类）、基址回退、按账号绑定的代理出网 |
+| `internal/antigravity` | Antigravity 上游：OAuth 刷新与控制面（loadCodeAssist、onboardUser、fetchAvailableModels，可选的每周额度 retrieveUserQuotaSummary），数据面（信封构造、生成与计数调用、SSE 解包、上游错误分类）、基址回退、按账号绑定的代理出网 |
 | `internal/relay` | 与入站协议无关的执行层：选号、会话粘性、取令牌、上游错误处理决定（冷却、换号、停用）、调度设置、类型化错误、用量记录、后台额度刷新、账号检测 |
 | `internal/pricing` | 模型价格：同步并解析官方价格页（Google AI Studio、Anthropic）、手动价、内存价格表、算用量费用、补算 |
 | `internal/pool` | 内存号池：启用账号快照、选号（含会话粘性的优先账号、额度避让、只用绑定代理的账号）、账号×模型冷却（落库，额度恢复后提前解除）、代理故障时暂停账号、每账号并发名额 |
@@ -82,7 +82,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 - 真实凭据（refresh token、导出的凭据 JSON）、`data/` 目录、密钥文件不得入库；日志不输出 token 和 API Key 明文，不记 URL 查询串。
 - 日志用 `log/slog`，请求链路上用带 ctx 的方法（`slog.InfoContext` 等），请求 ID 会自动带上。
 - 所有 Cloud Code（`v1internal`）请求（控制面和数据面）必须带真实 Antigravity User-Agent，否则上游返回 `403 SUBSCRIPTION_REQUIRED`，看起来像账号没订阅。OAuth 令牌刷新按官方客户端实抓用 Go 默认 UA。
-- 请求形态（请求头、传输层、信封字段）只照官方客户端实抓改，没有实抓依据的写法不引入。
+- 请求形态（请求头、传输层、信封字段）只照官方客户端实抓改，没有实抓依据的写法不引入。唯一的例外是每周额度的 `retrieveUserQuotaSummary`：没有实抓依据，按维护者要求做成默认关的开关（全局或按账号开启）。
 - 时间存 Unix 毫秒；防重复靠唯一约束加 `ON CONFLICT`，不"先查再插"。
 - 热路径不读库：选号、列模型走内存号池，API Key 鉴权走内存缓存；账号或 Key 变更落库后要重新加载对应快照。
 - Windows 命令行直接传中文请求体会按本地代码页编码，测试中文内容时用 UTF-8 文件作为请求体。

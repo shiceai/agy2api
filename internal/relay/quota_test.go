@@ -64,13 +64,36 @@ func TestRefreshQuotas(t *testing.T) {
 		t.Fatalf("refreshed again before interval: fetch %d load %d", fetch, load)
 	}
 
+	// 默认不拉每周额度；账号单独开启后，刷新目录时顺带拉。
+	if e.up.summaryCalls != 0 || a.QuotaSummaryJSON != "" {
+		t.Fatalf("默认不应拉每周额度：%d %q", e.up.summaryCalls, a.QuotaSummaryJSON)
+	}
+	if err := e.store.SetAccountWeeklyQuota(ctx, id, store.WeeklyQuotaOn); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.relay.pool.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !e.relay.refreshAccountQuota(ctx, e.relay.pool.Accounts()[0], true, false) {
+		t.Fatal("刷新应有写库")
+	}
+	a, err = e.store.GetAccount(ctx, e.enc, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := antigravity.UnmarshalQuotaSummary(a.QuotaSummaryJSON); e.up.summaryCalls != 1 || s == nil || len(s.Groups) != 1 ||
+		*s.Groups[0].Buckets[0].RemainingFraction != 0.3 || a.QuotaSummaryAt == 0 {
+		t.Fatalf("开启后应拉到每周额度：%d %q", e.up.summaryCalls, a.QuotaSummaryJSON)
+	}
+
 	// 间隔设为 0 时关闭。
+	before, _ := e.up.counts()
 	p := e.relay.Policy()
 	p.QuotaRefresh = 0
 	e.relay.SetPolicy(p)
 	e.relay.refreshQuotas(ctx, &quotaRefresher{models: map[int64]time.Time{}, subs: map[int64]time.Time{}})
-	if fetch, _ := e.up.counts(); fetch != 1 {
-		t.Fatalf("refreshed while disabled: fetch %d", fetch)
+	if fetch, _ := e.up.counts(); fetch != before {
+		t.Fatalf("refreshed while disabled: fetch %d, before %d", fetch, before)
 	}
 }
 

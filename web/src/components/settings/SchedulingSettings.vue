@@ -28,6 +28,7 @@ interface Form {
   quotaOn: boolean
   quotaEvery: number
   lowQuota: number
+  weekly: boolean
   idleOn: boolean
   idleSecs: number
   requireProxy: boolean
@@ -55,6 +56,7 @@ function toForm(s: Scheduling): Form {
     quotaOn: s.quota_refresh > 0,
     quotaEvery: s.quota_refresh > 0 ? s.quota_refresh / MIN : QUOTA_DEFAULT_MIN,
     lowQuota: s.low_quota,
+    weekly: s.weekly_quota,
     idleOn: s.stream_idle > 0,
     idleSecs: s.stream_idle > 0 ? s.stream_idle : IDLE_DEFAULT_SECS,
     requireProxy: s.require_proxy,
@@ -83,6 +85,7 @@ function toApi(f: Form): Scheduling {
     require_proxy: f.requireProxy,
     sticky: f.sticky,
     sticky_ttl: r(f.stickyMin * MIN),
+    weekly_quota: f.weekly,
   }
 }
 
@@ -234,6 +237,10 @@ function restoreDefaults() {
         <template #info>
           <p>后台定期拉取各账号每个模型的剩余额度（账号列表里显示），同时每 6 小时检查一次订阅档位。各账号错开时间刷新，不会同时请求上游。</p>
           <p>选号时先避开请求的模型额度低于阈值的账号，都低于时照常选。</p>
+          <p>
+            每周额度来自上游的另一个接口（retrieveUserQuotaSummary），按组给出 5 小时和每周额度。参考项目在用，官方客户端的本地服务也有这个接口，
+            但官方客户端的抓包里没见过它发这个请求，所以默认关。开启后随额度刷新一起拉；账号也可以在详情里单独开关。目前只显示，不参与选号。
+          </p>
         </template>
         <SettingRow label="后台刷新额度" description="关闭后只在同步账号时更新" input-id="sched-quota-on">
           <Switch id="sched-quota-on" v-model="form.quotaOn" />
@@ -243,6 +250,9 @@ function restoreDefaults() {
         </SettingRow>
         <SettingRow label="额度低于此值时避让" description="先选别的账号，0 表示不避让" input-id="sched-low-quota">
           <UnitInput id="sched-low-quota" v-model="form.lowQuota" unit="%" :min="0" :max="50" />
+        </SettingRow>
+        <SettingRow label="拉取每周额度" description="额度里多显示每周额度；官方抓包里没有这个请求" input-id="sched-weekly">
+          <Switch id="sched-weekly" v-model="form.weekly" />
         </SettingRow>
       </SettingCard>
 

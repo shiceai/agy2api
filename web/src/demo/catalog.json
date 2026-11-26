@@ -3,32 +3,50 @@
     {
       "id": "claude-opus-5-5-high",
       "display_name": "Claude Opus 5.5 (High)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "claude-opus-5-5",
+      "family_display_name": "Claude Opus 5.5"
     },
     {
       "id": "claude-opus-5-5-low",
       "display_name": "Claude Opus 5.5 (Low)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "claude-opus-5-5",
+      "family_display_name": "Claude Opus 5.5"
     },
     {
       "id": "claude-opus-5-5-medium",
       "display_name": "Claude Opus 5.5 (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "claude-opus-5-5",
+      "family_display_name": "Claude Opus 5.5"
     },
     {
       "id": "claude-sonnet-5-5-high",
       "display_name": "Claude Sonnet 5.5 (High)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "claude-sonnet-5-5",
+      "family_display_name": "Claude Sonnet 5.5"
     },
     {
       "id": "claude-sonnet-5-5-low",
       "display_name": "Claude Sonnet 5.5 (Low)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "claude-sonnet-5-5",
+      "family_display_name": "Claude Sonnet 5.5"
     },
     {
       "id": "claude-sonnet-5-5-medium",
       "display_name": "Claude Sonnet 5.5 (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "claude-sonnet-5-5",
+      "family_display_name": "Claude Sonnet 5.5"
     },
     {
       "id": "gemini-2.5-flash",
@@ -48,12 +66,14 @@
     {
       "id": "gemini-3-flash",
       "display_name": "Gemini 3 Flash",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true
     },
     {
       "id": "gemini-3.1-flash-image",
       "display_name": "Gemini 3.1 Flash Image",
-      "supports_thinking": false
+      "supports_thinking": false,
+      "listed": true
     },
     {
       "id": "gemini-3.1-flash-lite",
@@ -63,22 +83,32 @@
     {
       "id": "gemini-3.5-flash-lite",
       "display_name": "Gemini 3.5 Flash Lite",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true
     },
     {
       "id": "gemini-3.8-flash-high",
       "display_name": "Gemini 3.8 Flash (High)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-3.8-flash",
+      "family_display_name": "Gemini 3.8 Flash"
     },
     {
       "id": "gemini-3.8-flash-low",
       "display_name": "Gemini 3.8 Flash (Low)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-3.8-flash",
+      "family_display_name": "Gemini 3.8 Flash"
     },
     {
       "id": "gemini-3.8-flash-medium",
       "display_name": "Gemini 3.8 Flash (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-3.8-flash",
+      "family_display_name": "Gemini 3.8 Flash"
     },
     {
       "id": "gemini-3.8-flash-tiered",
@@ -88,47 +118,74 @@
     {
       "id": "gemini-4-argon-high",
       "display_name": "Gemini 4 Argon (High)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-argon",
+      "family_display_name": "Gemini 4 Argon"
     },
     {
       "id": "gemini-4-argon-low",
       "display_name": "Gemini 4 Argon (Low)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-argon",
+      "family_display_name": "Gemini 4 Argon"
     },
     {
       "id": "gemini-4-argon-medium",
       "display_name": "Gemini 4 Argon (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-argon",
+      "family_display_name": "Gemini 4 Argon"
     },
     {
       "id": "gemini-4-carbon-high",
       "display_name": "Gemini 4 Carbon (High)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-carbon",
+      "family_display_name": "Gemini 4 Carbon"
     },
     {
       "id": "gemini-4-carbon-low",
       "display_name": "Gemini 4 Carbon (Low)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-carbon",
+      "family_display_name": "Gemini 4 Carbon"
     },
     {
       "id": "gemini-4-carbon-medium",
       "display_name": "Gemini 4 Carbon (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-carbon",
+      "family_display_name": "Gemini 4 Carbon"
     },
     {
       "id": "gemini-4-hydrogen-high",
       "display_name": "Gemini 4 Hydrogen (High)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-hydrogen",
+      "family_display_name": "Gemini 4 Hydrogen"
     },
     {
       "id": "gemini-4-hydrogen-low",
       "display_name": "Gemini 4 Hydrogen (Low)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-hydrogen",
+      "family_display_name": "Gemini 4 Hydrogen"
     },
     {
       "id": "gemini-4-hydrogen-medium",
       "display_name": "Gemini 4 Hydrogen (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-hydrogen",
+      "family_display_name": "Gemini 4 Hydrogen"
     },
     {
       "id": "gemini-4-hydrogen-sonar",
@@ -148,27 +205,42 @@
     {
       "id": "gemini-4-hydrogen-xhigh",
       "display_name": "Gemini 4 Hydrogen (XHigh)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-hydrogen",
+      "family_display_name": "Gemini 4 Hydrogen"
     },
     {
       "id": "gemini-4-neon-high",
       "display_name": "Gemini 4 Neon (High)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-neon",
+      "family_display_name": "Gemini 4 Neon"
     },
     {
       "id": "gemini-4-neon-low",
       "display_name": "Gemini 4 Neon (Low)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-neon",
+      "family_display_name": "Gemini 4 Neon"
     },
     {
       "id": "gemini-4-neon-medium",
       "display_name": "Gemini 4 Neon (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-neon",
+      "family_display_name": "Gemini 4 Neon"
     },
     {
       "id": "gemini-4-neon-xhigh",
       "display_name": "Gemini 4 Neon (XHigh)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true,
+      "family": "gemini-4-neon",
+      "family_display_name": "Gemini 4 Neon"
     },
     {
       "id": "gemini-flash-worker-agy",
@@ -178,22 +250,26 @@
     {
       "id": "gemini-pro-orchestrator",
       "display_name": "Orchestrator (Carbon)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true
     },
     {
       "id": "gemini-pro-orchestrator-argon",
       "display_name": "Orchestrator (Argon)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true
     },
     {
       "id": "gemini-pro-orchestrator-neon",
       "display_name": "Orchestrator (Neon)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true
     },
     {
       "id": "gpt-oss-120b-medium",
       "display_name": "GPT-OSS 120B (Medium)",
-      "supports_thinking": true
+      "supports_thinking": true,
+      "listed": true
     },
     {
       "id": "tab_flash_lite_preview",
@@ -287,7 +363,7 @@
   ],
   "prices": {
     "status": {
-      "attempt_at": 1795588065133,
+      "attempt_at": 1795674465135,
       "sources": [
         {
           "vendor": "google",
@@ -356,14 +432,14 @@
               "reason": "缺少输入或输出价"
             }
           ],
-          "success_at": 1795588065133
+          "success_at": 1795674465135
         },
         {
           "vendor": "anthropic",
           "url": "https://platform.claude.com/docs/en/about-claude/pricing.md",
           "ok": true,
           "prices": 18,
-          "success_at": 1795588065133
+          "success_at": 1795674465135
         }
       ]
     },
@@ -386,7 +462,7 @@
             "output": 20000000,
             "cache_read": 200000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "claude-opus-5-5",
@@ -398,7 +474,7 @@
             "output": 20000000,
             "cache_read": 200000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -418,7 +494,7 @@
             "output": 10000000,
             "cache_read": 100000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "claude-sonnet-5-5",
@@ -430,7 +506,7 @@
             "output": 10000000,
             "cache_read": 100000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -448,7 +524,7 @@
             "output": 2500000,
             "cache_read": 30000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-2.5-flash",
@@ -460,7 +536,7 @@
             "output": 2500000,
             "cache_read": 30000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -478,7 +554,7 @@
             "output": 400000,
             "cache_read": 10000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-2.5-flash-lite",
@@ -490,7 +566,7 @@
             "output": 400000,
             "cache_read": 10000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -508,7 +584,7 @@
             "output": 2500000,
             "cache_read": 30000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-2.5-flash",
@@ -520,7 +596,7 @@
             "output": 2500000,
             "cache_read": 30000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -538,7 +614,7 @@
             "output": 3000000,
             "cache_read": 50000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-3-flash-preview",
@@ -550,7 +626,7 @@
             "output": 3000000,
             "cache_read": 50000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -576,7 +652,7 @@
             "output": 1500000,
             "cache_read": 25000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-3.1-flash-lite",
@@ -588,7 +664,7 @@
             "output": 1500000,
             "cache_read": 25000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -606,7 +682,7 @@
             "output": 2500000,
             "cache_read": 30000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-3.5-flash-lite",
@@ -618,7 +694,7 @@
             "output": 2500000,
             "cache_read": 30000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -644,7 +720,7 @@
               "cache_read": 75000
             }
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-3.8-flash",
@@ -662,7 +738,7 @@
               "cache_read": 75000
             }
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -696,7 +772,7 @@
               "cache_read": 100000
             }
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-4-argon",
@@ -714,7 +790,7 @@
               "cache_read": 100000
             }
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -740,7 +816,7 @@
               "cache_read": 100000
             }
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-4-carbon",
@@ -758,7 +834,7 @@
               "cache_read": 100000
             }
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -779,7 +855,7 @@
             "output": 7500000,
             "cache_read": 75000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-4-hydrogen",
@@ -791,7 +867,7 @@
             "output": 7500000,
             "cache_read": 75000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {
@@ -829,7 +905,7 @@
             "output": 15000000,
             "cache_read": 150000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         },
         "official": {
           "model": "gemini-4-neon",
@@ -841,7 +917,7 @@
             "output": 15000000,
             "cache_read": 150000
           },
-          "updated_at": 1795588065133
+          "updated_at": 1795674465135
         }
       },
       {

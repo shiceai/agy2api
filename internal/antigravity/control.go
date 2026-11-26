@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -48,6 +49,12 @@ type tierPayload struct {
 	Name                               string `json:"name"`
 	IsDefault                          bool   `json:"isDefault"`
 	UserDefinedCloudaicompanionProject bool   `json:"userDefinedCloudaicompanionProject"`
+	// AvailableCredits 是付费档位上的 AI 积分（codex2api 读同一个字段）。proto3 的 JSON 省略值为 0 的
+	// creditAmount，int64 会写成字符串。
+	AvailableCredits []struct {
+		CreditType   string `json:"creditType"`
+		CreditAmount any    `json:"creditAmount"`
+	} `json:"availableCredits"`
 }
 
 type loadCodeAssistResponse struct {
@@ -69,6 +76,8 @@ type Subscription struct {
 	PaidTierID    string `json:"paid_tier_id,omitempty"`
 	// Ineligible 是不符合资格的档位原因（reasonCode: reasonMessage）。
 	Ineligible []string `json:"ineligible,omitempty"`
+	// Credits 是付费档位上的 AI 积分，上游没给积分时为 nil。
+	Credits *float64 `json:"credits,omitempty"`
 }
 
 // Downgraded 报告付费档位是否降到了 Antigravity Starter Quota（订阅失效后的降级档）。
@@ -110,6 +119,10 @@ func (r loadCodeAssistResponse) subscription() Subscription {
 	var s Subscription
 	s.CurrentTier, s.CurrentTierID = tierName(r.CurrentTier)
 	s.PaidTier, s.PaidTierID = tierName(r.PaidTier)
+	if r.PaidTier != nil && len(r.PaidTier.AvailableCredits) > 0 {
+		credits := creditAmount(r.PaidTier.AvailableCredits[0].CreditAmount)
+		s.Credits = &credits
+	}
 	for _, t := range r.IneligibleTiers {
 		reason := strings.TrimSpace(t.ReasonCode)
 		if msg := strings.TrimSpace(t.ReasonMessage); msg != "" {
@@ -120,6 +133,18 @@ func (r loadCodeAssistResponse) subscription() Subscription {
 		}
 	}
 	return s
+}
+
+// creditAmount 读积分数：数字或数字字符串，缺省（proto3 省略的 0）和读不出时为 0。
+func creditAmount(v any) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case string:
+		f, _ := strconv.ParseFloat(strings.TrimSpace(n), 64)
+		return f
+	}
+	return 0
 }
 
 // FetchSubscription 调 loadCodeAssist 只取订阅信息（后台定期检查降档用）。cred 需带 access token。

@@ -26,7 +26,11 @@ const settings = await get('/settings')
 const prices = await get('/prices')
 const catalog = {
   // 只留界面用到的字段；额度和重置时间由演示后端按每个演示账号生成。
-  models: source.models.map((m) => ({ id: m.id, display_name: m.display_name, supports_thinking: !!m.supports_thinking })),
+  // 额度和枚举名不取；对外列出和家族（官方客户端的分组）是公开信息，额度弹窗按它们列模型名。
+  models: source.models.map((m) => ({
+    id: m.id, display_name: m.display_name, supports_thinking: !!m.supports_thinking,
+    ...(m.listed ? { listed: true } : {}), ...(m.family ? { family: m.family, family_display_name: m.family_display_name } : {}),
+  })),
   tiers: settings.tiers,
   families: settings.families,
   prices: { status: prices.status, auto_sync: prices.auto_sync, models: prices.models },

@@ -7,10 +7,12 @@ import (
 
 	"github.com/shiceai/agy2api/internal/antigravity"
 	"github.com/shiceai/agy2api/internal/pool"
+	"github.com/shiceai/agy2api/internal/store"
 )
 
 // 后台额度刷新：按 Policy.QuotaRefresh 的间隔给每个启用账号拉一次模型目录（含单模型剩余额度），
-// 每 subscriptionInterval 查一次订阅档位。只调官方客户端实抓里出现过的 fetchAvailableModels、loadCodeAssist。
+// 每 subscriptionInterval 查一次订阅档位。默认只调官方客户端实抓里出现过的 fetchAvailableModels、loadCodeAssist；
+// 开了每周额度的账号拉目录时另调 retrieveUserQuotaSummary（见 WeeklyQuotaOn）。
 // 刷新后重新加载号池，选号按新额度避让，并解除已经恢复的额度耗尽冷却。
 const (
 	quotaTick            = time.Minute
@@ -117,6 +119,9 @@ func (r *Relay) refreshAccountQuota(ctx context.Context, a *pool.Account, models
 	}
 	cred := controlCredential(a, token)
 	changed := false
+	if models && r.WeeklyQuotaOn(a.Account) && r.refreshQuotaSummary(ctx, a.ID, cred) {
+		changed = true
+	}
 	if models {
 		list, err := r.client.FetchAvailableModels(ctx, cred)
 		switch {
@@ -157,6 +162,47 @@ func (r *Relay) refreshAccountQuota(ctx context.Context, a *pool.Account, models
 		}
 	}
 	return changed
+}
+
+// WeeklyQuotaOn 报告账号要不要拉每周额度：账号自己设了开、关就按它，否则跟随全局设置。
+func (r *Relay) WeeklyQuotaOn(a *store.Account) bool {
+	switch a.WeeklyQuota {
+	case store.WeeklyQuotaOn:
+		return true
+	case store.WeeklyQuotaOff:
+		return false
+	}
+	return r.Policy().WeeklyQuota
+}
+
+// refreshQuotaSummary 拉一个账号的分组额度（每周额度）并落库，返回是否写入。失败只记日志，不影响账号状态。
+func (r *Relay) refreshQuotaSummary(ctx context.Context, id int64, cred *antigravity.Credential) bool {
+	log := slog.With("account_id", id)
+	summary, err := r.client.RetrieveQuotaSummary(ctx, cred)
+	if err != nil {
+		log.WarnContext(ctx, "拉取每周额度失败", "err", err)
+		return false
+	}
+	if err := r.store.SetAccountQuotaSummary(ctx, id, antigravity.MarshalQuotaSummary(summary)); err != nil {
+		log.ErrorContext(ctx, "保存每周额度失败", "err", err)
+		return false
+	}
+	log.DebugContext(ctx, "已拉取每周额度", "groups", len(summary.Groups))
+	return true
+}
+
+// SyncQuotaSummary 在手动同步账号后拉一次分组额度（账号没开每周额度时不拉），返回是否写入。
+func (r *Relay) SyncQuotaSummary(ctx context.Context, a *store.Account) bool {
+	if !r.WeeklyQuotaOn(a) {
+		return false
+	}
+	pa := pool.NewAccount(a)
+	token, err := r.accessToken(ctx, pa)
+	if err != nil {
+		slog.WarnContext(ctx, "拉取每周额度失败：取令牌出错", "account_id", a.ID, "err", err)
+		return false
+	}
+	return r.refreshQuotaSummary(ctx, a.ID, controlCredential(pa, token))
 }
 
 // reloadAndReconcile 在模型目录（额度）落库后重新加载号池，并解除已经恢复的额度耗尽冷却。

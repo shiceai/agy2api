@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isPlaceholder } from '@/lib/quota'
 import { computed, ref, watch } from 'vue'
 import { CircleAlert, CircleCheck, LoaderCircle } from '@lucide/vue'
 import { api, type Account, type ProbeResult } from '@/api/client'
@@ -17,16 +18,17 @@ const open = defineModel<boolean>('open', { required: true })
 const props = defineProps<{ account: Account }>()
 const emit = defineEmits<{ changed: [] }>()
 
-// 补全用的 tab_* 模型不是对话模型，不列出。默认 gemini-2.5-flash，没有就选第一个 Gemini flash。
+// 补全用的 tab_* 模型不是对话模型，上游的占位条目（如 gemini-4-carbon-disabled）不是能用的模型，都不列出。
+// 默认 gemini-3-flash（官方客户端执行命令用的轻量模型），没有就选第一个 Gemini flash。
 const models = computed(() =>
   (props.account.models ?? [])
     .map((m) => m.id)
-    .filter((id) => !id.startsWith('tab_'))
+    .filter((id) => !id.startsWith('tab_') && !isPlaceholder(id))
     .sort(),
 )
 function defaultModel(): string {
   const list = models.value
-  if (list.includes('gemini-2.5-flash')) return 'gemini-2.5-flash'
+  if (list.includes('gemini-3-flash')) return 'gemini-3-flash'
   return list.find((id) => id.startsWith('gemini') && id.includes('flash')) ?? list[0] ?? ''
 }
 

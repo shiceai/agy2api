@@ -42,6 +42,9 @@ type Policy struct {
 	// Sticky 开启会话粘性：同一对话优先用上次的账号；StickyTTL 是对话闲置多久后不再粘。见 affinity.go。
 	Sticky    bool
 	StickyTTL time.Duration
+	// WeeklyQuota 是每周额度的全局开关：开启后后台刷新额度时顺带拉分组额度（retrieveUserQuotaSummary），
+	// 账号可以单独开、关（store.Account.WeeklyQuota）。默认关：官方客户端抓包里没见过这个请求。
+	WeeklyQuota bool
 }
 
 // DefaultPolicy 是未配置时的设置。5xx 休息时间按小号池取得较短：一两个号的池子不能因为一次 500

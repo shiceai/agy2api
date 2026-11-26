@@ -210,6 +210,12 @@ func (s *Service) syncAccount(ctx context.Context, a *store.Account) (string, er
 	}
 	// refresh token 可能已轮换，清掉缓存的 access token，下次请求用新凭据刷新。
 	s.relay.InvalidateToken(a.ID)
+	// 开了每周额度的账号顺带拉一次分组额度，失败不影响同步结果。
+	if s.relay.SyncQuotaSummary(ctx, a) {
+		if fresh, err := s.store.GetAccount(ctx, s.enc, a.ID); err == nil {
+			*a = *fresh
+		}
+	}
 	s.reloadAccounts(ctx)
 	return res.Warning, nil
 }

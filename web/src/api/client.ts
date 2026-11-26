@@ -188,6 +188,28 @@ export interface ModelInfo {
   supports_thinking: boolean
   remaining_fraction?: number
   reset_time?: string
+  // listed：在对外的模型列表里（官方客户端的模型选择器或辅助用途）；family、family_display_name：官方分组的家族。
+  listed?: boolean
+  family?: string
+  family_display_name?: string
+}
+// QuotaSummary 是开了每周额度的账号拉到的分组额度：每组共享额度的模型（如 Gemini、Claude 和 GPT），
+// 组里每个窗口（window 是 5h、weekly 等）一个桶。remaining_fraction 缺省表示上游没给（多半是用完了）。
+export interface QuotaSummary {
+  groups: QuotaSummaryGroup[]
+}
+export interface QuotaSummaryGroup {
+  display_name?: string
+  description?: string
+  buckets: QuotaBucket[]
+}
+export interface QuotaBucket {
+  bucket_id?: string
+  window?: string
+  display_name?: string
+  description?: string
+  remaining_fraction?: number
+  reset_time?: string
 }
 export interface Account {
   id: number
@@ -214,6 +236,12 @@ export interface Account {
   subscription: Subscription | null
   synced_at: number
   created_at: number
+  // weekly_quota 是账号自己的每周额度开关（'' 跟随全局，'on'、'off'），weekly_quota_on 是实际是否拉取；
+  // quota_summary 是上次拉到的分组额度（没拉过为 null），quota_summary_at 是拉到的 Unix 毫秒。
+  weekly_quota: '' | 'on' | 'off'
+  weekly_quota_on: boolean
+  quota_summary: QuotaSummary | null
+  quota_summary_at: number
 }
 // Subscription 是 loadCodeAssist 返回的订阅档位。downgraded 表示付费档位降到了 Antigravity Starter Quota。
 export interface Subscription {
@@ -222,6 +250,8 @@ export interface Subscription {
   paid_tier?: string
   paid_tier_id?: string
   ineligible?: string[]
+  // 付费档位上的 AI 积分，上游没给时缺省。
+  credits?: number
   downgraded: boolean
   checked_at: number
 }
@@ -236,6 +266,9 @@ export interface AccountList {
   default_concurrency: number
   // 避让阈值（百分比）：剩余额度低于它的模型选号时先避开。
   low_quota: number
+  // 后台刷新额度的间隔（秒，0 为不刷新），用来提示额度可能已过期；weekly_quota 是每周额度的全局开关。
+  quota_refresh: number
+  weekly_quota: boolean
 }
 // ImportResult 是导入或 Google 登录添加账号的结果：created 为 false 表示邮箱已存在、换上了新凭据；
 // reenabled 表示账号之前因 refresh token 失效被停用，这次重新启用了。
@@ -484,6 +517,8 @@ export interface Scheduling {
   // sticky 开启会话粘性，sticky_ttl 是对话闲置多久后不再粘（秒）。
   sticky: boolean
   sticky_ttl: number
+  // weekly_quota 是每周额度的全局开关：开启后后台刷新额度时顺带拉每周额度，账号可单独开关。
+  weekly_quota: boolean
 }
 export interface SchedulingResponse {
   settings: Scheduling

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -35,6 +36,11 @@ type Account struct {
 	// SubscriptionJSON 是 loadCodeAssist 返回的订阅信息（JSON），SubscriptionCheckedAt 是上次检查的 Unix 毫秒。
 	SubscriptionJSON      string
 	SubscriptionCheckedAt int64
+	// WeeklyQuota 是账号自己的每周额度开关：空串跟随全局设置，WeeklyQuotaOn 开，WeeklyQuotaOff 关。
+	// QuotaSummaryJSON 是上次拉到的分组额度（JSON，见 antigravity.QuotaSummary），QuotaSummaryAt 是拉到的 Unix 毫秒。
+	WeeklyQuota      string
+	QuotaSummaryJSON string
+	QuotaSummaryAt   int64
 	// ProxyID 是绑定的代理，0 表示直连；ProxyURL 是它的地址（明文，已解密），ProxyDisabled 是它是否停用，
 	// 读账号时一起带出。
 	ProxyID       int64
@@ -43,6 +49,12 @@ type Account struct {
 	CreatedAt     int64
 	UpdatedAt     int64
 }
+
+// 账号的每周额度开关（Account.WeeklyQuota），空串是跟随全局设置。
+const (
+	WeeklyQuotaOn  = "on"
+	WeeklyQuotaOff = "off"
+)
 
 // Enabled 报告账号是否处于可调度状态。
 func (a *Account) Enabled() bool { return a.Status == StatusEnabled }
@@ -100,7 +112,8 @@ func scanAccount(enc Encryptor, row interface{ Scan(...any) error }) (*Account, 
 	if err := row.Scan(&a.ID, &a.Email, &a.Name, &a.ProjectID, &a.UserProjectID,
 		&rtEnc, &a.ClientID, &csEnc, &a.Scope, &a.UserAgent, &a.Status, &a.DisabledReason,
 		&a.MaxConcurrency, &a.ModelsJSON, &a.SyncedAt, &a.CreatedAt, &a.UpdatedAt,
-		&a.ModelsRefreshedAt, &a.SubscriptionJSON, &a.SubscriptionCheckedAt, &a.ProxyID, &proxyEnc, &a.ProxyDisabled); err != nil {
+		&a.ModelsRefreshedAt, &a.SubscriptionJSON, &a.SubscriptionCheckedAt, &a.WeeklyQuota, &a.QuotaSummaryJSON, &a.QuotaSummaryAt,
+		&a.ProxyID, &proxyEnc, &a.ProxyDisabled); err != nil {
 		return nil, err
 	}
 	var err error
@@ -120,7 +133,7 @@ func scanAccount(enc Encryptor, row interface{ Scan(...any) error }) (*Account, 
 
 const accountCols = `id,email,name,project_id,user_project_id,refresh_token_enc,client_id,
 	client_secret_enc,scope,user_agent,status,disabled_reason,max_concurrency,models_json,synced_at,created_at,updated_at,
-	models_refreshed_at,subscription_json,subscription_checked_at,COALESCE(proxy_id,0),
+	models_refreshed_at,subscription_json,subscription_checked_at,weekly_quota,quota_summary_json,quota_summary_at,COALESCE(proxy_id,0),
 	COALESCE((SELECT p.url_enc FROM proxies p WHERE p.id = accounts.proxy_id),''),
 	COALESCE((SELECT p.status = 'disabled' FROM proxies p WHERE p.id = accounts.proxy_id),0)`
 
@@ -245,6 +258,29 @@ func (s *Store) SetAccountSubscription(ctx context.Context, id int64, subscripti
 	_, err := s.execCtx(ctx, `UPDATE accounts SET subscription_json=?,subscription_checked_at=?,updated_at=? WHERE id=?`,
 		subscriptionJSON, now, now, id)
 	return err
+}
+
+// SetAccountQuotaSummary 更新账号的分组额度（每周额度）和拉取时间。
+func (s *Store) SetAccountQuotaSummary(ctx context.Context, id int64, summaryJSON string) error {
+	now := nowMs()
+	_, err := s.execCtx(ctx, `UPDATE accounts SET quota_summary_json=?,quota_summary_at=?,updated_at=? WHERE id=?`,
+		summaryJSON, now, now, id)
+	return err
+}
+
+// SetAccountWeeklyQuota 设置账号自己的每周额度开关：空串跟随全局，WeeklyQuotaOn、WeeklyQuotaOff。
+func (s *Store) SetAccountWeeklyQuota(ctx context.Context, id int64, mode string) error {
+	if mode != "" && mode != WeeklyQuotaOn && mode != WeeklyQuotaOff {
+		return fmt.Errorf("store: invalid weekly quota mode %q", mode)
+	}
+	res, err := s.execCtx(ctx, `UPDATE accounts SET weekly_quota=?,updated_at=? WHERE id=?`, mode, nowMs(), id)
+	if err != nil {
+		return err
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetAccountMaxConcurrency 设置账号单独的并发上限，0 表示跟随全局默认值。

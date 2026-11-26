@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { RefreshCw, Stethoscope } from '@lucide/vue'
 import { api, type Account, type AccountStats, type Proxy } from '@/api/client'
 import { cn, fmtAgo, fmtDuration, fmtNum, fmtRemaining, fmtShortTime, fmtSpan, fmtTime } from '@/lib/utils'
+import { quotaStale } from '@/lib/quota'
 import { fmtCost } from '@/lib/cost'
 import { resultLabel } from '@/lib/usage'
 import { Button } from '@/components/ui/button'
@@ -23,7 +24,16 @@ import { choiceOf, proxyValue } from '@/lib/proxy'
 // 账号详情：在账号列表点邮箱打开（右侧面板，手机上占满）。先是当前状态（额度、冷却），再是所选时间范围内的
 // 调用情况（按每次上游尝试统计：次数、成功率、平均耗时、各模型明细、最近错误，错误可打开调用详情），最后是账号信息。
 const account = defineModel<Account | null>('account', { required: true })
-const props = defineProps<{ lowQuota: number; defaultConcurrency: number; inFlight: number; syncing: boolean; proxies: Proxy[] }>()
+// quotaRefresh 是后台刷新额度的间隔（秒），weeklyQuota 是每周额度的全局开关（账号跟随全局时显示）。
+const props = defineProps<{
+  lowQuota: number
+  quotaRefresh: number
+  weeklyQuota: boolean
+  defaultConcurrency: number
+  inFlight: number
+  syncing: boolean
+  proxies: Proxy[]
+}>()
 // changed：检测改变了账号状态（冷却、停用、启用），列表要刷新。
 const emit = defineEmits<{ sync: [id: number]; changed: [] }>()
 
@@ -113,6 +123,42 @@ async function saveProxy() {
   }
 }
 
+// 每周额度开关就地修改：跟随全局（设置 → 账号调度 → 额度）、开、关。开启后服务端立即拉一次。
+type WeeklyMode = '' | 'on' | 'off'
+const editingWeekly = ref(false)
+const weeklyChoice = ref<WeeklyMode>('')
+const weeklyError = ref('')
+const savingWeekly = ref(false)
+const weeklyOptions = computed(() => [
+  { value: '' as WeeklyMode, label: `跟随全局（${props.weeklyQuota ? '开' : '关'}）` },
+  { value: 'on' as WeeklyMode, label: '开' },
+  { value: 'off' as WeeklyMode, label: '关' },
+])
+const weeklyText = computed(() => weeklyOptions.value.find((o) => o.value === (shown.value?.weekly_quota ?? ''))?.label ?? '—')
+watch(
+  () => account.value?.id,
+  () => (editingWeekly.value = false),
+)
+function editWeekly() {
+  weeklyChoice.value = shown.value?.weekly_quota ?? ''
+  weeklyError.value = ''
+  editingWeekly.value = true
+}
+async function saveWeekly() {
+  const a = shown.value
+  if (!a) return
+  savingWeekly.value = true
+  try {
+    await api.put(`/api/admin/accounts/${a.id}/settings`, { weekly_quota: weeklyChoice.value })
+    editingWeekly.value = false
+    emit('changed')
+  } catch (e) {
+    weeklyError.value = (e as Error).message
+  } finally {
+    savingWeekly.value = false
+  }
+}
+
 const editingConcurrency = ref(false)
 const concurrencyInput = ref('')
 const concurrencyError = ref('')
@@ -173,12 +219,15 @@ async function saveConcurrency() {
             <section class="py-5">
               <div class="mb-2 flex items-baseline justify-between gap-3">
                 <h3 class="text-sm font-semibold">额度</h3>
-                <span class="text-xs text-muted-foreground" :title="fmtTime(shown.models_refreshed_at)">
-                  更新于 {{ fmtAgo(shown.models_refreshed_at) }}
+                <span
+                  :class="['text-xs', quotaStale(shown, quotaRefresh) ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground']"
+                  :title="fmtTime(shown.models_refreshed_at)"
+                >
+                  更新于 {{ fmtAgo(shown.models_refreshed_at) }}<template v-if="quotaStale(shown, quotaRefresh)"> · 可能已过期</template>
                 </span>
               </div>
               <div class="overflow-hidden rounded-lg border">
-                <QuotaWindowList :models="shown.models" :low-quota="lowQuota" />
+                <QuotaWindowList :account="shown" :low-quota="lowQuota" />
               </div>
             </section>
 
@@ -329,6 +378,22 @@ async function saveConcurrency() {
                     </div>
                     <p class="text-xs text-muted-foreground">这个账号的所有请求都经它出网，代理连不上时不会改成直连。</p>
                     <p v-if="proxyError" class="text-xs text-destructive">{{ proxyError }}</p>
+                  </form>
+                </dd>
+                <dt :class="['text-muted-foreground', editingWeekly && 'pt-1.5']">每周额度</dt>
+                <dd>
+                  <div v-if="!editingWeekly" class="flex items-center gap-3">
+                    <span>{{ weeklyText }}</span>
+                    <Button variant="link" size="xs" class="h-auto px-0" @click="editWeekly">修改</Button>
+                  </div>
+                  <form v-else class="space-y-1.5" @submit.prevent="saveWeekly">
+                    <SegmentedControl v-model="weeklyChoice" :options="weeklyOptions" label="每周额度" hide-label />
+                    <div class="flex items-center gap-2">
+                      <Button type="submit" size="sm" :disabled="savingWeekly">保存</Button>
+                      <Button type="button" variant="ghost" size="sm" @click="editingWeekly = false">取消</Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">额度里多显示每周额度；官方抓包里没有这个请求。</p>
+                    <p v-if="weeklyError" class="text-xs text-destructive">{{ weeklyError }}</p>
                   </form>
                 </dd>
                 <dt class="text-muted-foreground">模型</dt>

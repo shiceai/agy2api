@@ -43,7 +43,7 @@ APIs (Claude Code, Codex, the OpenAI SDK and others connect directly), and comes
   conversation on the same account (recognizes Claude Code and Codex sessions and `X-Session-Id`), per-account
   concurrency limits
 - **Account management**: add accounts with Google sign-in or bulk import, automatic token refresh, automatic disabling
-  of revoked accounts, per-account testing
+  of revoked accounts, per-account testing; per-model quota display, with optional weekly quota
 - **Egress proxies**: bind each account to a fixed egress proxy (http, https, socks5)
 - **API keys**: expiry, token limits, allowed models
 - **Usage and cost**: per-call details, cost estimated from official API prices

@@ -45,6 +45,12 @@ type accountView struct {
 	// （Unix 毫秒），0 表示没有暂停。
 	Proxy            *accountProxyView `json:"proxy"`
 	ProxyPausedUntil int64             `json:"proxy_paused_until"`
+	// WeeklyQuota 是账号自己的每周额度开关（空串跟随全局，on、off），WeeklyQuotaOn 是实际是否拉取。
+	// QuotaSummary 是上次拉到的分组额度（含每周额度），没拉过为 null；QuotaSummaryAt 是拉到的 Unix 毫秒。
+	WeeklyQuota    string                    `json:"weekly_quota"`
+	WeeklyQuotaOn  bool                      `json:"weekly_quota_on"`
+	QuotaSummary   *antigravity.QuotaSummary `json:"quota_summary"`
+	QuotaSummaryAt int64                     `json:"quota_summary_at"`
 }
 
 // accountProxyView 是账号绑定的代理。
@@ -130,6 +136,10 @@ func (s *Service) toAccountViewWith(a *store.Account, snap accountSnapshot) acco
 		CreatedAt:         a.CreatedAt,
 		Proxy:             accountProxy(snap.proxies[a.ProxyID]),
 		ProxyPausedUntil:  unixMilli(snap.paused[a.ID]),
+		WeeklyQuota:       a.WeeklyQuota,
+		WeeklyQuotaOn:     s.relay.WeeklyQuotaOn(a),
+		QuotaSummary:      antigravity.UnmarshalQuotaSummary(a.QuotaSummaryJSON),
+		QuotaSummaryAt:    a.QuotaSummaryAt,
 	}
 }
 
@@ -165,12 +175,19 @@ func (s *Service) adminListAccounts(w http.ResponseWriter, r *http.Request) {
 		"default_concurrency": s.relay.Policy().Concurrency,
 		// low_quota 是避让阈值（百分比），剩余额度低于它的模型在管理端标出。
 		"low_quota": schedulingFromPolicy(s.relay.Policy()).LowQuota,
+		// quota_refresh 是后台刷新额度的间隔（秒，0 为不刷新），管理端据此提示额度可能已过期；
+		// weekly_quota 是每周额度的全局开关，账号跟随全局时显示它。
+		"quota_refresh": schedulingFromPolicy(s.relay.Policy()).QuotaRefresh,
+		"weekly_quota":  s.relay.Policy().WeeklyQuota,
 	})
 }
 
-// accountSettingsRequest 是账号级设置。max_concurrency 为 0 表示跟随全局默认值。
+// accountSettingsRequest 是账号单独设置的修改，只改给了的字段。
 type accountSettingsRequest struct {
-	MaxConcurrency int `json:"max_concurrency"`
+	// MaxConcurrency 是并发上限，0 表示跟随全局默认值。
+	MaxConcurrency *int `json:"max_concurrency"`
+	// WeeklyQuota 是每周额度开关：空串跟随全局，on、off。
+	WeeklyQuota *string `json:"weekly_quota"`
 }
 
 func (s *Service) adminUpdateAccountSettings(w http.ResponseWriter, r *http.Request) {
@@ -182,11 +199,25 @@ func (s *Service) adminUpdateAccountSettings(w http.ResponseWriter, r *http.Requ
 	if !decodeAdminJSON(w, r, 1<<10, &req) {
 		return
 	}
-	if req.MaxConcurrency < 0 || req.MaxConcurrency > 64 {
+	if req.MaxConcurrency != nil && (*req.MaxConcurrency < 0 || *req.MaxConcurrency > 64) {
 		adminError(w, http.StatusBadRequest, "max_concurrency must be between 0 and 64 (0 follows the global default)")
 		return
 	}
-	err := s.store.SetAccountMaxConcurrency(r.Context(), id, req.MaxConcurrency)
+	if req.WeeklyQuota != nil && *req.WeeklyQuota != "" && *req.WeeklyQuota != store.WeeklyQuotaOn && *req.WeeklyQuota != store.WeeklyQuotaOff {
+		adminError(w, http.StatusBadRequest, "weekly_quota must be empty (follow the global setting), on or off")
+		return
+	}
+	if req.MaxConcurrency == nil && req.WeeklyQuota == nil {
+		adminError(w, http.StatusBadRequest, "nothing to change")
+		return
+	}
+	var err error
+	if req.MaxConcurrency != nil {
+		err = s.store.SetAccountMaxConcurrency(r.Context(), id, *req.MaxConcurrency)
+	}
+	if err == nil && req.WeeklyQuota != nil {
+		err = s.store.SetAccountWeeklyQuota(r.Context(), id, *req.WeeklyQuota)
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		adminError(w, http.StatusNotFound, "account not found")
 		return
@@ -195,12 +226,29 @@ func (s *Service) adminUpdateAccountSettings(w http.ResponseWriter, r *http.Requ
 		adminError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	slog.InfoContext(r.Context(), "已修改账号设置", "account_id", id, "max_concurrency", req.MaxConcurrency)
+	attrs := []any{"account_id", id}
+	if req.MaxConcurrency != nil {
+		attrs = append(attrs, "max_concurrency", *req.MaxConcurrency)
+	}
+	if req.WeeklyQuota != nil {
+		attrs = append(attrs, "weekly_quota", *req.WeeklyQuota)
+	}
+	slog.InfoContext(r.Context(), "已修改账号设置", attrs...)
 	s.reloadAccounts(r.Context())
 	a, err := s.store.GetAccount(r.Context(), s.enc, id)
 	if err != nil {
 		adminError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// 刚开启每周额度的启用账号立即拉一次，不用等下次后台刷新。
+	if req.WeeklyQuota != nil && a.Enabled() && s.relay.WeeklyQuotaOn(a) {
+		ctx, cancel := context.WithTimeout(r.Context(), quotaSummaryTimeout)
+		if s.relay.SyncQuotaSummary(ctx, a) {
+			if fresh, err := s.store.GetAccount(r.Context(), s.enc, id); err == nil {
+				a = fresh
+			}
+		}
+		cancel()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"account": s.toAccountView(r.Context(), a)})
 }
@@ -234,6 +282,9 @@ func (s *Service) adminSyncAccount(w http.ResponseWriter, r *http.Request) {
 
 // syncTimeout 是一次手动同步（刷新令牌加三个控制面调用）的总时限。
 const syncTimeout = 60 * time.Second
+
+// quotaSummaryTimeout 是开启每周额度后立即拉一次的时限，超时就等后台刷新。
+const quotaSummaryTimeout = 20 * time.Second
 
 // syncError 把同步失败写成管理端直接显示的中文原因（管理端标题里已经有"同步失败"）。
 // refresh token 已失效时带 code=invalid_grant，管理端据此提示重新授权。

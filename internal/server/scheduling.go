@@ -32,6 +32,8 @@ type schedulingView struct {
 	RequireProxy           bool `json:"require_proxy"`
 	Sticky                 bool `json:"sticky"`
 	StickyTTL              int  `json:"sticky_ttl"`
+	// WeeklyQuota 是每周额度的全局开关（账号可单独开关），见 relay.Policy.WeeklyQuota。
+	WeeklyQuota bool `json:"weekly_quota"`
 }
 
 // schedulingSetting 存在 settings 的 scheduling 键，默认值是 relay.DefaultPolicy。
@@ -67,6 +69,7 @@ func schedulingFromPolicy(p relay.Policy) schedulingView {
 		RequireProxy:           p.RequireProxy,
 		Sticky:                 p.Sticky,
 		StickyTTL:              secs(p.StickyTTL),
+		WeeklyQuota:            p.WeeklyQuota,
 	}
 }
 
@@ -92,6 +95,7 @@ func (v schedulingView) policy() relay.Policy {
 		RequireProxy:           v.RequireProxy,
 		Sticky:                 v.Sticky,
 		StickyTTL:              dur(v.StickyTTL),
+		WeeklyQuota:            v.WeeklyQuota,
 	}
 }
 

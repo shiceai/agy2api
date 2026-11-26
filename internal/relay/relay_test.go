@@ -62,6 +62,8 @@ type fakeUpstream struct {
 	fetchCalls int
 	fetchDelay time.Duration // 取模型目录前先等这么久，测并发刷新用
 	loadCalls  int
+	// summaryCalls 是 retrieveUserQuotaSummary（每周额度）的调用次数。
+	summaryCalls int
 }
 
 func newFakeUpstream() *fakeUpstream {
@@ -89,6 +91,12 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.handleFetchModels(w, r)
 	case r.URL.Path == "/v1internal:loadCodeAssist":
 		f.handleLoadCodeAssist(w, r)
+	case r.URL.Path == "/v1internal:retrieveUserQuotaSummary":
+		f.mu.Lock()
+		f.summaryCalls++
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"groups":[{"displayName":"Gemini Models","buckets":[{"bucketId":"gemini-weekly","window":"weekly","remainingFraction":0.3,"resetTime":"2030-01-01T00:00:00Z"}]}]}`))
 	default:
 		http.NotFound(w, r)
 	}

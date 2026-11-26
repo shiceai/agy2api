@@ -6,6 +6,7 @@
 // 改动只留在内存里，刷新页面恢复。
 import catalogJson from './catalog.json'
 import type {
+  QuotaSummary,
   Account,
   AccountList,
   AccountStats,
@@ -124,13 +125,41 @@ let nextProxyId = 4
 
 // --- 账号 ---
 
-interface DemoAccount extends Omit<Account, 'proxy' | 'in_flight' | 'model_count'> {
+interface DemoAccount extends Omit<Account, 'proxy' | 'in_flight' | 'model_count' | 'weekly_quota_on'> {
   proxy_id: number
 }
 const proSubscription = (): Subscription => ({
   current_tier: 'Antigravity', current_tier_id: 'free-tier', paid_tier: 'Google AI Pro', paid_tier_id: 'g1-pro-tier',
-  downgraded: false, checked_at: start - 3 * HOUR,
+  credits: 0, downgraded: false, checked_at: start - 3 * HOUR,
 })
+// weeklySummary 是开了每周额度的账号拉到的分组额度（照 2026-11-26 实抓的格式）。
+function weeklySummary(gemini5h: number, geminiWeek: number, third5h: number, thirdWeek: number): QuotaSummary {
+  const bucket = (id: string, window: string, remaining: number, resetHours: number) => ({
+    bucket_id: id, window, display_name: window === '5h' ? 'Five Hour Limit Remaining' : 'Weekly Limit Remaining',
+    remaining_fraction: remaining, reset_time: new Date(start + resetHours * HOUR).toISOString(),
+  })
+  return {
+    groups: [
+      {
+        display_name: 'Gemini Models',
+        description: 'Models within this group: Gemini 4 Neon, Gemini 4 Carbon, Gemini 4 Argon, Gemini 4 Hydrogen, Orchestrator (Neon), Orchestrator (Carbon), Orchestrator (Argon), Gemini 3.8 Flash',
+        buckets: [bucket('gemini-weekly', 'weekly', geminiWeek, 6 * 24 + 23), bucket('gemini-5h', '5h', gemini5h, 4)],
+      },
+      {
+        display_name: 'Claude and GPT models',
+        description: 'Models within this group: Claude Opus 5.5, Claude Sonnet 5.5, GPT-OSS 120B',
+        buckets: [bucket('3p-weekly', 'weekly', thirdWeek, 6 * 24 + 2), bucket('3p-5h', '5h', third5h, 2)],
+      },
+    ],
+  }
+}
+// carbonPlaceholder 模拟 Carbon 对这个账号不开放：目录里没有 Carbon 各档，只有一个占位条目。
+function withoutCarbon(models: ModelInfo[]): ModelInfo[] {
+  return [
+    ...models.filter((m) => !m.id.startsWith('gemini-4-carbon')),
+    { id: 'gemini-4-carbon-disabled', display_name: 'Gemini 4 Carbon', supports_thinking: true },
+  ]
+}
 // accountModels 给每个模型配上额度：同一家族同一个剩余比例；low 家族的额度压到避让阈值以下。
 function accountModels(seed: number, low = ''): ModelInfo[] {
   const r = mulberry32(seed)
@@ -147,17 +176,19 @@ function newAccount(id: number, email: string, name: string, proxyId: number, ex
     id, email, name, project_id: `demo-project-${hex(5)}`, user_project_id: '', user_agent: userAgent, status: 'enabled',
     max_concurrency: 0, cooldowns: [], models: accountModels(id), models_refreshed_at: start - between(2, 14) * MIN,
     proxy_id: proxyId, proxy_paused_until: 0, subscription: proSubscription(), synced_at: start - between(1, 5) * DAY,
-    created_at: start - between(5, 9) * DAY, ...extra,
+    created_at: start - between(5, 9) * DAY, weekly_quota: '', quota_summary: null, quota_summary_at: 0, ...extra,
   }
 }
 const sonnet = resolve('claude-sonnet-5-5', 'medium')
 let accounts: DemoAccount[] = [
-  newAccount(1, 'alice@example.com', 'Alice', 1),
+  newAccount(1, 'alice@example.com', 'Alice', 1, {
+    weekly_quota: 'on', quota_summary: weeklySummary(0.96, 0.97, 1, 0.93), quota_summary_at: start - 6 * MIN,
+  }),
   newAccount(2, 'bob@example.com', 'Bob', 2, {
     max_concurrency: 5,
     cooldowns: [{ model: sonnet, until: start + 4 * MIN, reason: 'rate_limit' }],
   }),
-  newAccount(3, 'carol@example.com', 'Carol', 0, { models: accountModels(3, 'gemini-3.8-flash') }),
+  newAccount(3, 'carol@example.com', 'Carol', 0, { models: withoutCarbon(accountModels(3, 'gemini-3.8-flash')) }),
   newAccount(4, 'dave@example.com', 'Dave', 3),
   newAccount(5, 'erin@example.com', 'Erin', 0, {
     status: 'disabled', disabled_reason: 'refresh token 已失效（invalid_grant）', subscription: null,
@@ -301,7 +332,7 @@ const schedulingDefaults: Scheduling = {
   token_refresh_early: true, token_refresh_min_lead: 300, token_refresh_max_lead: 900, concurrency: 15, slot_wait: 30,
   max_attempts: 3, cooldown_wait: 30, rate_limit_base: 60, rate_limit_max: 300, server_error_cooldown: 30,
   validation_cooldown: 600, model_forbidden_cooldown: 300, quota_refresh: 900, low_quota: 10, stream_idle: 120,
-  require_proxy: false, sticky: true, sticky_ttl: 3600,
+  require_proxy: false, sticky: true, sticky_ttl: 3600, weekly_quota: false,
 }
 let scheduling: Scheduling = { ...schedulingDefaults }
 let clientFilter: ClientFilter = { enabled: false, mode: 'rewrite', use_default_keywords: true, rules: '' }
@@ -320,6 +351,7 @@ function accountView(a: DemoAccount): Account {
   const { proxy_id: _, ...rest } = a
   return {
     ...rest, cooldowns, model_count: a.models.length, in_flight: live.in_flight[String(a.id)] ?? 0,
+    weekly_quota_on: a.weekly_quota === 'on' || (a.weekly_quota === '' && scheduling.weekly_quota),
     proxy: p ? { id: p.id, name: p.name, egress_ip: p.egress_ip, egress_country: p.egress_country, check_error: p.check_error, status: p.status } : null,
   }
 }
@@ -562,7 +594,10 @@ on('POST', '/system/(upgrade|revert)', () => fail(409, '演示站不能升级'))
 on('GET', '/overview', () => overview())
 on('GET', '/live', () => tickLive())
 
-on('GET', '/accounts', (): AccountList => ({ accounts: accounts.map(accountView), default_concurrency: scheduling.concurrency, low_quota: scheduling.low_quota }))
+on('GET', '/accounts', (): AccountList => ({
+  accounts: accounts.map(accountView), default_concurrency: scheduling.concurrency, low_quota: scheduling.low_quota,
+  quota_refresh: scheduling.quota_refresh, weekly_quota: scheduling.weekly_quota,
+}))
 on('POST', '/accounts/(\\d+)/(enable|disable)', (m) => {
   const a = findAccount(Number(m[1]))
   a.status = m[2] === 'enable' ? 'enabled' : 'disabled'
@@ -575,8 +610,19 @@ on('DELETE', '/accounts/(\\d+)', (m) => {
   return ok
 })
 on('PUT', '/accounts/(\\d+)/settings', (m, _q, b) => {
-  findAccount(Number(m[1])).max_concurrency = Math.max(0, Number(b.max_concurrency) || 0)
-  return ok
+  const a = findAccount(Number(m[1]))
+  if (b.max_concurrency !== undefined) a.max_concurrency = Math.max(0, Number(b.max_concurrency) || 0)
+  if (b.weekly_quota !== undefined) {
+    const mode = String(b.weekly_quota)
+    if (mode !== '' && mode !== 'on' && mode !== 'off') return fail(400, 'weekly_quota must be empty (follow the global setting), on or off')
+    a.weekly_quota = mode
+    // 开启时模拟立即拉到一次
+    if (accountView(a).weekly_quota_on && !a.quota_summary) {
+      a.quota_summary = weeklySummary(0.88, 0.71, 0.95, 0.9)
+      a.quota_summary_at = Date.now()
+    }
+  }
+  return { account: accountView(a) }
 })
 on('PUT', '/accounts/(\\d+)/proxy', (m, _q, b) => {
   const id = Number(b.proxy_id) || 0

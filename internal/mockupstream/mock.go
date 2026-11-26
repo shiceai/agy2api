@@ -19,6 +19,7 @@ func Handler() http.Handler {
 	mux.HandleFunc("/v1internal:loadCodeAssist", handleLoadCodeAssist)
 	mux.HandleFunc("/v1internal:onboardUser", handleOnboard)
 	mux.HandleFunc("/v1internal:fetchAvailableModels", handleFetchModels)
+	mux.HandleFunc("/v1internal:retrieveUserQuotaSummary", handleQuotaSummary)
 	mux.HandleFunc("/v1internal:generateContent", handleGenerate)
 	mux.HandleFunc("/v1internal:streamGenerateContent", handleStreamGenerate)
 	mux.HandleFunc("/v1internal:countTokens", handleCountTokens)
@@ -57,7 +58,28 @@ func handleLoadCodeAssist(w http.ResponseWriter, r *http.Request) {
 		"cloudaicompanionProject": "mock-project",
 		"currentTier":             map[string]any{"id": "free-tier", "name": "Free", "isDefault": true},
 		"allowedTiers":            []any{map[string]any{"id": "free-tier", "name": "Free", "isDefault": true}},
+		// 付费档位带 AI 积分（int64 按 proto3 的 JSON 写成字符串）。
+		"paidTier": map[string]any{"id": "g1-pro-tier", "name": "Google AI Pro",
+			"availableCredits": []any{map[string]any{"creditType": "GOOGLE_ONE_AI", "creditAmount": "25"}}},
 	})
+}
+
+// handleQuotaSummary 回分组额度（照 2026-11-26 实抓的格式）：Gemini 一组、Claude 和 GPT 一组，各有每周、5 小时窗口；
+// Claude 组的 5 小时窗口省略了值为 0 的剩余比例。
+func handleQuotaSummary(w http.ResponseWriter, r *http.Request) {
+	reset := func(h time.Duration) string { return time.Now().Add(h).UTC().Format(time.RFC3339) }
+	writeJSON(w, map[string]any{"groups": []any{
+		map[string]any{"displayName": "Gemini Models", "description": "Models within this group: Gemini 3 Pro, Gemini 3 Flash",
+			"buckets": []any{
+				map[string]any{"bucketId": "gemini-weekly", "window": "weekly", "remainingFraction": 0.75, "resetTime": reset(100 * time.Hour)},
+				map[string]any{"bucketId": "gemini-5h", "window": "5h", "remainingFraction": 0.5, "resetTime": reset(3 * time.Hour)},
+			}},
+		map[string]any{"displayName": "Claude and GPT models", "description": "Models within this group: Claude Opus 5.5",
+			"buckets": []any{
+				map[string]any{"bucketId": "3p-weekly", "window": "weekly", "remainingFraction": 0.9, "resetTime": reset(120 * time.Hour)},
+				map[string]any{"bucketId": "3p-5h", "window": "5h", "resetTime": reset(2 * time.Hour)},
+			}},
+	}})
 }
 
 func handleOnboard(w http.ResponseWriter, r *http.Request) {

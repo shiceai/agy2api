@@ -1,4 +1,4 @@
-import type { ModelInfo } from '@/api/client'
+import type { Account, ModelInfo, QuotaBucket, QuotaSummary } from '@/api/client'
 
 // 额度条的严重程度：快用完（<20%）红，偏低（<50%）黄，其余蓝。
 export type Severity = 'ok' | 'warning' | 'critical'
@@ -21,12 +21,36 @@ export function fmtPercent(remaining: number): string {
 
 // 有额度窗口的模型：带剩余比例和重置时间。没有重置时间的（如补全用的 tab_* 模型）不限额，不计。
 function metered(models: ModelInfo[]): ModelInfo[] {
-  return (models ?? []).filter((m) => m.remaining_fraction != null && !!m.reset_time)
+  return (models ?? []).filter((m) => m.remaining_fraction != null && !!m.reset_time && !isPlaceholder(m.id))
+}
+
+// 上游的占位条目：模型对这个账号不开放时，目录里只放一个 <家族>-disabled（如 gemini-4-carbon-disabled），
+// 它不是能用的模型（后端同样忽略它，见 antigravity.IsUnavailablePlaceholder）。
+export function isPlaceholder(id: string): boolean {
+  return /(^|[-_])disabled($|[-_])/i.test(id)
+}
+
+// unavailableModels 是这个账号不能用的模型名（占位条目的显示名），去重排序。
+export function unavailableModels(models: ModelInfo[]): string[] {
+  const names = new Set<string>()
+  for (const m of models ?? []) {
+    if (isPlaceholder(m.id)) names.add(m.display_name || m.id.replace(/[-_]disabled$/i, ''))
+  }
+  return [...names].sort()
+}
+
+// quotaStale 报告额度是不是可能已过期：停用的账号不再刷新；后台刷新开着时超过两个间隔（再宽限 5 分钟）没更新，
+// 关着时超过一天没更新。quotaRefresh 是刷新间隔（秒）。
+export function quotaStale(account: Account, quotaRefresh: number): boolean {
+  if (!account.models_refreshed_at) return false
+  if (account.status !== 'enabled') return true
+  const limit = quotaRefresh > 0 ? quotaRefresh * 2000 + 5 * 60_000 : 24 * 3600_000
+  return Date.now() - account.models_refreshed_at > limit
 }
 
 export interface QuotaGroup {
   label: string
-  // 组内最低的剩余额度，组里没有带额度的模型时为 null。
+  // 组内最低的剩余额度（拉到了每周额度时也算上），组里没有带额度的模型时为 null。
   remaining: number | null
 }
 
@@ -35,10 +59,15 @@ const groups = [
   { label: 'Gemini', match: (id: string) => id.startsWith('gemini') },
   { label: 'Claude', match: (id: string) => id.startsWith('claude') || id.startsWith('gpt') },
 ]
-export function quotaGroups(models: ModelInfo[]): QuotaGroup[] {
+export function quotaGroups(models: ModelInfo[], summary?: QuotaSummary | null): QuotaGroup[] {
   const list = metered(models)
+  const sections = summarySections(summary)
   return groups.map((g) => {
     const values = list.filter((m) => g.match(m.id)).map((m) => m.remaining_fraction as number)
+    for (const sec of sections) {
+      if (summaryGroupOf(sec.label) !== g.label.toLowerCase()) continue
+      for (const r of sec.rows) if (r.remaining != null) values.push(r.remaining)
+    }
     return { label: g.label, remaining: values.length ? Math.min(...values) : null }
   })
 }
@@ -53,6 +82,9 @@ export interface QuotaWindow {
   count: number
   remaining: number
   reset: number // Unix 毫秒
+  // group 是所在的组；main 是组里模型最多的窗口（拉到每周额度时由上游的分组代替）。
+  group: Group
+  main: boolean
 }
 
 type Group = 'gemini' | 'claude' | 'other'
@@ -107,25 +139,127 @@ export function quotaWindows(models: ModelInfo[]): QuotaWindow[] {
     const [main, ...rest] = list
     if (!main) continue
     rest.sort((a, b) => a.remaining - b.remaining || a.reset - b.reset)
-    const toWindow = (w: typeof main, label: string): QuotaWindow => ({
+    const toWindow = (w: typeof main, label: string, isMain: boolean): QuotaWindow => ({
       key: w.key,
       label,
       names: w.names,
       count: w.models.length,
       remaining: w.remaining,
       reset: w.reset,
+      group,
+      main: isMain,
     })
-    out.push(toWindow(main, groupLabel(group, main.models, main.names)))
-    for (const w of rest) out.push(toWindow(w, shortNames(w.names, group === 'other' ? '' : group)))
+    out.push(toWindow(main, groupLabel(group, main.models, main.names), true))
+    for (const w of rest) out.push(toWindow(w, shortNames(w.names, group === 'other' ? '' : group), false))
   }
   return out
 }
 
-// 模型系列名：显示名去掉"(High)"这类档位后缀，没有显示名用 ID，去重。"(Argon)"这类不是档位的保留。
+// 模型系列名：有官方分组信息时只取对外列出的（家族用家族名，不含自动分档、监控这类内部变体），
+// 否则显示名去掉"(High)"这类档位后缀，没有显示名用 ID，去重。"(Argon)"这类不是档位的保留。
 function families(models: ModelInfo[]): string[] {
+  const listed = new Set<string>()
+  for (const m of models) {
+    if (m.listed) listed.add(m.family_display_name || m.display_name || m.id)
+  }
+  if (listed.size) return [...listed].sort()
   const names = new Set<string>()
   for (const m of models) {
     names.add((m.display_name || m.id).replace(/\s*\((minimal|low|medium|high|xhigh)\)\s*$/i, '').trim())
   }
   return [...names].sort()
+}
+
+// --- 每周额度（开了每周额度的账号拉到的分组额度，见 antigravity.QuotaSummary）---
+
+export interface QuotaRow {
+  key: string
+  label: string
+  // window 是上游的窗口名（5h、weekly）。选号避让只看 5 小时窗口。
+  window: string
+  remaining: number | null
+  reset: number // Unix 毫秒，没有时为 NaN
+}
+export interface QuotaSection {
+  key: string
+  label: string
+  // names 是组里的模型名，展开时列出。
+  names: string[]
+  rows: QuotaRow[]
+}
+
+const windowLabels: Record<string, string> = { '5h': '5 小时', weekly: '每周', daily: '每天' }
+const windowOrder = ['5h', 'daily', 'weekly']
+
+// 组名："Gemini Models" → Gemini，"Claude and GPT models" → Claude · GPT，其余原样。
+function summaryLabel(name: string): string {
+  return name.replace(/\s+models?$/i, '').replace(/\s+and\s+/gi, ' · ').trim() || name
+}
+
+// summaryGroupOf 把上游的组对应到表格里的两条（gemini、claude），对不上时为空串。
+function summaryGroupOf(label: string): string {
+  const l = label.toLowerCase()
+  if (l.startsWith('gemini')) return 'gemini'
+  if (l.includes('claude') || l.includes('gpt')) return 'claude'
+  return ''
+}
+
+// 组说明里的模型名（"Models within this group: A, B"），对不上格式时用整句。
+function describedModels(description?: string): string[] {
+  if (!description) return []
+  const m = description.match(/:\s*(.+)$/)
+  return m
+    ? m[1]
+        .split(/,\s*/)
+        .map((n) => n.trim())
+        .filter(Boolean)
+    : [description]
+}
+
+// 上游省略了值为 0 的比例（proto3）：有重置时间而没有比例时按用完算。
+function bucketRemaining(b: QuotaBucket): number | null {
+  if (b.remaining_fraction != null) return b.remaining_fraction
+  return b.reset_time ? 0 : null
+}
+
+function windowRank(window?: string): number {
+  const i = windowOrder.indexOf(window ?? '')
+  return i < 0 ? windowOrder.length : i
+}
+
+// summarySections 把分组额度整理成每组一节、每个窗口一行（5 小时在前、每周在后）。没拉过时为空。
+export function summarySections(summary?: QuotaSummary | null): QuotaSection[] {
+  return (summary?.groups ?? [])
+    .filter((g) => g.buckets?.length)
+    .map((g, i) => {
+      const label = summaryLabel(g.display_name || `第 ${i + 1} 组`)
+      const rows = [...g.buckets]
+        .sort((a, b) => windowRank(a.window) - windowRank(b.window))
+        .map((b, j) => ({
+          key: `${label}|${b.bucket_id || b.window || j}`,
+          label: windowLabels[b.window ?? ''] ?? (b.display_name || b.window || '额度'),
+          window: b.window ?? '',
+          remaining: bucketRemaining(b),
+          reset: b.reset_time ? Date.parse(b.reset_time) : NaN,
+        }))
+      return { key: `summary|${label}`, label, names: describedModels(g.description), rows }
+    })
+}
+
+// quotaSections 是额度弹窗和账号详情里的额度列表：拉到了每周额度时，上游的分组（每组 5 小时、每周两行）代替推算的
+// 主窗口，推算出的其它窗口（如单独计算的 Gemini 4 Argon）照旧列在后面；没拉过时全是推算的窗口，每个一行。
+export function quotaSections(account: Pick<Account, 'models' | 'quota_summary'>): QuotaSection[] {
+  const windows = quotaWindows(account.models)
+  const summary = summarySections(account.quota_summary)
+  const toSection = (w: QuotaWindow): QuotaSection => ({
+    key: w.key,
+    label: w.label,
+    names: w.names,
+    rows: [{ key: w.key, label: w.label, window: '5h', remaining: w.remaining, reset: w.reset }],
+  })
+  if (!summary.length) return windows.map(toSection)
+  const covered = new Set(summary.map((sec) => summaryGroupOf(sec.label)).filter(Boolean))
+  const labels = new Set(summary.map((sec) => sec.label.toLowerCase()))
+  const rest = windows.filter((w) => !(w.main && covered.has(w.group)) && !labels.has(w.label.toLowerCase()))
+  return [...summary, ...rest.map(toSection)]
 }

@@ -43,6 +43,9 @@ function inFlightOf(a: Account): number {
 const defaultConcurrency = ref(0)
 // 避让阈值（百分比，设置页 → 账号调度 → 额度），额度弹窗里标出低于它的窗口。
 const lowQuota = ref(0)
+// 后台刷新额度的间隔（秒），用来提示额度可能已过期；每周额度的全局开关，账号跟随全局时显示。
+const quotaRefresh = ref(0)
+const weeklyQuota = ref(false)
 // 列表加载失败的原因，显示在内容区顶部；操作结果用 Toast。
 const loadError = ref('')
 const busy = ref<number | null>(null)
@@ -84,6 +87,8 @@ async function load() {
     accounts.value = res.accounts ?? []
     defaultConcurrency.value = res.default_concurrency
     lowQuota.value = res.low_quota ?? 0
+    quotaRefresh.value = res.quota_refresh ?? 0
+    weeklyQuota.value = !!res.weekly_quota
     loadError.value = ''
     // 已经不存在的账号（被删除）从勾选里去掉。
     const ids = new Set(accounts.value.map((a) => a.id))
@@ -262,7 +267,7 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
             <span>{{ a.synced_at ? `同步于 ${fmtAgo(a.synced_at)}` : '未同步' }}</span>
             <span class="inline-flex items-center gap-1">代理 <AccountProxy :account="a" /></span>
           </div>
-          <QuotaSummary :account="a" :low-quota="lowQuota" row />
+          <QuotaSummary :account="a" :low-quota="lowQuota" :quota-refresh="quotaRefresh" row />
           <!-- 手机上没有悬停，停用原因直接显示 -->
           <div v-if="a.status !== 'enabled' && a.disabled_reason" class="text-xs text-muted-foreground">停用原因：{{ a.disabled_reason }}</div>
           <div class="truncate text-xs text-muted-foreground" :title="a.user_agent">
@@ -328,7 +333,7 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
             </TableCell>
             <TableCell class="hidden text-muted-foreground min-[1600px]:table-cell">{{ a.name || '—' }}</TableCell>
             <TableCell><PlanBadge :subscription="a.subscription" /></TableCell>
-            <TableCell class="py-1.5"><QuotaSummary :account="a" :low-quota="lowQuota" /></TableCell>
+            <TableCell class="py-1.5"><QuotaSummary :account="a" :low-quota="lowQuota" :quota-refresh="quotaRefresh" /></TableCell>
             <TableCell class="hidden text-muted-foreground min-[1440px]:table-cell">{{ a.project_id || '—' }}</TableCell>
             <TableCell class="hidden text-muted-foreground min-[1440px]:table-cell" :title="a.user_agent">hub {{ hubVersion(a.user_agent) }}</TableCell>
             <TableCell class="text-right tabular-nums">{{ a.model_count }}</TableCell>
@@ -410,6 +415,8 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
     <AccountSheet
       v-model:account="detail"
       :low-quota="lowQuota"
+      :quota-refresh="quotaRefresh"
+      :weekly-quota="weeklyQuota"
       :default-concurrency="defaultConcurrency"
       :in-flight="detail ? inFlightOf(detail) : 0"
       :syncing="!!detail && busy === detail.id"
