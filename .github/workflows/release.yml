@@ -123,7 +123,7 @@ jobs:
             dir="package/$name"
             mkdir -p "$dir"
             cp "bin/agy2api-$os-$arch$ext" "$dir/agy2api$ext"
-            cp README.md README_EN.md LICENSE CHANGELOG.md docs/deploy.md deploy/env.example deploy/agy2api.service "$dir/"
+            cp README.md README_EN.md LICENSE CHANGELOG.md docs/deploy.md docs/api.md deploy/env.example deploy/agy2api.service "$dir/"
             if [ "$os" = windows ]; then
               (cd package && zip -qr "../dist/$name.zip" "$name")
             else

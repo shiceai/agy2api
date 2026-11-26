@@ -96,7 +96,8 @@ curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
 ```
 
 Before exposing it to the internet, read the [deployment guide](docs/deploy.md) (in Chinese): HTTPS reverse proxy,
-admin access control, backup and upgrade, and deployment with systemd.
+admin access control, backup and upgrade, and deployment with systemd. The conversion rules and limits of each API are
+in the [API notes](docs/api.md) (in Chinese).
 
 ## Use with Claude Code
 

@@ -85,6 +85,7 @@ curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
 ```
 
 上公网前请看[部署说明](docs/deploy.md)：HTTPS 反向代理、管理端访问限制、备份和升级，以及 systemd 部署方式。
+各接口的转换规则和限制见[接口说明](docs/api.md)。
 
 ## 在 Claude Code 中使用
 

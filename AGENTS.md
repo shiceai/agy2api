@@ -15,7 +15,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 
 技术栈：Go（chi、`modernc.org/sqlite` 纯 Go 无 CGO），管理端 Vue 3 + shadcn-vue（reka-ui，Tailwind 4），构建产物 `go:embed` 进二进制。
 
-部署说明见 `docs/deploy.md`。设计说明和路线图由维护者另行维护，不在本仓库。
+部署说明见 `docs/deploy.md`，各接口的转换规则和限制见 `docs/api.md`。设计说明和路线图由维护者另行维护，不在本仓库。
 
 ## 目录职责
 
@@ -37,7 +37,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 | `internal/mockupstream` | 开发与测试用的模拟上游 |
 | `ddl` | SQLite 迁移脚本，规则见 `ddl/README.md` |
 | `web` | 管理端前端，构建输出到 `internal/server/webdist`；`web/src/demo` 是演示站的模拟后端 |
-| `docs` | 部署说明 |
+| `docs` | 部署说明（`deploy.md`：安装、反代、备份升级、环境变量）、接口说明（`api.md`：各入站接口的转换和限制、会话粘性） |
 | `deploy` | 部署示例：systemd 服务、环境变量模板（Dockerfile、compose.yaml 在仓库根目录） |
 | `scripts` | 构建、提交前检查、一键安装（`install.sh`，随 Release 发布）、从 CHANGELOG 取发布说明、更新演示站的目录快照 |
 | `.github/workflows` | `ci.yml`：推送到 main 和 PR 时跑 `check.sh` 和前端构建；`release.yml`：推送 `v*` 标签时检查（调用 `ci.yml`）、推送镜像、构建二进制包、创建 Release；`demo.yml`：部署演示站 |
@@ -48,7 +48,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 - Git 提交使用 Conventional Commits，**全部用英文**，例如 `fix(pool): restore accounts after cooldown expires`：标题用祈使句、小写开头、不加句号，正文说明改了什么、为什么。不写 `Co-Authored-By` 等合作者脚注。文档和代码注释仍用简体中文。
 - 一个独立功能或修复验证通过后单独提交，不把无关改动放进同一个提交。
 - 涉及表结构时先加迁移，规则见 `ddl/README.md`：文件名 `YYYYMMDD_NNN_description.sql`，已提交的迁移不得改名、修改或删除，只能追加。
-- 改动影响使用方式（配置、部署、功能）时，在同一次工作中更新 README 和 `docs/deploy.md` 的对应内容。
+- 改动影响使用方式（配置、部署、功能）时，在同一次工作中更新 README 和 `docs/deploy.md`（部署相关）或 `docs/api.md`（接口相关）的对应内容。
 - README 有两份：`README.md`（简体中文，默认）和 `README_EN.md`（英文），内容保持一致，改一份时另一份一起改。
 - 前端构建产物不入库：`internal/server/webdist` 只提交 `.gitkeep`，Vite 构建后会自动补回。
 - 完整构建：`bash scripts/build.sh`；交叉编译传 `os/arch`，如 `bash scripts/build.sh linux/amd64`。版本号默认取 `git describe --tags --always --dirty`，注入 `main.version`。
