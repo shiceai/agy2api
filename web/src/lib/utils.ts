@@ -8,12 +8,11 @@ export function fmtTime(ms: number): string {
   return new Date(ms).toLocaleString()
 }
 
-// 格式化相对时间。
+// 格式化相对时间。不到 1 分钟是"刚刚"：时间是服务器记的，浏览器时钟可能慢几秒，差值会是负数。
 export function fmtAgo(ms: number): string {
   if (!ms) return '从未'
-  const diff = Date.now() - ms
-  const s = Math.floor(diff / 1000)
-  if (s < 60) return `${s} 秒前`
+  const s = Math.floor((Date.now() - ms) / 1000)
+  if (s < 60) return '刚刚'
   const m = Math.floor(s / 60)
   if (m < 60) return `${m} 分钟前`
   const h = Math.floor(m / 60)
