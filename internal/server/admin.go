@@ -244,6 +244,7 @@ func (s *Service) adminUpdateAccountSettings(w http.ResponseWriter, r *http.Requ
 	if req.WeeklyQuota != nil && a.Enabled() && s.relay.WeeklyQuotaOn(a) {
 		ctx, cancel := context.WithTimeout(r.Context(), quotaSummaryTimeout)
 		if s.relay.SyncQuotaSummary(ctx, a) {
+			s.reloadAccounts(r.Context()) // 选号马上用上新拉到的每周额度
 			if fresh, err := s.store.GetAccount(r.Context(), s.enc, id); err == nil {
 				a = fresh
 			}

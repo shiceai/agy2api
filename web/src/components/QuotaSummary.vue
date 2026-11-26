@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { Account } from '@/api/client'
 import { cn, fmtAgo, fmtTime } from '@/lib/utils'
-import { fmtPercent, quotaGroups, quotaSections, quotaStale, unavailableModels } from '@/lib/quota'
+import { activeSummary, fmtPercent, quotaGroups, quotaSections, quotaStale, unavailableModels } from '@/lib/quota'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import QuotaMeter from './QuotaMeter.vue'
 import QuotaWindowList from './QuotaWindowList.vue'
@@ -12,7 +12,7 @@ import QuotaWindowList from './QuotaWindowList.vue'
 // 可能已过期；row 为 true 时两条横排（手机卡片）。
 const props = defineProps<{ account: Account; lowQuota: number; quotaRefresh: number; row?: boolean }>()
 
-const groups = computed(() => quotaGroups(props.account.models, props.account.quota_summary))
+const groups = computed(() => quotaGroups(props.account.models, activeSummary(props.account)))
 const hasQuota = computed(() => quotaSections(props.account).length > 0 || unavailableModels(props.account.models).length > 0)
 const stale = computed(() => quotaStale(props.account, props.quotaRefresh))
 </script>

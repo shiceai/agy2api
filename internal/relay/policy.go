@@ -78,6 +78,7 @@ func (r *Relay) SetPolicy(p Policy) {
 		r.pool.SetDefaultConcurrency(p.Concurrency)
 		r.pool.SetLowQuota(p.LowQuota)
 		r.pool.SetRequireProxy(p.RequireProxy)
+		r.pool.SetWeeklyQuota(p.WeeklyQuota)
 	})
 }
 

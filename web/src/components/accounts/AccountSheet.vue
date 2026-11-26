@@ -392,7 +392,7 @@ async function saveConcurrency() {
                       <Button type="submit" size="sm" :disabled="savingWeekly">保存</Button>
                       <Button type="button" variant="ghost" size="sm" @click="editingWeekly = false">取消</Button>
                     </div>
-                    <p class="text-xs text-muted-foreground">额度里多显示每周额度；官方抓包里没有这个请求。</p>
+                    <p class="text-xs text-muted-foreground">选号时也看每周额度；官方抓包里没有这个请求。</p>
                     <p v-if="weeklyError" class="text-xs text-destructive">{{ weeklyError }}</p>
                   </form>
                 </dd>

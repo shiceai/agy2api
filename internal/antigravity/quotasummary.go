@@ -3,7 +3,9 @@ package antigravity
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // 每周额度：retrieveUserQuotaSummary 返回按组分的额度，每组有 5 小时和每周等窗口。fetchAvailableModels 的单模型
@@ -93,4 +95,101 @@ func UnmarshalQuotaSummary(raw string) *QuotaSummary {
 		return nil
 	}
 	return &s
+}
+
+// WeeklyLimit 是一个模型所在组的每周额度。Reset 为零值时上游没给重置时间。
+type WeeklyLimit struct {
+	Remaining float64
+	Reset     time.Time
+}
+
+// tierSuffix 是显示名末尾的档位，如 "Gemini 4 Neon (High)" 的 " (High)"；"(Argon)" 这类不是档位的保留。
+var tierSuffix = regexp.MustCompile(`(?i)\s*\((minimal|low|medium|high|xhigh)\)\s*$`)
+
+// WeeklyLimits 把分组额度里的每周窗口对应到账号目录里的模型：先看组说明里列出的模型名（"Models within this
+// group: Gemini 4 Neon, …"，和模型的家族显示名或去掉档位的显示名比对，几个组都列了时取列得最少、最具体的组）；
+// 对不上的按厂商归组：gemini* 归 Gemini 的组，claude*、gpt* 归 Claude 和 GPT 的组（同厂商有几个组时取列得最多的
+// 总组）。组说明里没列官方客户端的辅助模型（gemini-3-flash 等），但它们的 5 小时额度和同厂商的模型同步变化，
+// 按同一个额度池算。没有每周窗口的组、对不上组的模型不在结果里。
+func WeeklyLimits(s *QuotaSummary, models []ModelInfo) map[string]WeeklyLimit {
+	if s == nil {
+		return nil
+	}
+	type group struct {
+		limit  WeeklyLimit
+		names  map[string]bool
+		vendor string
+	}
+	var groups []group
+	for _, g := range s.Groups {
+		var weekly *QuotaBucket
+		for i := range g.Buckets {
+			if strings.EqualFold(g.Buckets[i].Window, "weekly") {
+				weekly = &g.Buckets[i]
+				break
+			}
+		}
+		if weekly == nil {
+			continue
+		}
+		limit := WeeklyLimit{}
+		if weekly.RemainingFraction != nil {
+			limit.Remaining = *weekly.RemainingFraction
+		} else if weekly.ResetTime == "" {
+			continue // 既没比例也没重置时间，读不出
+		}
+		limit.Reset, _ = time.Parse(time.RFC3339, weekly.ResetTime)
+		names := map[string]bool{}
+		if _, list, ok := strings.Cut(g.Description, ":"); ok {
+			for _, n := range strings.Split(list, ",") {
+				if n = strings.ToLower(strings.TrimSpace(n)); n != "" {
+					names[n] = true
+				}
+			}
+		}
+		label := strings.ToLower(g.DisplayName)
+		vendor := ""
+		switch {
+		case strings.HasPrefix(label, "gemini"):
+			vendor = "gemini"
+		case strings.Contains(label, "claude"), strings.Contains(label, "gpt"):
+			vendor = "claude"
+		}
+		groups = append(groups, group{limit, names, vendor})
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+	out := map[string]WeeklyLimit{}
+	for _, m := range models {
+		name := m.FamilyDisplayName
+		if name == "" {
+			name = tierSuffix.ReplaceAllString(m.DisplayName, "")
+		}
+		name = strings.ToLower(strings.TrimSpace(name))
+		best := -1
+		for i, g := range groups {
+			if name != "" && g.names[name] && (best < 0 || len(g.names) < len(groups[best].names)) {
+				best = i
+			}
+		}
+		if best < 0 {
+			vendor := ""
+			switch id := strings.ToLower(m.ID); {
+			case strings.HasPrefix(id, "gemini"):
+				vendor = "gemini"
+			case strings.HasPrefix(id, "claude"), strings.HasPrefix(id, "gpt"):
+				vendor = "claude"
+			}
+			for i, g := range groups {
+				if vendor != "" && g.vendor == vendor && (best < 0 || len(g.names) > len(groups[best].names)) {
+					best = i
+				}
+			}
+		}
+		if best >= 0 {
+			out[m.ID] = groups[best].limit
+		}
+	}
+	return out
 }

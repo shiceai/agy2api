@@ -246,11 +246,16 @@ export function summarySections(summary?: QuotaSummary | null): QuotaSection[] {
     })
 }
 
+// activeSummary 是生效中的分组额度：账号关了每周额度时库里留着的旧数据不参与选号，也不显示。
+export function activeSummary(account: Pick<Account, 'quota_summary' | 'weekly_quota_on'>): QuotaSummary | null {
+  return account.weekly_quota_on ? account.quota_summary : null
+}
+
 // quotaSections 是额度弹窗和账号详情里的额度列表：拉到了每周额度时，上游的分组（每组 5 小时、每周两行）代替推算的
 // 主窗口，推算出的其它窗口（如单独计算的 Gemini 4 Argon）照旧列在后面；没拉过时全是推算的窗口，每个一行。
-export function quotaSections(account: Pick<Account, 'models' | 'quota_summary'>): QuotaSection[] {
+export function quotaSections(account: Pick<Account, 'models' | 'quota_summary' | 'weekly_quota_on'>): QuotaSection[] {
   const windows = quotaWindows(account.models)
-  const summary = summarySections(account.quota_summary)
+  const summary = summarySections(activeSummary(account))
   const toSection = (w: QuotaWindow): QuotaSection => ({
     key: w.key,
     label: w.label,

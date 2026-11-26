@@ -164,15 +164,10 @@ func (r *Relay) refreshAccountQuota(ctx context.Context, a *pool.Account, models
 	return changed
 }
 
-// WeeklyQuotaOn 报告账号要不要拉每周额度：账号自己设了开、关就按它，否则跟随全局设置。
+// WeeklyQuotaOn 报告账号要不要拉每周额度：账号自己设了开、关就按它，否则跟随全局设置（见 pool.Pool.WeeklyOn，
+// 选号用的是同一个判断）。
 func (r *Relay) WeeklyQuotaOn(a *store.Account) bool {
-	switch a.WeeklyQuota {
-	case store.WeeklyQuotaOn:
-		return true
-	case store.WeeklyQuotaOff:
-		return false
-	}
-	return r.Policy().WeeklyQuota
+	return r.pool.WeeklyOn(a)
 }
 
 // refreshQuotaSummary 拉一个账号的分组额度（每周额度）并落库，返回是否写入。失败只记日志，不影响账号状态。

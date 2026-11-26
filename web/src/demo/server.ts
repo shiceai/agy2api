@@ -186,6 +186,8 @@ let accounts: DemoAccount[] = [
   }),
   newAccount(2, 'bob@example.com', 'Bob', 2, {
     max_concurrency: 5,
+    // Claude 和 GPT 的每周额度用完了：重置前选号不选它
+    weekly_quota: 'on', quota_summary: weeklySummary(0.8, 0.62, 0.9, 0), quota_summary_at: start - 6 * MIN,
     cooldowns: [{ model: sonnet, until: start + 4 * MIN, reason: 'rate_limit' }],
   }),
   newAccount(3, 'carol@example.com', 'Carol', 0, { models: withoutCarbon(accountModels(3, 'gemini-3.8-flash')) }),

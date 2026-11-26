@@ -60,6 +60,9 @@ type Account struct {
 	models map[string]antigravity.ModelInfo
 	// known 是有模型目录（哪怕目录里只有占位条目）；没有目录的账号视为未知，什么模型都放行。
 	known bool
+	// weekly 是各模型所在组的每周额度（开了每周额度的账号拉到的分组额度，见 antigravity.WeeklyLimits）。
+	// 账号的每周额度开关是否生效由号池判断（见 Pool.WeeklyOn），关掉后库里留着的旧数据不起作用。
+	weekly map[string]antigravity.WeeklyLimit
 }
 
 // NewAccount 用库里的账号构造号池账号（解析模型目录）。号池只放启用的账号；检测停用的账号时直接用它构造。
@@ -67,12 +70,24 @@ type Account struct {
 func NewAccount(a *store.Account) *Account {
 	catalog := antigravity.UnmarshalModels(a.ModelsJSON)
 	models := make(map[string]antigravity.ModelInfo, len(catalog))
+	usable := make([]antigravity.ModelInfo, 0, len(catalog))
 	for _, m := range catalog {
 		if !antigravity.IsUnavailablePlaceholder(m.ID) {
 			models[m.ID] = m
+			usable = append(usable, m)
 		}
 	}
-	return &Account{Account: a, models: models, known: len(catalog) > 0}
+	weekly := antigravity.WeeklyLimits(antigravity.UnmarshalQuotaSummary(a.QuotaSummaryJSON), usable)
+	return &Account{Account: a, models: models, known: len(catalog) > 0, weekly: weekly}
+}
+
+// weeklyLimit 返回某模型所在组的每周额度；没有数据，或已过重置时间（还没拉到新数据，按已恢复算）时 ok 为 false。
+func (a *Account) weeklyLimit(model string, now time.Time) (antigravity.WeeklyLimit, bool) {
+	l, ok := a.weekly[model]
+	if !ok || (!l.Reset.IsZero() && !now.Before(l.Reset)) {
+		return antigravity.WeeklyLimit{}, false
+	}
+	return l, true
 }
 
 // Model 返回账号目录里某模型的信息。
@@ -201,6 +216,8 @@ type Pool struct {
 	lowQuota atomic.Uint64
 	// requireProxy 为 true 时没绑定代理的账号不参与调度。
 	requireProxy atomic.Bool
+	// weeklyQuota 是每周额度的全局开关，账号可以单独开、关（store.Account.WeeklyQuota）。
+	weeklyQuota atomic.Bool
 
 	mu        sync.Mutex
 	cooldowns map[cooldownKey]cooldown
@@ -268,6 +285,40 @@ func (p *Pool) SetDefaultConcurrency(n int) {
 // SetLowQuota 设置避让阈值（0～1 的比例）：某账号对请求的模型剩余额度低于它时先不选；能选的都低于它时不避让。
 func (p *Pool) SetLowQuota(threshold float64) {
 	p.lowQuota.Store(math.Float64bits(threshold))
+}
+
+// SetWeeklyQuota 设置每周额度的全局开关。
+func (p *Pool) SetWeeklyQuota(on bool) {
+	p.weeklyQuota.Store(on)
+}
+
+// WeeklyOn 报告账号的每周额度是否生效：账号自己设了开、关就按它，否则跟随全局开关。只有生效的账号才拉每周额度，
+// 选号也只看生效账号的每周额度。
+func (p *Pool) WeeklyOn(a *store.Account) bool {
+	switch a.WeeklyQuota {
+	case store.WeeklyQuotaOn:
+		return true
+	case store.WeeklyQuotaOff:
+		return false
+	}
+	return p.weeklyQuota.Load()
+}
+
+// weekly 返回账号某模型生效中的每周额度（见 Account.weeklyLimit），账号没开每周额度时 ok 为 false。
+func (p *Pool) weekly(a *Account, model string, now time.Time) (antigravity.WeeklyLimit, bool) {
+	if !p.WeeklyOn(a.Account) {
+		return antigravity.WeeklyLimit{}, false
+	}
+	return a.weeklyLimit(model, now)
+}
+
+// quotaLeft 返回账号某模型的剩余额度：5 小时额度（模型目录）和每周额度（开了每周额度时）取较低的；都没有时 ok 为 false。
+func (p *Pool) quotaLeft(a *Account, model string, now time.Time) (float64, bool) {
+	rem, ok := a.remaining(model)
+	if l, wok := p.weekly(a, model, now); wok && (!ok || l.Remaining < rem) {
+		rem, ok = l.Remaining, true
+	}
+	return rem, ok
 }
 
 // Limit 返回账号的并发上限：单独设置的优先，否则用默认值。
@@ -408,6 +459,14 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 			note(c.account.ID, AffinityCooldown)
 			continue
 		}
+		// 每周额度用完：重置前不选，和冷却一样对待（上游这时只会回 429）。
+		if l, ok := p.weekly(c.account, c.model, now); ok && l.Remaining <= 0 {
+			if !l.Reset.IsZero() && (retryAt.IsZero() || l.Reset.Before(retryAt)) {
+				retryAt = l.Reset
+			}
+			note(c.account.ID, AffinityCooldown)
+			continue
+		}
 		if p.inflight[c.account.ID] >= p.Limit(c.account.Account) {
 			busy = true
 			note(c.account.ID, AffinityBusy)
@@ -419,10 +478,11 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 		return nil, p.freed, &UnavailableError{RetryAt: retryAt, Busy: busy}
 	}
 	// 额度避让：先排除这个模型剩余额度低于阈值的账号；都低时不避让。没有额度信息的视为正常。
+	// 开了每周额度的账号按 5 小时和每周额度的较低值算。
 	if threshold := math.Float64frombits(p.lowQuota.Load()); threshold > 0 {
 		healthy := candidates[:0:0]
 		for _, c := range candidates {
-			if rem, ok := c.account.remaining(c.model); !ok || rem >= threshold {
+			if rem, ok := p.quotaLeft(c.account, c.model, now); !ok || rem >= threshold {
 				healthy = append(healthy, c)
 			} else {
 				note(c.account.ID, AffinityLowQuota)
@@ -560,7 +620,8 @@ func (p *Pool) Cooldown(ctx context.Context, accountID int64, until time.Time, r
 }
 
 // ReconcileCooldowns 按当前快照里的额度，提前解除已经恢复的"额度耗尽"冷却：冷却写入后刷新过额度，
-// 该账号这个模型剩余额度大于 0，且冷却剩余不超过 longCooldown。内存和库都删。返回解除的条数。刷新额度后调用。
+// 该账号这个模型剩余额度大于 0，且冷却剩余不超过 longCooldown；开了每周额度的账号还要每周额度没用完
+// （5 小时额度恢复了、每周额度还是 0 时上游照样回 429）。内存和库都删。返回解除的条数。刷新额度后调用。
 func (p *Pool) ReconcileCooldowns(ctx context.Context) int {
 	now := time.Now()
 	accounts := map[int64]*Account{}
@@ -579,6 +640,9 @@ func (p *Pool) ReconcileCooldowns(ctx context.Context) int {
 		}
 		if !time.UnixMilli(a.ModelsRefreshedAt).After(cd.set) {
 			continue // 额度是冷却之前取的，不能说明已恢复
+		}
+		if l, ok := p.weekly(a, key.model, now); ok && l.Remaining <= 0 {
+			continue
 		}
 		if rem, ok := a.remaining(key.model); ok && rem > 0 {
 			delete(p.cooldowns, key)

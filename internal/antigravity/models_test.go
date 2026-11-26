@@ -101,3 +101,48 @@ func TestPublicModelsWithoutListing(t *testing.T) {
 		t.Fatalf("PublicModels = %s", got)
 	}
 }
+
+// 每周额度对应到模型：组说明里列了的按列的（几个组都列了取最具体的），没列的辅助模型按厂商归到总组；
+// 没有每周窗口的组不算；上游省略了比例但有重置时间的按用完算。
+func TestWeeklyLimits(t *testing.T) {
+	r := func(f float64) *float64 { return &f }
+	summary := &QuotaSummary{Groups: []QuotaGroup{
+		{DisplayName: "Gemini Models", Description: "Models within this group: Gemini 4 Neon, Gemini 4 Argon, Orchestrator (Neon)",
+			Buckets: []QuotaBucket{{Window: "5h", RemainingFraction: r(0.9)}, {Window: "weekly", RemainingFraction: r(0.6), ResetTime: "2030-01-02T00:00:00Z"}}},
+		{DisplayName: "Gemini 4 Argon", Description: "Models within this group: Gemini 4 Argon",
+			Buckets: []QuotaBucket{{Window: "weekly", ResetTime: "2030-01-03T00:00:00Z"}}},
+		{DisplayName: "Claude and GPT models", Description: "Models within this group: Claude Opus 5.5, GPT-OSS 120B",
+			Buckets: []QuotaBucket{{Window: "weekly", RemainingFraction: r(0.3), ResetTime: "2030-01-04T00:00:00Z"}}},
+		{DisplayName: "Other", Buckets: []QuotaBucket{{Window: "5h", RemainingFraction: r(0.1)}}},
+	}}
+	models := []ModelInfo{
+		{ID: "gemini-4-neon-high", DisplayName: "Gemini 4 Neon (High)", Family: "gemini-4-neon", FamilyDisplayName: "Gemini 4 Neon"},
+		{ID: "gemini-4-argon-low", DisplayName: "Gemini 4 Argon (Low)"},
+		{ID: "gemini-pro-orchestrator-neon", DisplayName: "Orchestrator (Neon)"},
+		{ID: "gemini-3-flash", DisplayName: "Gemini 3 Flash"},
+		{ID: "claude-opus-5-5-medium", DisplayName: "Claude Opus 5.5 (Medium)"},
+		{ID: "gpt-oss-120b-medium", DisplayName: "GPT-OSS 120B (Medium)"},
+		{ID: "tab_flash_lite_preview"},
+	}
+	got := WeeklyLimits(summary, models)
+	want := map[string]string{
+		"gemini-4-neon-high":           "0.6 2030-01-02",
+		"gemini-4-argon-low":           "0 2030-01-03", // 两组都列了 Argon，取只列它的那组；比例省略按用完算
+		"gemini-pro-orchestrator-neon": "0.6 2030-01-02",
+		"gemini-3-flash":               "0.6 2030-01-02", // 没列，按厂商归到 Gemini 总组
+		"claude-opus-5-5-medium":       "0.3 2030-01-04",
+		"gpt-oss-120b-medium":          "0.3 2030-01-04",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("WeeklyLimits = %v", got)
+	}
+	for id, w := range want {
+		l, ok := got[id]
+		if s := fmt.Sprintf("%v %s", l.Remaining, l.Reset.Format("2006-01-02")); !ok || s != w {
+			t.Errorf("%s = %s, want %s", id, s, w)
+		}
+	}
+	if WeeklyLimits(nil, models) != nil {
+		t.Fatal("没有分组额度时应为 nil")
+	}
+}

@@ -8,8 +8,9 @@ import QuotaMeter from './QuotaMeter.vue'
 
 // 额度列表：名称、额度条、剩余、重置时间对齐成列。没拉每周额度时每个推算出的窗口一行；拉到了时上游的每组
 // 一节（组名一行，下面 5 小时、每周各一行）。点组名（或单行）展开它包含的模型。低于避让阈值（lowQuota，百分比）
-// 的 5 小时额度带警告图标，底部说明；账号不能用的模型（上游的占位条目）列在最后。额度弹窗和账号详情共用。
-const props = defineProps<{ account: Pick<Account, 'models' | 'quota_summary'>; lowQuota: number }>()
+// 的带警告图标（选号时 5 小时和每周额度都看），每周额度用完的组重置前不选，底部说明；账号不能用的模型（上游的
+// 占位条目）列在最后。额度弹窗和账号详情共用。
+const props = defineProps<{ account: Pick<Account, 'models' | 'quota_summary' | 'weekly_quota_on'>; lowQuota: number }>()
 
 const sections = computed(() => quotaSections(props.account))
 const unavailable = computed(() => unavailableModels(props.account.models))
@@ -31,9 +32,14 @@ function resetText(r: QuotaRow): string {
   if (h < 24) return `${h} 小时后`
   return `${Math.round(h / 24)} 天后`
 }
-// 选号避让只看 5 小时额度（每周额度只显示）。
-const avoided = (r: QuotaRow) => r.window === '5h' && r.remaining != null && props.lowQuota > 0 && r.remaining < props.lowQuota / 100
+// 选号时避开剩余低于阈值的；每周额度用完的组在重置前不选（还没到重置时间才算）。
+const avoided = (r: QuotaRow) => r.remaining != null && props.lowQuota > 0 && r.remaining < props.lowQuota / 100
 const anyAvoided = computed(() => sections.value.some((s) => s.rows.some(avoided)))
+const weeklyOut = computed(() =>
+  sections.value
+    .filter((s) => s.rows.some((r) => r.window === 'weekly' && r.remaining === 0 && r.reset > Date.now()))
+    .map((s) => s.label),
+)
 </script>
 
 <template>
@@ -93,6 +99,10 @@ const anyAvoided = computed(() => sections.value.some((s) => s.rows.some(avoided
     <p v-if="unavailable.length" class="flex items-start gap-1.5 border-t px-4 py-2 text-xs text-muted-foreground">
       <Ban class="mt-px size-3.5 shrink-0" />
       这个账号不能用：{{ unavailable.join('、') }}
+    </p>
+    <p v-if="weeklyOut.length" class="flex items-start gap-1.5 border-t px-4 py-2 text-xs text-muted-foreground">
+      <Ban class="mt-px size-3.5 shrink-0 text-destructive" />
+      {{ weeklyOut.join('、') }} 的每周额度用完了，重置前不选这个账号
     </p>
     <p v-if="anyAvoided" class="flex items-center gap-1.5 border-t px-4 py-2 text-xs text-muted-foreground">
       <TriangleAlert class="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />

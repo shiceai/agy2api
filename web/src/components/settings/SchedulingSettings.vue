@@ -239,7 +239,8 @@ function restoreDefaults() {
           <p>选号时先避开请求的模型额度低于阈值的账号，都低于时照常选。</p>
           <p>
             每周额度来自上游的另一个接口（retrieveUserQuotaSummary），按组给出 5 小时和每周额度。参考项目在用，官方客户端的本地服务也有这个接口，
-            但官方客户端的抓包里没见过它发这个请求，所以默认关。开启后随额度刷新一起拉；账号也可以在详情里单独开关。目前只显示，不参与选号。
+            但官方客户端的抓包里没见过它发这个请求，所以默认关。开启后随额度刷新一起拉，账号也可以在详情里单独开关。拉到的每周额度用于选号：用完的账号在重置前不选，
+            避让按 5 小时和每周额度的较低值算，每周额度没恢复时不提前解除额度耗尽冷却。
           </p>
         </template>
         <SettingRow label="后台刷新额度" description="关闭后只在同步账号时更新" input-id="sched-quota-on">
@@ -251,7 +252,7 @@ function restoreDefaults() {
         <SettingRow label="额度低于此值时避让" description="先选别的账号，0 表示不避让" input-id="sched-low-quota">
           <UnitInput id="sched-low-quota" v-model="form.lowQuota" unit="%" :min="0" :max="50" />
         </SettingRow>
-        <SettingRow label="拉取每周额度" description="额度里多显示每周额度；官方抓包里没有这个请求" input-id="sched-weekly">
+        <SettingRow label="拉取每周额度" description="选号时也看每周额度；官方抓包里没有这个请求" input-id="sched-weekly">
           <Switch id="sched-weekly" v-model="form.weekly" />
         </SettingRow>
       </SettingCard>
