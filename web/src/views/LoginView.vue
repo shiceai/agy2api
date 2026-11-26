@@ -3,6 +3,7 @@ import { onMounted, ref, useTemplateRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Loader2 } from '@lucide/vue'
 import { ApiError, fetchSession, isDemo, setAdminPassword } from '@/api/client'
+import { versionInfo } from '@/lib/version'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
@@ -32,7 +33,7 @@ async function submit() {
   busy.value = true
   error.value = ''
   try {
-    await fetchSession(pw.value)
+    versionInfo.value = await fetchSession(pw.value) // 进去后侧边栏直接有版本号，不跳动
     setAdminPassword(pw.value)
     await router.replace(target())
   } catch (e) {
