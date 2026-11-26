@@ -50,7 +50,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-- 默认用最新的正式版（`latest`）。要固定版本，在 `.env` 里写 `AGY2API_IMAGE=ghcr.io/shiceai/agy2api:1.1.0`。
+- 默认用最新的正式版（`latest`）。要固定版本，在 `.env` 里写 `AGY2API_IMAGE=ghcr.io/shiceai/agy2api:1.2.0`。
 - 从源码构建：在仓库根目录 `VERSION=$(git describe --tags --always --dirty) docker compose up -d --build`。
   构建出的镜像也叫 `ghcr.io/shiceai/agy2api:latest`，要换回发布的镜像时执行 `docker compose pull`。
 - 核验镜像确实由本仓库的发布流程构建：`gh attestation verify oci://ghcr.io/shiceai/agy2api:<版本> -R shiceai/agy2api`。

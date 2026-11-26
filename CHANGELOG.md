@@ -2,7 +2,7 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## 未发布
+## v1.2.0 - 2026-11-25
 
 新增 OpenAI Chat Completions 接口，OpenAI SDK、Cherry Studio 等客户端可以直接接入。
 
