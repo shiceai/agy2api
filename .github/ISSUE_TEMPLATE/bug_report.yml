@@ -14,7 +14,7 @@ body:
     attributes:
       label: 版本 / Version
       description: 管理端侧边栏名称下面的版本号，或 `agy2api -version` 的输出 / Shown under the name in the sidebar, or printed by `agy2api -version`
-      placeholder: v1.5.0
+      placeholder: v1.6.0
     validations:
       required: true
   - type: dropdown
