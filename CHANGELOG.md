@@ -18,19 +18,19 @@
 
 ## v1.6.1 - 2026-11-26
 
-修了管理端确认框点"确认"不起作用的问题（在线升级、删除等操作都做不了）；有新版本时提示得更及时。
+修复管理端确认框无法确认的问题，新版本提示更及时。
 
 ### 改动
 
-- **新版本提示得更及时。** 以前服务每天只查一次新版本，刚发布的版本要等到下次检查才在侧边栏提示。现在打开管理端、从后台切回管理端时也会查（10 分钟内最多一次），发布后回到管理端就能看到。
+- **打开或切回管理端时自动检查新版本。** 新版本发布后不必等每日检查即可看到提示。
 
 ### 修复
 
-- **确认框点"确认"不起作用。** 在线升级、撤销升级、删除账号/API Key/代理、账号批量操作、清理用量记录这些要先确认的操作，点确认后弹窗关了，操作却没有执行，之前的版本都有这个问题。现在点确认会正常执行。
+- **确认框点击"确认"无效。** 影响在线升级、删除、批量操作等所有需要确认的操作。
 
 ### 升级说明
 
-- **v1.6.0 及更早的版本在管理端点不了升级**（就是上面确认框的问题），可以在服务器上调接口升级，口令是 `.env` 里的 `AGY2API_ADMIN_PASSWORD`，地址按实际的监听地址改：
+- **v1.6.0 及更早版本无法在管理端点击升级。** 请在服务器上执行以下命令（口令为 `.env` 中的 `AGY2API_ADMIN_PASSWORD`，地址按实际监听地址修改），或重新运行安装脚本（Docker 方式加 `--docker`）：
 
   ```bash
   curl -s -X POST -H "X-Admin-Password: <管理口令>" http://127.0.0.1:8249/api/admin/system/check >/dev/null
@@ -38,91 +38,89 @@
     -d '{"version":"v1.6.1"}' http://127.0.0.1:8249/api/admin/system/upgrade
   ```
 
-  升级在后台进行，下载完成后服务自动重启，一两分钟后刷新管理端就是新版本。也可以重新运行一次安装脚本（Docker 方式加 `--docker`）。
-
 ## v1.6.0 - 2026-11-26
 
-模型列表改成和官方客户端一致；新增可选的每周额度（参与选号）和 AI 积分显示；可以同时监听多个地址；修了管理端首次打开先闪概览等几个界面问题。
+模型列表与官方客户端保持一致；新增可选的每周额度、AI 积分显示和多地址监听。
 
 ### 功能
 
-- **可选的每周额度。** 上游的每周额度要另调一个接口，参考项目在用，但官方客户端的抓包里没见过，所以默认关。在"设置 → 账号调度 → 额度"里全局打开，或在账号详情里给单个账号打开（跟随全局 / 开 / 关）；开启后随额度刷新一起拉，额度弹窗按上游的分组显示 5 小时和每周额度。选号时也会用上：每周额度用完的账号在重置前不选（都用完时返回 429，`Retry-After` 是最早的重置时间），避让按 5 小时和每周额度的较低值算，每周额度没恢复时不提前解除额度耗尽冷却。
-- **显示 AI 积分。** 从已有的订阅检查里读出付费档位上的 AI 积分，套餐的悬停说明里显示，不多发请求。
-- **可以同时监听多个地址。** `AGY2API_ADDR` 写多个地址、用逗号分隔，如 `127.0.0.1:8249,10.8.0.1:8249`：本机的反向代理照常对外，WireGuard 等内网里的机器直接访问内网地址。有一个地址监听不了时服务不启动，日志里写明是哪个。一键安装的 `--listen` 也接受多个地址；Docker 方式用 `compose.override.yaml` 多加端口映射。部署说明新增"内网访问"一节，写了开机顺序的配置。
+- **可选的每周额度。** 在"设置 → 账号调度 → 额度"或账号详情中开启（默认关闭）；开启后参与选号，用完的账号在重置前不再选用。
+- **显示 AI 积分。** 在套餐的悬停说明中显示。
+- **支持同时监听多个地址。** `AGY2API_ADDR` 用逗号分隔多个地址，可同时服务本机反向代理和 WireGuard 等内网，详见部署说明"内网访问"。
 
 ### 改动
 
-- **模型列表和官方客户端一致，分档的只列家族名。** `/v1/models` 只列官方客户端模型选择器里的模型和它辅助用途的模型（`gemini-3-flash`、`gemini-3.5-flash-lite`、`gemini-3.1-flash-image`），分档的合成家族名（如 `gemini-4-neon`、`claude-opus-5-5`），档位按请求里的思考参数选，没给时用"设置 → 思考档位"的默认档。旧名字（如 `gemini-2.5-flash`）、内部变体和补全模型不再列出。带档位的名字和不再列出的模型照样能调用，已有的配置不受影响。
-- **额度弹窗更好读。** 额度很久没更新（账号已停用，或超过两个刷新间隔）时标出"可能已过期"；展开窗口只列官方的模型名，不再列自动分档、监控这类内部变体；账号不能用的模型（如 Gemini 4 Carbon 对部分账号不开放）单独列出。
-- **上游的占位条目不再当模型用。** 某个模型对账号不开放时，上游目录里只放一个 `<模型>-disabled` 的占位条目（如 `gemini-4-carbon-disabled`）。它不再参与选号、不会被列出，直接请求时返回模型不存在；账号检测的模型列表里也不出现。
+- **模型列表与官方客户端一致，分档模型只列家族名。** 带档位的模型名和未列出的模型仍可调用，已有配置不受影响。
+- **额度弹窗更清晰。** 标出可能过期的额度，隐藏内部变体，单独列出账号无法使用的模型。
+- **忽略上游的占位模型。** `*-disabled` 条目不再参与选号和列出。
 
 ### 修复
 
-- **刚检查过新版本时显示"-2 秒前检查"。** 时间是服务器记的，浏览器的时钟可能慢几秒。现在不到 1 分钟的一律显示"刚刚"，账号、代理、密钥等处的相对时间也一样。
-- **首次打开管理端先闪一下概览才跳到登录页，刷新时侧边栏的名称跳动。** 现在先确认登录状态再显示页面：没登录直接进登录页；已登录时版本号和页面一起出现，名称不再跳动。
+- **刚检查完新版本时显示"-2 秒前检查"。**
+- **首次打开管理端时先闪现概览页再跳转登录页；刷新时侧边栏名称跳动。**
 
 ## v1.5.0 - 2026-11-26
 
-一键安装改成把程序、配置和数据装在一个目录里，Docker 的数据改放在 `data/` 目录；部署说明加了卸载，接口细节移到接口说明。
+一键安装改为单目录布局，Docker 数据改为挂载 `data/` 目录。
 
 ### 改动
 
-- **一键安装改成装在一个目录里。** 默认在运行命令的目录下新建 `agy2api`，程序、配置 `.env` 和数据 `data/` 都在里面，`--dir` 可以指定别处。再运行一次就是升级，在哪个目录运行都能找到原来的安装。systemd 服务以安装目录所有者的身份运行（没有任何特权，只能写 `data/`）；没有 systemd 的系统在目录里生成 `run.sh`。`--uninstall` 也能卸载 Docker 方式的安装。
-- **Docker 的数据改放在 `compose.yaml` 同目录的 `data/`。** 不再用命名卷，备份、迁移直接复制整个目录。一键安装会自动把 `data/` 改成容器里的用户（UID 10001）所有，不需要 sudo。
+- **一键安装改为单目录布局。** 默认在当前目录下创建 `agy2api/`，程序、`.env` 和 `data/` 都在其中，可用 `--dir` 指定位置；再次运行即升级，`--uninstall` 可卸载（含 Docker 方式）。
+- **Docker 数据改为挂载 `compose.yaml` 同目录的 `data/`。** 备份和迁移时直接复制整个目录。
 
 ### 文档
 
-- **部署说明加了"卸载"一节，各接口的细节移到单独的接口说明（`docs/api.md`）。**
+- **部署说明新增"卸载"一节；各接口的转换规则和限制移至 `docs/api.md`。**
 
 ### 升级说明
 
-- **1.4.0 及以前用一键安装装成 systemd 服务的**：新脚本不原地升级旧的安装，会提示先 `--uninstall` 再重新安装。要沿用旧数据，把 `/var/lib/private/agy2api` 里的 `agy2api.db`、`agy2api.key` 复制到新目录的 `data/`，改成安装目录的所有者后执行 `systemctl restart agy2api`。
-- **用 Docker 的**：换成新的 `compose.yaml` 前，先把命名卷里的数据复制到 `data/`（命令见部署说明的"Docker Compose"一节）。一键安装遇到旧的 `compose.yaml` 会停下并给出这条命令。
+- **1.4.0 及更早版本通过一键安装部署的 systemd 服务需重新安装。** 先执行 `--uninstall`，再把 `/var/lib/private/agy2api` 中的 `agy2api.db`、`agy2api.key` 复制到新目录的 `data/`，改为安装目录的所有者后重启服务。
+- **Docker 部署换用新 `compose.yaml` 前需先把命名卷中的数据迁移到 `data/`。** 命令见部署说明"Docker Compose"一节，一键安装检测到旧布局时也会给出。
 
 ## v1.4.0 - 2026-11-25
 
-新增 OpenAI Responses 接口，Codex 可以直接接入；"客户端兼容"也作用于 Codex。
+新增 OpenAI Responses 接口，支持 Codex 直接接入。
 
 ### 功能
 
-- **OpenAI Responses 接口，Codex 可以直接接入。** 提供 `/v1/responses`（流式和非流式），Codex 在 `config.toml` 里加一个 `wire_api = "responses"` 的服务商就能用（见 README）。工具调用（含 Codex 的命名空间工具和自定义工具）、图片和文件、`reasoning.effort`、结构化输出都会转换，思考签名经 reasoning 条目的 `encrypted_content` 在多轮对话里来回传递，同一个 Codex 会话优先用同一个账号。网关不存响应，`previous_response_id` 这类要服务端保存状态的用法不支持。用量页的"接口"筛选多了 OpenAI Responses。
-- **"Claude Code 兼容"改名"客户端兼容"，也作用于 Codex。** 上游同样会拦截 Codex 的系统提示（返回伪装成额度耗尽的 429），开着这个开关（默认开）时 Responses 接口也把客户端 system 降为用户消息。开关还在"设置 → 模型别名"。
+- **新增 OpenAI Responses 接口（`/v1/responses`）。** Codex 添加 `wire_api = "responses"` 的服务商即可使用（见 README）；不保存响应，不支持 `previous_response_id` 等依赖服务端状态的用法。
+- **"Claude Code 兼容"更名为"客户端兼容"，同时适用于 Codex。** 位于"设置 → 模型别名"，默认开启。
 
 ## v1.3.0 - 2026-11-25
 
-会话粘性改为优先认客户端给的会话标识（Claude Code 的会话头等），并修复 Claude Code 的不同会话被认成同一个对话的问题。
+会话粘性优先按客户端会话标识识别对话；修复 Claude Code 不同会话被识别为同一对话的问题。
 
 ### 功能
 
-- **会话粘性认会话头。** 同一对话优先用上次账号时，先看客户端给的会话标识：Claude Code 的 `X-Claude-Code-Session-Id`（子代理单独认，不影响主会话的账号）、通用的 `X-Session-Id` 请求头、OpenAI 接口的 `prompt_cache_key`，都没有时才按首条用户消息。多人共用一个 Key 时，给每人设上 `X-Session-Id`，首条消息相同的对话也不会混在一起。用量详情的"会话"一行会写明按什么认的对话。
+- **会话粘性支持客户端会话标识。** 依次识别 `X-Claude-Code-Session-Id`、`X-Session-Id` 和 `prompt_cache_key`，都没有时按首条用户消息；多人共用一个 Key 时可为每人设置 `X-Session-Id`。
 
 ### 修复
 
-- **Claude Code 的不同会话被认成同一个对话。** "Claude Code 兼容"把客户端的系统提示转成第一条用户消息后，会话粘性和发给上游的会话 ID 都拿它认对话；同一项目里的几个 Claude Code 会话系统提示几乎一样，于是粘到同一个账号、共用一个会话 ID。现在认对话时跳过这条转出来的消息，"系统提示词伪装"的"客户端转用户"模式也一样。
+- **Claude Code 的不同会话被识别为同一对话并绑定到同一账号。**
 
 ## v1.2.0 - 2026-11-25
 
-新增 OpenAI Chat Completions 接口，OpenAI SDK、Cherry Studio 等客户端可以直接接入。
+新增 OpenAI Chat Completions 接口，支持 OpenAI SDK、Cherry Studio 等客户端直接接入。
 
 ### 功能
 
-- **OpenAI Chat Completions 接口。** 提供 `/v1/chat/completions`（流式和非流式），`/v1/models` 返回 OpenAI 格式的模型列表，客户端把 Base URL 设成 `http://<地址>/v1` 就能用。工具调用、图片、音频和文件、`reasoning_effort` 都会转换，思考内容放在 `reasoning_content` 字段；选号、换号、模型别名、用量记录等和其它接口一样，用量页的"接口"筛选多了 OpenAI。
-- **结构化输出。** OpenAI 接口的 `response_format`（`json_schema`）对 Gemini 模型生效，`$ref` 等上游不认的写法会自动整理。Gemini 接口发来的 `responseJsonSchema` 上游原本不生效，现在也会转成上游认的写法。
+- **新增 OpenAI Chat Completions 接口（`/v1/chat/completions`）。** Base URL 设为 `http://<地址>/v1` 即可使用，支持工具调用、多模态输入和 `reasoning_effort`。
+- **支持结构化输出。** OpenAI 接口的 `response_format`（`json_schema`）和 Gemini 接口的 `responseJsonSchema` 均可生效。
 
 ### 升级说明
 
-- **`/v1/models` 的默认格式改成 OpenAI。** 带 `x-goog-api-key` 或 `?key=` 的请求（Gemini SDK 都带）仍返回 Gemini 格式，带 `anthropic-version` 的仍返回 Anthropic 格式，`/v1beta/models` 不变。只有用 `Authorization: Bearer` 或 `x-api-key` 调 `/v1/models` 又要 Gemini 格式的客户端受影响，改用 `/v1beta/models` 即可。
+- **`/v1/models` 默认返回 OpenAI 格式。** Gemini SDK（带 `x-goog-api-key` 或 `?key=`）和 Anthropic 客户端（带 `anthropic-version`）不受影响；其他需要 Gemini 格式的客户端请改用 `/v1beta/models`。
 
 ## v1.1.0 - 2026-11-25
 
-新增 Anthropic Messages 接口，Claude Code 等 Anthropic 客户端可以直接接入。
+新增 Anthropic Messages 接口，支持 Claude Code 等客户端直接接入。
 
 ### 功能
 
-- **Anthropic Messages 接口。** 提供 `/v1/messages`（流式和非流式）和 `/v1/messages/count_tokens`，带 `anthropic-version` 头的 `/v1/models` 返回 Anthropic 格式。Claude Code 设好 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_AUTH_TOKEN` 就能用。工具调用、图片和文档、思考参数都会转换，Gemini 模型的思考签名能在多轮对话里来回传递；选号、换号、用量记录等和 Gemini 接口一样。
-- **模型别名。** 客户端发的模型名不在号池里时，自动去掉 `[1m]` 和日期后缀，再按规则映射：预置规则把 Claude 的官方名映射到号池里的 Claude 家族，Haiku 映射到 `claude-sonnet-5-5-low`。可以在"设置 → 模型别名"里加自定义规则并试解析，两个接口都生效。
-- **用量区分接口。** 用量页新增"接口"列和筛选，详情里写明调用的接口；请求模型记客户端原来的名字。
-- **Claude Code 兼容（默认开）。** 上游会按系统提示里的客户端特征拦截 Claude Code 等，返回伪装成额度耗尽的 429。网关默认把 Anthropic 入站客户端的 system 降为开头的一条用户消息（上游只检查系统提示）即可放行，可在"设置 → 模型别名"里关掉。
+- **新增 Anthropic Messages 接口（`/v1/messages`、`/v1/messages/count_tokens`）。** Claude Code 设置 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_AUTH_TOKEN` 即可使用。
+- **模型别名。** 自动去掉 `[1m]` 和日期后缀并按规则映射模型名；预置 Claude 官方模型名的映射，可在"设置 → 模型别名"中自定义。
+- **用量按接口区分。** 用量页新增"接口"列和筛选。
+- **Claude Code 兼容（默认开启）。** 将客户端的 system 转为用户消息，避免被上游拦截；可在"设置 → 模型别名"中关闭。
 
 ## v1.0.0 - 2026-11-25
 
@@ -130,19 +128,19 @@
 
 ### 功能
 
-- **Gemini 原生接口。** 提供 `generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，`/v1` 是 `/v1beta` 的别名，可以直接用 `google-genai` 等 SDK。模型名可以写目录里的精确 ID，也可以写家族名，按思考参数自动选档位。
-- **号池调度。** 冷却按"账号 × 模型"计算：429 按上游给的重置时间，5xx 短暂休息。请求失败自动换号，流式在第一帧之前出错也会换号；选不到账号时短暂等待冷却恢复。剩余额度低的账号会被避让，同一对话优先使用上次的账号，每个账号有并发上限。
-- **账号管理。** 管理端用 Google 登录添加账号，服务部署在远端也能用；也可以批量导入 refresh token。令牌提前刷新，失效后自动停用账号，单个账号可以手动检测。
-- **出口代理。** 每个账号绑定固定的出口代理（http、https、socks5），代理故障时暂停该账号，不回落直连。可以检测代理的出口 IP、地区和延迟。
+- **Gemini 原生接口。** 支持 `generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，可直接使用 `google-genai` 等 SDK。
+- **号池调度。** 按"账号 × 模型"冷却，失败自动换号，低额度账号避让，同一对话优先使用同一账号，每个账号有并发上限。
+- **账号管理。** 支持 Google 登录添加和批量导入 refresh token，令牌自动刷新，失效自动停用。
+- **出口代理。** 每个账号可绑定 http、https 或 socks5 代理，代理故障时暂停该账号，不回落直连。
 - **API Key。** 支持到期时间、Token 上限（每天、每月、总量）和允许的模型。
-- **用量和费用。** 记录每次调用的耗时、Token 和失败原因，按官方 API 价格估算费用（只显示，不扣费），显示实时并发，按保留期自动清理旧记录。
-- **安全。** 管理口令防爆破：同一地址错误口令太多时暂时锁定。支持管理端 IP 白名单，客户端 IP 只认可信反向代理转发的地址，凭据加密存储。
-- **管理端。** 桌面和手机都能用，支持浅色和深色。
-- **在线升级。** 有新版本时侧边栏的版本号变成绿色，点开一键升级到新的正式版：下载后按 SHA256SUMS.txt 校验，先备份数据库，服务原地重启换成新程序。新程序放在数据目录里，Docker 容器重建、systemd 重启后都还是新版本；连续起不来时自动退回原来的版本，也可以手动撤销。`AGY2API_UPDATE=off` 关闭。
+- **用量与费用。** 记录每次调用的耗时、Token 和失败原因，按官方价格估算费用。
+- **安全。** 管理口令防爆破、管理端 IP 白名单、只认可信反向代理转发的客户端 IP、凭据加密存储。
+- **管理端。** 适配桌面和手机，支持浅色和深色主题。
+- **在线升级。** 一键升级到新的正式版，自动校验并备份数据库，启动失败时自动回退；`AGY2API_UPDATE=off` 可关闭。
 
 ### 部署
 
-- **一键安装**：`curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash`。Linux 上装成 systemd 服务，首次安装自动生成管理口令，默认只在本机 8249 端口监听；再运行一次就是升级，加 `--docker` 用 Docker 部署，`--uninstall` 卸载。
-- **二进制包**：从本页下载对应平台的压缩包，用随附的 `SHA256SUMS.txt` 核对；也可以运行 `gh attestation verify <压缩包> -R shiceai/agy2api`，核验压缩包确实由本仓库的发布流程构建。
+- **一键安装**：`curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.sh | sudo bash`。默认安装为 systemd 服务，只监听本机 8249 端口；加 `--docker` 使用 Docker 部署，`--uninstall` 卸载。
+- **二进制包**：下载对应平台的压缩包，用 `SHA256SUMS.txt` 校验，或运行 `gh attestation verify <压缩包> -R shiceai/agy2api` 核验来源。
 - **容器镜像**：`ghcr.io/shiceai/agy2api:1.0.0`，支持 linux/amd64 和 linux/arm64。
-- 部署步骤见包里的 `deploy.md`。使用前请先阅读 README 里的风险提示。
+- 部署步骤见包内的 `deploy.md`，使用前请先阅读 README 中的风险提示。
