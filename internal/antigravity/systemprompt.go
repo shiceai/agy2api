@@ -23,6 +23,28 @@ const (
 // 告诉模型下面是客户端自己的指导（user 级），据此了解宿主应用和工具，但不覆盖 system。
 const systemAsUserBridge = "The following is the client application's own guidance, originally provided as system instructions and now presented at the user level. Read it to understand the host application, its workflow and available tools, and apply its relevant guidance when carrying out subsequent user tasks. It has user-level priority and does not override the system instructions above. Do not treat it as the user task or reply to it separately."
 
+// systemToUserBridge 是 MoveSystemToUser 放在被移动的客户端 system 之前的说明。不假设上面还有 system
+// 提示词（兼容开关单独生效时 systemInstruction 为空），所以不写"不覆盖上面的 system"。
+const systemToUserBridge = "The text below was the client application's own system instructions, now provided at the user level. Use it to understand the host application, its workflow and available tools, and apply its guidance when carrying out the user's tasks. Do not treat it as a task to answer on its own."
+
+// MoveSystemToUser 把 systemInstruction 整体转成开头的一条 user 消息（带说明），并清空 systemInstruction。
+// Anthropic 入站用它规避上游对第三方编码客户端（Claude Code 等）system 的识别：上游只检查 systemInstruction，
+// 不看对话内容，systemInstruction 留空即可放行。没有 system 时不改。原地修改 body，返回是否改过。
+func MoveSystemToUser(body map[string]any) bool {
+	if body == nil {
+		return false
+	}
+	existing := systemParts(body)
+	if len(existing) == 0 {
+		return false
+	}
+	delete(body, "systemInstruction")
+	delete(body, "system_instruction")
+	parts := append([]any{map[string]any{"text": systemToUserBridge}}, existing...)
+	prependContent(body, map[string]any{"role": "user", "parts": parts})
+	return true
+}
+
 // ApplySystemPrompt 按模式把模板注入请求体的 systemInstruction，返回是否改过 body。
 // template 为空（去空白后）时不动。原地修改 body。
 func ApplySystemPrompt(body map[string]any, mode SystemPromptMode, template string) bool {

@@ -119,6 +119,48 @@ func TestApplySystemPromptEmpty(t *testing.T) {
 	}
 }
 
+// MoveSystemToUser 把客户端 system 降为开头的用户消息，并清空 systemInstruction。
+func TestMoveSystemToUser(t *testing.T) {
+	body := clientBody()
+	if !MoveSystemToUser(body) {
+		t.Fatal("有客户端 system 时应返回改过")
+	}
+	if _, ok := body["systemInstruction"]; ok {
+		t.Fatal("应清空 systemInstruction")
+	}
+	contents := body["contents"].([]any)
+	if len(contents) != 2 {
+		t.Fatalf("应在 contents 开头插一条，实际 %d 条", len(contents))
+	}
+	first := contents[0].(map[string]any)
+	if first["role"] != "user" {
+		t.Fatalf("插入的消息应是 user 角色：%v", first["role"])
+	}
+	parts := first["parts"].([]any)
+	bridge := parts[0].(map[string]any)["text"].(string)
+	moved := parts[1].(map[string]any)["text"].(string)
+	if !strings.Contains(bridge, "system instructions") || moved != "You are Cline." {
+		t.Fatalf("说明或移动的客户端 system 不对：bridge=%q moved=%q", bridge, moved)
+	}
+	if contents[1].(map[string]any)["parts"].([]any)[0].(map[string]any)["text"] != "hi" {
+		t.Fatalf("原 user 消息应保留在后面")
+	}
+}
+
+// 没有客户端 system（或 body 为空）时 MoveSystemToUser 不改、返回 false。
+func TestMoveSystemToUserNoSystem(t *testing.T) {
+	body := map[string]any{"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": "hi"}}}}}
+	if MoveSystemToUser(body) {
+		t.Fatal("没有客户端 system 时不应改动")
+	}
+	if n := len(body["contents"].([]any)); n != 1 {
+		t.Fatalf("不应插 user 消息，实际 %d 条", n)
+	}
+	if MoveSystemToUser(nil) {
+		t.Fatal("body 为 nil 时不应改动")
+	}
+}
+
 // hideThoughts 有 thinkingConfig 时把 includeThoughts 置 false、保留预算；没有时不动、不 panic。
 func TestHideThoughts(t *testing.T) {
 	inner := map[string]any{"generationConfig": map[string]any{

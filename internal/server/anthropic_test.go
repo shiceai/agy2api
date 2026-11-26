@@ -16,6 +16,7 @@ func anthropicHeaders(t *testing.T, srv *httptest.Server) map[string]string {
 
 func TestMessagesNonStream(t *testing.T) {
 	svc, _ := newTestService(t)
+	svc.anthropicSystemAsUser.Store(false) // 只测转换，不动 system
 	srv := httptest.NewServer(svc.Router())
 	defer srv.Close()
 	h := anthropicHeaders(t, srv)
@@ -208,5 +209,44 @@ func TestMessagesModelAlias(t *testing.T) {
 	if len(logs.Records) != 1 || logs.Records[0].RequestModel != "claude-haiku-5-5-20261001" ||
 		logs.Records[0].ResolvedModel != "gemini-3-flash-high" || logs.Records[0].Protocol != "anthropic" {
 		t.Fatalf("usage = %+v", logs.Records)
+	}
+}
+
+// Anthropic 兼容默认开：客户端 system 被降为开头的用户消息（上游只剩这条，mock 回显它）。
+// 关掉后 system 回到 systemInstruction，mock 回显真正的用户消息。
+func TestMessagesSystemAsUser(t *testing.T) {
+	svc, _ := newTestService(t)
+	srv := httptest.NewServer(svc.Router())
+	defer srv.Close()
+	h := anthropicHeaders(t, srv)
+
+	read := func() string {
+		resp := doReq(t, srv, http.MethodPost, "/v1/messages", h,
+			`{"model":"gemini-3-flash","max_tokens":50,"system":"You are Claude Code.","messages":[{"role":"user","content":"hello there"}]}`)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status %d: %s", resp.StatusCode, readBody(resp))
+		}
+		var msg struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		}
+		decode(t, resp, &msg)
+		if len(msg.Content) != 1 {
+			t.Fatalf("content = %+v", msg.Content)
+		}
+		return msg.Content[0].Text
+	}
+
+	// 默认开：mock 回显第一条用户文本，即被移到前面的说明。
+	if got := read(); !strings.Contains(got, "client application's own system instructions") {
+		t.Fatalf("兼容默认开时 system 应降为开头用户消息，mock 回显 = %q", got)
+	}
+	// 关掉：system 回到 systemInstruction，回显真正的用户消息。
+	if resp := doReq(t, srv, http.MethodPut, "/api/admin/settings/anthropic-compat", nil, `{"system_as_user":false}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("save compat: %d %s", resp.StatusCode, readBody(resp))
+	}
+	if got := read(); got != "echo: hello there" {
+		t.Fatalf("兼容关闭时应回显真正的用户消息，实际 %q", got)
 	}
 }

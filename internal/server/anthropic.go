@@ -27,7 +27,8 @@ func isAnthropicRequest(r *http.Request) bool {
 }
 
 // readAnthropicRequest 读取并转换 Messages 请求体，失败时已写回 413 或 400。
-func readAnthropicRequest(w http.ResponseWriter, r *http.Request, countOnly bool) (*anthropic.Request, bool) {
+// 开启 Anthropic 兼容（默认）时把客户端 system 降为开头的用户消息（见 anthropic_compat.go）。
+func (s *Service) readAnthropicRequest(w http.ResponseWriter, r *http.Request, countOnly bool) (*anthropic.Request, bool) {
 	body, err := readRequestBody(w, r, inboundBodyLimit)
 	switch {
 	case errors.Is(err, errBodyTooLarge):
@@ -46,13 +47,16 @@ func readAnthropicRequest(w http.ResponseWriter, r *http.Request, countOnly bool
 		// Claude Code 每个请求都带 web_search 等服务端工具，记 debug，不刷屏。
 		slog.DebugContext(r.Context(), "Messages 请求里有上游不支持的内容，已去掉", "dropped", req.Dropped)
 	}
+	if s.anthropicSystemAsUser.Load() {
+		antigravity.MoveSystemToUser(req.Body)
+	}
 	return req, true
 }
 
 // handleMessages 处理 POST /v1/messages。
 func (s *Service) handleMessages(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	in, ok := readAnthropicRequest(w, r, false)
+	in, ok := s.readAnthropicRequest(w, r, false)
 	if !ok {
 		return
 	}
@@ -118,7 +122,7 @@ func (s *Service) handleMessages(w http.ResponseWriter, r *http.Request) {
 
 // handleMessagesCountTokens 处理 POST /v1/messages/count_tokens：优先问上游，失败时本地估算（同 Gemini 的 countTokens）。
 func (s *Service) handleMessagesCountTokens(w http.ResponseWriter, r *http.Request) {
-	in, ok := readAnthropicRequest(w, r, true)
+	in, ok := s.readAnthropicRequest(w, r, true)
 	if !ok {
 		return
 	}

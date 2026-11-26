@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { Check } from '@lucide/vue'
-import { api, errorMessage, type AliasTestResult, type ModelAliasResponse, type ModelAliasSettings } from '@/api/client'
+import { api, errorMessage, type AliasTestResult, type AnthropicCompatResponse, type ModelAliasResponse, type ModelAliasSettings } from '@/api/client'
 import { toastError } from '@/lib/toast'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
@@ -27,6 +27,10 @@ const testModel = ref('claude-haiku-5-5')
 const testing = ref(false)
 const result = ref<AliasTestResult | null>(null)
 
+// Claude Code 兼容：单独的开关，切换即保存（见下方卡片）。
+const systemAsUser = ref(true)
+const savingCompat = ref(false)
+
 const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== saved.value)
 
 function apply(res: ModelAliasResponse) {
@@ -37,11 +41,30 @@ function apply(res: ModelAliasResponse) {
 
 onMounted(async () => {
   try {
-    apply(await api.get<ModelAliasResponse>('/api/admin/settings/model-aliases'))
+    const [aliases, compat] = await Promise.all([
+      api.get<ModelAliasResponse>('/api/admin/settings/model-aliases'),
+      api.get<AnthropicCompatResponse>('/api/admin/settings/anthropic-compat'),
+    ])
+    apply(aliases)
+    systemAsUser.value = compat.settings.system_as_user
   } catch (e) {
     loadError.value = errorMessage(e)
   }
 })
+
+// 兼容开关切换即保存；失败回滚。
+async function setCompat(value: boolean) {
+  savingCompat.value = true
+  try {
+    const res = await api.put<AnthropicCompatResponse>('/api/admin/settings/anthropic-compat', { system_as_user: value })
+    systemAsUser.value = res.settings.system_as_user
+  } catch (e) {
+    systemAsUser.value = !value
+    toastError('保存 Claude Code 兼容失败', e)
+  } finally {
+    savingCompat.value = false
+  }
+}
 
 async function save() {
   if (!form.value) return
@@ -126,6 +149,16 @@ async function test() {
           <dd v-if="result.resolved" class="wrap-anywhere">{{ result.resolved }}</dd>
           <dd v-else class="text-destructive">号池里没有这个模型</dd>
         </dl>
+      </SettingCard>
+
+      <SettingCard title="Claude Code 兼容" description="把客户端 system 降为用户消息，绕过上游对 Claude Code 的拦截">
+        <template #info>
+          <p>上游会识别第三方客户端写在系统提示里的内容，返回伪装成额度耗尽的 429（与模型、措辞都无关，删改也躲不掉）。检测只看系统提示、不看对话内容，所以把客户端 system 降为开头的一条用户消息即可放行。</p>
+          <p>代价：客户端 system 从 system 级降到 user 级，可能略微改变模型遵循指令的方式。只作用于 Anthropic 接口，不影响 Gemini 接口。</p>
+        </template>
+        <SettingRow label="降客户端 system 为用户消息" description="关掉后 Claude Code 等直接接入会一直被上游拦截（429）" input-id="compat-sysuser">
+          <Switch id="compat-sysuser" :model-value="systemAsUser" :disabled="savingCompat" @update:model-value="setCompat(Boolean($event))" />
+        </SettingRow>
       </SettingCard>
     </SettingGrid>
 

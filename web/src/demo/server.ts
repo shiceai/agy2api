@@ -541,6 +541,12 @@ on('POST', '/settings/model-aliases/test', (_m, _q, b) => {
   const resolved = family ? `${target}-${family.tiers.includes('medium') ? 'medium' : family.tiers[0]}` : catalog.models.some((m) => m.id === target) ? target : undefined
   return { model, target, rule, ...(resolved ? { resolved } : {}) }
 })
+let anthropicCompat = { system_as_user: true }
+on('GET', '/settings/anthropic-compat', () => ({ settings: anthropicCompat }))
+on('PUT', '/settings/anthropic-compat', (_m, _q, b) => {
+  anthropicCompat = { system_as_user: b.system_as_user !== false }
+  return { settings: anthropicCompat }
+})
 on('POST', '/system/check', async () => {
   await sleep(600)
   return { ...systemView(), checked_at: Date.now() }

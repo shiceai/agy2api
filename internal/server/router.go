@@ -88,6 +88,8 @@ func (s *Service) Router() http.Handler {
 		r.Get("/settings/model-aliases", s.adminGetModelAliases)
 		r.Put("/settings/model-aliases", s.adminUpdateModelAliases)
 		r.Post("/settings/model-aliases/test", s.adminTestModelAlias)
+		r.Get("/settings/anthropic-compat", s.adminGetAnthropicCompat)
+		r.Put("/settings/anthropic-compat", s.adminUpdateAnthropicCompat)
 		r.Get("/settings/request-handling", s.adminGetRequestHandling)
 		r.Put("/settings/request-handling", s.adminUpdateRequestHandling)
 		r.Get("/prices", s.adminGetPrices)

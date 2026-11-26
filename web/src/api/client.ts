@@ -124,6 +124,14 @@ export interface AliasTestResult {
   resolved?: string
 }
 
+// AnthropicCompat 是 Anthropic 入站兼容设置：system_as_user 为真时把客户端 system 降为开头的用户消息。
+export interface AnthropicCompat {
+  system_as_user: boolean
+}
+export interface AnthropicCompatResponse {
+  settings: AnthropicCompat
+}
+
 // --- 版本与在线升级（版本弹窗） ---
 export interface ReleaseInfo {
   version: string
