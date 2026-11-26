@@ -178,7 +178,7 @@ server {
 - **模型别名**：客户端的模型名不在号池目录里时，先去掉末尾的 `[1m]` 和 `-YYYYMMDD` 日期，还不在就按规则映射（自定义规则在前、
   预置规则在后）。预置规则把 Claude 的官方名映射到号池里的 `claude-opus-5-5`、`claude-sonnet-5-5` 家族，Haiku 映射到
   `claude-sonnet-5-5-low`。在管理端"设置 → 模型别名"里可以关掉预置规则、加自定义规则（每行 `别名 => 目标`，可用 `*` 通配），
-  并试解析一个模型名。Gemini 接口同样生效。
+  并试解析一个模型名。Gemini、OpenAI 接口同样生效。
 - 不支持：Anthropic 的服务端工具（如 `web_search`，请求里有时去掉，其它工具照常）、文件 API（`file_id`）、批处理 API。
   Antigravity 上的 Claude 不返回思考内容。
 - **Claude Code 兼容**（默认开，只作用于 Anthropic 入站）：上游按系统提示里的客户端特征（Claude Code 等）拦截，返回
@@ -186,7 +186,27 @@ server {
   开启后把客户端 system 整体降为开头的一条用户消息、系统提示留空即可放行，代价是客户端 system 从 system 级降到 user 级、
   可能略微改变模型遵循方式。在"设置 → 模型别名 → Claude Code 兼容"里开关。用别的中间服务以 Gemini 协议转发 Claude Code
   的请求时不走这个开关（它只认 Anthropic 入站），可开"系统提示词伪装"的"客户端转用户"模式达到同样效果，模板留空即可（只降级、不注入）。
-- 用量页的"接口"一列区分 Gemini 和 Anthropic 的请求，请求模型记客户端原来的名字，"实际发出"是映射后的模型。
+- 用量页的"接口"一列区分 Gemini、Anthropic 和 OpenAI 的请求，请求模型记客户端原来的名字，"实际发出"是映射后的模型。
+
+## OpenAI 接口
+
+网关还提供 OpenAI Chat Completions 接口，OpenAI SDK、Cherry Studio 等客户端把 Base URL 设成 `http://<地址>/v1` 即可接入（用法见 README）：
+
+- `POST /v1/chat/completions`（流式和非流式）；`GET /v1/models`、`GET /v1/models/{id}` 返回 OpenAI 格式。API Key 放在
+  `Authorization: Bearer` 里。
+- `/v1/models` 三种接口共用，按请求头区分格式：带 `anthropic-version` 的是 Anthropic 格式，带 `x-goog-api-key` 或 `?key=`
+  （Gemini SDK 都带）的是 Gemini 格式，其余是 OpenAI 格式。`/v1beta/models` 始终是 Gemini 格式。
+- 和 Anthropic 接口一样走同一套号池和设置（模型别名、客户端过滤、系统提示词伪装、请求处理）；"Claude Code 兼容"开关只作用于
+  Anthropic 入站。开头的 `system`、`developer` 消息进系统提示，对话中间的转成用户消息里的 `<system-reminder>`。
+- 转换：工具调用和 `tool_choice`；图片（data URL，http 地址要打开远程图片内联）、音频（`input_audio`）、文件（`file_data`）；
+  `max_completion_tokens`（或 `max_tokens`）、`temperature`、`top_p`、`stop`；`reasoning_effort`（none、minimal 按 low）。
+  其它参数（如 `presence_penalty`、`seed`、`logprobs`）忽略。
+- 思考内容在 `reasoning_content` 字段返回（非标准字段，DeepSeek 带起来的写法）。OpenAI 格式没有放思考签名的位置，下一轮
+  历史里的工具调用由网关补占位签名，多轮工具调用照常可用。用量按 OpenAI 口径：`prompt_tokens` 含命中缓存，
+  `completion_tokens` 含思考。
+- 结构化输出：`response_format` 的 `json_schema` 转成上游认的 `responseSchema`（内联 `$ref`、去掉不支持的关键字），
+  对 Gemini 模型生效；Claude 模型上游报 400。`json_object` 上游不强制，靠提示词。
+- 不支持：Responses 接口、`n` 大于 1、用 Files API 上传的文件（`file_id`）。
 
 ## 环境变量
 

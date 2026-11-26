@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/shiceai/agy2api/internal/anthropic"
@@ -19,12 +18,6 @@ import (
 // Anthropic Messages 入站：/v1/messages、/v1/messages/count_tokens，以及带 anthropic-version 头的 /v1/models。
 // 请求转成 Gemini 格式交给执行层（选号、换号、会话粘性、用量记录等都复用），响应再转回 Messages 格式
 // （转换见 internal/anthropic）。
-
-// isAnthropicRequest 报告请求是不是走 Anthropic 接口：/v1/messages 下的路径，或带 anthropic-version 头
-// （Anthropic SDK 每个请求都带；/v1/models 靠它区分两种格式）。
-func isAnthropicRequest(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/v1/messages") || r.Header.Get("anthropic-version") != ""
-}
 
 // readAnthropicRequest 读取并转换 Messages 请求体，失败时已写回 413 或 400。
 // 开启 Anthropic 兼容（默认）时把客户端 system 降为开头的用户消息（见 anthropic_compat.go）。
@@ -97,9 +90,21 @@ func (s *Service) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	startSSE(w)
-	st := anthropic.NewStreamer(w, func() { flush(w) }, in.Model)
-	// 执行层的流式响应每块是一行 "data: {...}"（见 antigravity.sseUnwrapper），逐行转成 Messages 事件。
-	br := bufio.NewReaderSize(resp.Body, 64<<10)
+	convertStream(resp.Body, anthropic.NewStreamer(w, func() { flush(w) }, in.Model))
+}
+
+// streamConverter 把执行层的 Gemini 流式响应转成别的协议的流（anthropic.Streamer、openai.Streamer）。
+type streamConverter interface {
+	Chunk(data []byte)
+	Finish()
+	Error(status int, message string)
+	Err() error
+}
+
+// convertStream 逐行读执行层的流式响应（每块一行 "data: {...}"，见 antigravity.sseUnwrapper）交给转换器，
+// 正常结束时收尾，上游中途出错时在流里发错误；客户端断开时提前返回。
+func convertStream(body io.Reader, st streamConverter) {
+	br := bufio.NewReaderSize(body, 64<<10)
 	for {
 		line, err := br.ReadBytes('\n')
 		if data, ok := bytes.CutPrefix(bytes.TrimRight(line, "\r\n"), []byte("data: ")); ok {

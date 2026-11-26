@@ -337,8 +337,8 @@ export interface UsageRecord {
   request_model: string
   resolved_model: string
   upstream_model: string
-  // protocol 是入站接口：gemini（Gemini 原生接口）或 anthropic（Anthropic Messages 接口）。
-  protocol: 'gemini' | 'anthropic'
+  // protocol 是入站接口：gemini（Gemini 原生接口）、anthropic（Anthropic Messages 接口）或 openai（OpenAI Chat Completions 接口）。
+  protocol: 'gemini' | 'anthropic' | 'openai'
   reasoning: string
   prompt_tokens: number
   output_tokens: number

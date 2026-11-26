@@ -50,8 +50,8 @@ func (s *Service) adminUsageLogs(w http.ResponseWriter, r *http.Request) {
 		adminError(w, http.StatusBadRequest, "status must be success or error")
 		return
 	}
-	if f.Protocol != "" && f.Protocol != store.ProtocolGemini && f.Protocol != store.ProtocolAnthropic {
-		adminError(w, http.StatusBadRequest, "protocol must be gemini or anthropic")
+	if f.Protocol != "" && f.Protocol != store.ProtocolGemini && f.Protocol != store.ProtocolAnthropic && f.Protocol != store.ProtocolOpenAI {
+		adminError(w, http.StatusBadRequest, "protocol must be gemini, anthropic or openai")
 		return
 	}
 	if f.Stream != "" && f.Stream != "stream" && f.Stream != "sync" {

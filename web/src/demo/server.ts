@@ -265,10 +265,10 @@ function fakeRecord(at: number): UsageRecord {
   const last = attempts.at(-1)
   return {
     id: nextUsageId++, request_id: hex(16), api_key_id: keyId, account_id: ok && last ? last.account_id : 0,
-    // Claude 的请求大约一半来自 Claude Code（Anthropic 接口），请求模型是官方名
+    // Claude 的请求大约一半来自 Claude Code（Anthropic 接口），请求模型是官方名；其余约两成来自 OpenAI 兼容客户端
     ...(fam.startsWith('claude') && rand() < 0.5
       ? { protocol: 'anthropic' as const, request_model: `${fam}-20261015` }
-      : { protocol: 'gemini' as const, request_model: fam }),
+      : { protocol: rand() < 0.2 ? ('openai' as const) : ('gemini' as const), request_model: fam }),
     resolved_model: resolved, upstream_model: resolved, reasoning: tier,
     prompt_tokens: ok ? prompt : 0, output_tokens: output, cached_tokens: cached, thoughts_tokens: thoughts, total_tokens: totalTokens,
     status_code: status, stream, first_token_ms: stream && ok ? header + between(20, 400) : null, latency_ms: ok ? total : between(40, 3000),

@@ -19,7 +19,7 @@ type UsageRecord struct {
 	ResolvedModel string `json:"resolved_model"`
 	// UpstreamModel 是上游响应里报告的模型（modelVersion）。
 	UpstreamModel string `json:"upstream_model"`
-	// Protocol 是入站接口：gemini 或 anthropic。
+	// Protocol 是入站接口：gemini、anthropic 或 openai。
 	Protocol string `json:"protocol"`
 	// Reasoning 是推理强度：档位（low/medium/high/xhigh）、客户端的 thinkingLevel，或 "budget:<N>"。
 	Reasoning string `json:"reasoning"`
@@ -48,6 +48,7 @@ type UsageRecord struct {
 const (
 	ProtocolGemini    = "gemini"
 	ProtocolAnthropic = "anthropic"
+	ProtocolOpenAI    = "openai"
 )
 
 // InsertUsage 在一个事务里写入若干条用量记录。CreatedAt 为 0 的记录用当前时间。
@@ -229,7 +230,7 @@ type UsageFilter struct {
 	// Stream 为 "stream"、"sync"，或空。
 	Stream    string
 	RequestID string
-	// Protocol 是入站接口（ProtocolGemini、ProtocolAnthropic），空为不限。
+	// Protocol 是入站接口（ProtocolGemini、ProtocolAnthropic、ProtocolOpenAI），空为不限。
 	Protocol string
 }
 

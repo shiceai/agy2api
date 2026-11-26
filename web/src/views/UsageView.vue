@@ -95,7 +95,7 @@ interface DimFilter {
 }
 const status = ref<'all' | 'success' | 'error'>('all')
 const stream = ref<'all' | 'stream' | 'sync'>('all')
-const protocol = ref<'all' | 'gemini' | 'anthropic'>('all')
+const protocol = ref<'all' | 'gemini' | 'anthropic' | 'openai'>('all')
 const dimFilters = ref<Partial<Record<Dimension, DimFilter>>>({})
 const activeDims = computed(() => (['model', 'account', 'apiKey'] as const).filter((d) => dimFilters.value[d]))
 const requestIdInput = ref('')
@@ -280,8 +280,14 @@ const clickable = 'cursor-pointer decoration-dotted underline-offset-2 hover:und
 const dimLabels: Record<Dimension, string> = { model: '模型', account: '账号', apiKey: '密钥' }
 const statusOptions = [{ value: 'all', label: '全部' }, { value: 'success', label: '成功' }, { value: 'error', label: '错误' }] as const
 const streamOptions = [{ value: 'all', label: '全部' }, { value: 'stream', label: '流式' }, { value: 'sync', label: '非流式' }] as const
-const protocolOptions = [{ value: 'all', label: '全部' }, { value: 'gemini', label: 'Gemini' }, { value: 'anthropic', label: 'Anthropic' }] as const
-const protocolLabel = (p: string) => (p === 'anthropic' ? 'Anthropic' : 'Gemini')
+const protocolLabels: Record<string, string> = { gemini: 'Gemini', anthropic: 'Anthropic', openai: 'OpenAI' }
+const protocolOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'openai', label: 'OpenAI' },
+] as const
+const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
 </script>
 
 <template>
@@ -340,7 +346,7 @@ const protocolLabel = (p: string) => (p === 'anthropic' ? 'Anthropic' : 'Gemini'
               </button>
               <Badge v-if="r.reasoning" variant="outline" :class="reasoningClass(r.reasoning)">{{ reasoningText(r.reasoning) }}</Badge>
               <Badge v-if="r.stream || r.detail?.fake_stream" variant="outline" class="text-muted-foreground">{{ r.detail?.fake_stream ? '假流' : '流' }}</Badge>
-              <Badge v-if="r.protocol === 'anthropic'" variant="outline" class="text-muted-foreground">Anthropic</Badge>
+              <Badge v-if="r.protocol !== 'gemini'" variant="outline" class="text-muted-foreground">{{ protocolLabel(r.protocol) }}</Badge>
             </div>
             <UsageStatus :record="r" inline class="shrink-0" />
           </div>

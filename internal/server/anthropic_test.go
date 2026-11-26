@@ -104,7 +104,7 @@ func TestMessagesCountTokensAndModels(t *testing.T) {
 		t.Fatalf("input_tokens = %d", counted.InputTokens)
 	}
 
-	// 带 anthropic-version 的 /v1/models 返回 Anthropic 格式，不带的仍是 Gemini 格式。
+	// 带 anthropic-version 的 /v1/models 返回 Anthropic 格式，带 x-goog-api-key 的是 Gemini 格式（其余是 OpenAI 格式，见 openai_test.go）。
 	var list struct {
 		Data []struct {
 			Type string `json:"type"`
@@ -119,7 +119,7 @@ func TestMessagesCountTokensAndModels(t *testing.T) {
 	var gemini struct {
 		Models []map[string]any `json:"models"`
 	}
-	decode(t, doReq(t, srv, http.MethodGet, "/v1/models", map[string]string{"x-api-key": h["x-api-key"]}, ""), &gemini)
+	decode(t, doReq(t, srv, http.MethodGet, "/v1/models", map[string]string{"x-goog-api-key": h["x-api-key"]}, ""), &gemini)
 	if len(gemini.Models) != 3 {
 		t.Fatalf("gemini models = %+v", gemini)
 	}

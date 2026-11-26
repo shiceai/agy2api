@@ -7,7 +7,7 @@
 
 <h1 align="center">AGY2API</h1>
 
-<p align="center"><strong>Turn a pool of Antigravity accounts into a schedulable, observable API gateway that speaks the Gemini and Anthropic APIs</strong></p>
+<p align="center"><strong>Turn a pool of Antigravity accounts into a schedulable, observable API gateway that speaks the Gemini, Anthropic and OpenAI APIs</strong></p>
 
 <p align="center">
   <a href="https://github.com/shiceai/agy2api/releases/latest"><img src="https://img.shields.io/github/v/release/shiceai/agy2api?style=flat-square" alt="Latest release"></a>
@@ -24,8 +24,8 @@
 <p align="center"><a href="README.md">简体中文</a> | English</p>
 
 AGY2API manages multiple Antigravity accounts, handling account selection, cooldown recovery, failover and low-quota
-avoidance. It exposes the native Gemini `v1beta` API and the Anthropic Messages API (Claude Code connects directly), and
-comes with an admin console.
+avoidance. It exposes the native Gemini `v1beta` API, the Anthropic Messages API and the OpenAI Chat Completions API
+(Claude Code, the OpenAI SDK and others connect directly), and comes with an admin console.
 
 > **Risk notice**: this project reaches Google Cloud Code's internal API through Antigravity accounts. This kind of use
 > may violate Google's Terms of Service; accounts may be restricted or banned, and paid subscriptions will not be
@@ -37,6 +37,8 @@ comes with an admin console.
   such as `google-genai`
 - **Anthropic API**: `/v1/messages` (streaming and non-streaming) and `count_tokens`, so Claude Code and other Anthropic clients
   can connect directly; official model names are mapped to models in the pool by model aliases
+- **OpenAI API**: `/v1/chat/completions` (streaming and non-streaming) and model listing, with tool calls, images,
+  thinking content and structured output; the OpenAI SDK, Cherry Studio and other clients can connect directly
 - **Pool scheduling**: cooldowns per account and model, automatic failover, avoids accounts with low quota, keeps a
   conversation on the same account, per-account concurrency limits
 - **Account management**: add accounts with Google sign-in or bulk import, automatic token refresh, automatic disabling
@@ -55,6 +57,7 @@ comes with an admin console.
 flowchart LR
     client["Gemini clients<br/>google-genai, etc."] -->|Gemini v1beta| auth
     claude["Claude Code and other<br/>Anthropic clients"] -->|Anthropic Messages| auth
+    openai["OpenAI SDK and other<br/>OpenAI clients"] -->|OpenAI Chat Completions| auth
     subgraph gw["AGY2API"]
         auth["API key auth and limits"] --> pool["Account pool scheduling<br/>cooldown · failover · low-quota avoidance"]
         pool -.-> usage["Usage and cost records"]
@@ -115,6 +118,31 @@ claude
   user message (only the system prompt is inspected, not the conversation), which gets the request through; the cost is
   that the client's system drops from system to user level and may slightly change how the model follows it. Turn it off
   under Settings -> Model aliases -> Claude Code compatibility.
+
+## Use with OpenAI-compatible clients
+
+Set the base URL to `http://127.0.0.1:8249/v1` and the API key to a key created in the admin console, and use models
+from the pool (`/v1/models` lists them):
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8249/v1", api_key="agy-xxxxx")
+resp = client.chat.completions.create(
+    model="gemini-3-flash",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+print(resp.choices[0].message.content)
+```
+
+- Supports streaming (including `stream_options.include_usage`), tool calls, images (data URLs; http URLs need remote
+  image inlining turned on under Settings -> Request handling) and `reasoning_effort`. When a client uses model names
+  that are not in the pool, map them with rules under Settings -> Model aliases.
+- Thinking content is returned in the `reasoning_content` field (not part of the OpenAI standard; Cherry Studio and other
+  clients display it). Turn it off under Settings -> Request handling.
+- `response_format` with `json_schema` works with Gemini models; `json_object` is not enforced by the upstream and relies
+  on the prompt; Claude models do not support structured output (the upstream returns 400).
+- Not supported: the Responses API, `n` greater than 1, and files uploaded through the Files API (`file_id`).
 
 ## Upgrade
 

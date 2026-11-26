@@ -19,6 +19,7 @@ import (
 	"github.com/shiceai/agy2api/internal/anthropic"
 	"github.com/shiceai/agy2api/internal/antigravity"
 	"github.com/shiceai/agy2api/internal/logx"
+	"github.com/shiceai/agy2api/internal/openai"
 	"github.com/shiceai/agy2api/internal/relay"
 	"github.com/shiceai/agy2api/internal/store"
 )
@@ -26,28 +27,34 @@ import (
 // inboundBodyLimit 是入站 Gemini 请求体上限（16 MiB）。
 const inboundBodyLimit = 16 << 20
 
-// listModels 返回启用账号目录的并集，Gemini models[] 形态；Key 限制了模型时只列允许的。带 anthropic-version 头
-// （Anthropic SDK）时返回 Anthropic 格式。
+// listModels 返回启用账号目录的并集；Key 限制了模型时只列允许的。格式按调用的接口（见 inboundProtocol）：
+// Gemini 的 models[]，Anthropic 或 OpenAI 的 data[]。
 func (s *Service) listModels(w http.ResponseWriter, r *http.Request) {
 	key := apiKeyFromContext(r.Context())
 	catalog := s.relay.Models()
 	models := make([]map[string]any, 0, len(catalog))
-	anthropicFormat := isAnthropicRequest(r)
+	protocol := inboundProtocol(r)
 	for _, m := range catalog {
 		if !keyAllowsModel(key, m.ID) {
 			continue
 		}
-		if anthropicFormat {
+		switch protocol {
+		case store.ProtocolAnthropic:
 			models = append(models, anthropic.ModelRecord(m.ID, m.DisplayName))
-		} else {
+		case store.ProtocolOpenAI:
+			models = append(models, openai.ModelRecord(m.ID))
+		default:
 			models = append(models, geminiModelRecord(m.ID, m))
 		}
 	}
-	if anthropicFormat {
+	switch protocol {
+	case store.ProtocolAnthropic:
 		writeJSON(w, http.StatusOK, anthropic.ModelList(models))
-		return
+	case store.ProtocolOpenAI:
+		writeJSON(w, http.StatusOK, openai.ModelList(models))
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"models": models})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"models": models})
 }
 
 // geminiModelRecord 构造 Gemini 模型记录。id 是对外的模型名，家族名请求时与 m.ID 不同。
@@ -73,11 +80,14 @@ func (s *Service) getModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if m, ok := s.relay.LookupModel(r.Context(), base); ok {
-		if isAnthropicRequest(r) {
+		switch inboundProtocol(r) {
+		case store.ProtocolAnthropic:
 			writeJSON(w, http.StatusOK, anthropic.ModelRecord(model, m.DisplayName))
-			return
+		case store.ProtocolOpenAI:
+			writeJSON(w, http.StatusOK, openai.ModelRecord(model))
+		default:
+			writeJSON(w, http.StatusOK, geminiModelRecord(model, m))
 		}
-		writeJSON(w, http.StatusOK, geminiModelRecord(model, m))
 		return
 	}
 	inboundError(w, r, http.StatusNotFound, "NOT_FOUND", "model not found: "+model)
@@ -131,13 +141,33 @@ func modelNotAllowed(w http.ResponseWriter, r *http.Request, model string) {
 	inboundError(w, r, http.StatusForbidden, "PERMISSION_DENIED", "model "+model+" is not allowed for this API key")
 }
 
-// inboundError 按入站接口的格式写错误：Anthropic 接口用 Messages 的错误格式，其余用 Gemini 的。
-func inboundError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
-	if isAnthropicRequest(r) {
-		writeJSON(w, status, anthropic.ErrorBody(status, msg))
-		return
+// inboundProtocol 判断请求走的入站接口（store.ProtocolGemini 等）：
+//   - /v1/chat/ 下的路径是 OpenAI；
+//   - /v1/messages 下的路径，或带 anthropic-version 头（Anthropic SDK 每个请求都带）是 Anthropic；
+//   - 不带 Gemini 客户端 Key 头的 GET /v1/models（见 isOpenAIModelsRequest）是 OpenAI；
+//   - 其余是 Gemini。
+func inboundProtocol(r *http.Request) string {
+	switch {
+	case strings.HasPrefix(r.URL.Path, "/v1/chat/"):
+		return store.ProtocolOpenAI
+	case strings.HasPrefix(r.URL.Path, "/v1/messages"), r.Header.Get("anthropic-version") != "":
+		return store.ProtocolAnthropic
+	case isOpenAIModelsRequest(r):
+		return store.ProtocolOpenAI
 	}
-	geminiError(w, status, code, msg)
+	return store.ProtocolGemini
+}
+
+// inboundError 按入站接口的格式写错误：Anthropic、OpenAI 接口用各自的错误格式，其余用 Gemini 的。
+func inboundError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
+	switch inboundProtocol(r) {
+	case store.ProtocolAnthropic:
+		writeJSON(w, status, anthropic.ErrorBody(status, msg))
+	case store.ProtocolOpenAI:
+		writeJSON(w, status, openai.ErrorBody(status, msg))
+	default:
+		geminiError(w, status, code, msg)
+	}
 }
 
 // quotaExceeded 检查 Key 本周期的 Token 是否已用完，用完时写回错误：每天、每月的周期返回 429 并带 Retry-After
@@ -164,13 +194,10 @@ func (s *Service) quotaExceeded(w http.ResponseWriter, r *http.Request, req rela
 }
 
 // inboundRequest 用入站请求的模型、调用方和 Key 构造执行层请求（请求体另填）。model 是别名解析后的模型名，
-// requested 是客户端原来的模型名（记进用量）。接口按请求判断（Gemini 或 Anthropic）。
+// requested 是客户端原来的模型名（记进用量）。接口按请求判断（见 inboundProtocol）。
 func inboundRequest(r *http.Request, model, requested string, stream bool) relay.Request {
 	req := relay.Request{Model: model, RequestModel: requested, Stream: stream, ClientIP: clientIP(r), UserAgent: r.UserAgent(),
-		Protocol: store.ProtocolGemini}
-	if isAnthropicRequest(r) {
-		req.Protocol = store.ProtocolAnthropic
-	}
+		Protocol: inboundProtocol(r)}
 	if key := apiKeyFromContext(r.Context()); key != nil {
 		req.APIKeyID = key.ID
 	}

@@ -56,9 +56,11 @@ interface Field {
   wide?: boolean // 占满一行
   mono?: boolean
 }
-// inboundAPI 描述客户端调用的接口：Anthropic 的 /v1/messages，或 Gemini 的方法名（假流式时上游实际用非流式）。
+// inboundAPI 描述客户端调用的接口：Anthropic 的 /v1/messages、OpenAI 的 /v1/chat/completions，
+// 或 Gemini 的方法名（假流式时上游实际用非流式）。
 function inboundAPI(r: UsageLog): string {
   if (r.protocol === 'anthropic') return r.stream ? 'Anthropic /v1/messages（流式）' : 'Anthropic /v1/messages'
+  if (r.protocol === 'openai') return r.stream ? 'OpenAI /v1/chat/completions（流式）' : 'OpenAI /v1/chat/completions'
   if (r.detail?.fake_stream) return 'Gemini streamGenerateContent（上游用非流式）'
   return r.stream ? 'Gemini streamGenerateContent' : 'Gemini generateContent'
 }

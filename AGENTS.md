@@ -30,8 +30,9 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 | `internal/relay` | 与入站协议无关的执行层：选号、会话粘性、取令牌、上游错误处理决定（冷却、换号、停用）、调度设置、类型化错误、用量记录、后台额度刷新、账号检测 |
 | `internal/pricing` | 模型价格：同步并解析官方价格页（Google AI Studio、Anthropic）、手动价、内存价格表、算用量费用、补算 |
 | `internal/pool` | 内存号池：启用账号快照、选号（含会话粘性的优先账号、额度避让、只用绑定代理的账号）、账号×模型冷却（落库，额度恢复后提前解除）、代理故障时暂停账号、每账号并发名额 |
-| `internal/server` | HTTP：路由、中间件（客户端 IP 只认可信反代、管理端 IP 白名单、管理口令防爆破）、API Key 鉴权缓存（含到期、允许的模型、Token 上限检查）、Gemini 入站、Anthropic 入站（`/v1/messages`）、模型别名、管理接口（含代理管理和测试、版本与在线升级）、用量记录清理、前端嵌入；账号变更后通知 relay 重新加载号池 |
+| `internal/server` | HTTP：路由、中间件（客户端 IP 只认可信反代、管理端 IP 白名单、管理口令防爆破）、API Key 鉴权缓存（含到期、允许的模型、Token 上限检查）、Gemini 入站、Anthropic 入站（`/v1/messages`）、OpenAI 入站（`/v1/chat/completions`）、按请求区分入站接口（`/v1/models` 三种格式）、模型别名、管理接口（含代理管理和测试、版本与在线升级）、用量记录清理、前端嵌入；账号变更后通知 relay 重新加载号池 |
 | `internal/anthropic` | Anthropic Messages 入站的格式转换：请求转成 Gemini 请求体（system、消息、工具、思考参数，去掉 Claude Code 的计费块），非流式响应和流式事件转回 Messages 格式，错误格式，Gemini 思考签名经空思考块往返 |
+| `internal/openai` | OpenAI Chat Completions 入站的格式转换：请求转成 Gemini 请求体（system/developer、消息、工具、图片音频文件、`reasoning_effort`、`response_format`），非流式响应和流式块转回 OpenAI 格式（思考放 `reasoning_content`），错误格式和模型记录 |
 | `internal/upgrade` | 在线升级：查 GitHub Releases 的新版本，下载、校验、备份数据库后把新程序放进数据目录；启动时在自带的程序和数据目录里的新程序中选较新的运行，连续起不来时停用；原地重启（exec） |
 | `internal/mockupstream` | 开发与测试用的模拟上游 |
 | `ddl` | SQLite 迁移脚本，规则见 `ddl/README.md` |

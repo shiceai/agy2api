@@ -19,7 +19,7 @@ func (s *Service) Router() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	})
 
-	// 入站 Gemini 和 Anthropic：API Key 鉴权。/v1 是 /v1beta 的别名。模型名里可以带 /（如 假流式/gemini-2.5-flash），
+	// 入站 Gemini、Anthropic 和 OpenAI：API Key 鉴权。/v1 是 /v1beta 的别名。模型名里可以带 /（如 假流式/gemini-2.5-flash），
 	// 所以模型部分用通配，见 modelPath。
 	r.Group(func(r chi.Router) {
 		r.Use(s.apiKeyAuth)
@@ -28,9 +28,11 @@ func (s *Service) Router() http.Handler {
 			r.Get(prefix+"/models/*", s.getModel)
 			r.Post(prefix+"/models/*", s.handleModelAction)
 		}
-		// 入站 Anthropic Messages（Claude Code 等），见 anthropic.go；模型列表和 Gemini 共用 /v1/models，按请求头区分格式。
+		// 入站 Anthropic Messages（Claude Code 等），见 anthropic.go；入站 OpenAI Chat Completions，见 openai.go。
+		// 模型列表三种接口共用 /v1/models，按请求头区分格式（见 inboundProtocol）。
 		r.Post("/v1/messages", s.handleMessages)
 		r.Post("/v1/messages/count_tokens", s.handleMessagesCountTokens)
+		r.Post("/v1/chat/completions", s.handleChatCompletions)
 	})
 
 	// 管理端：先按 IP 白名单（AGY2API_ADMIN_ALLOW），再校验静态口令。

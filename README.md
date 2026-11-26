@@ -7,7 +7,7 @@
 
 <h1 align="center">AGY2API</h1>
 
-<p align="center"><strong>把 Antigravity 账号池变成可调度、可观测的 Gemini、Anthropic 兼容 API 网关</strong></p>
+<p align="center"><strong>把 Antigravity 账号池变成可调度、可观测的 Gemini、Anthropic、OpenAI 兼容 API 网关</strong></p>
 
 <p align="center">
   <a href="https://github.com/shiceai/agy2api/releases/latest"><img src="https://img.shields.io/github/v/release/shiceai/agy2api?style=flat-square" alt="Latest release"></a>
@@ -23,7 +23,7 @@
 
 <p align="center">简体中文 | <a href="README_EN.md">English</a></p>
 
-管理多个 Antigravity 账号，负责选号、冷却恢复、失败换号和额度避让，对外提供 Gemini 原生 `v1beta` 和 Anthropic Messages 接口（Claude Code 可直接接入），自带管理端。
+管理多个 Antigravity 账号，负责选号、冷却恢复、失败换号和额度避让，对外提供 Gemini 原生 `v1beta`、Anthropic Messages 和 OpenAI Chat Completions 接口（Claude Code、OpenAI SDK 等可直接接入），自带管理端。
 
 > **风险提示**：本项目经 Antigravity 账号访问 Google Cloud Code 的内部接口，这种用法可能违反 Google 的服务条款，
 > 账号可能被限制或封禁，已付费的订阅不会因此退款。仅供学习和技术研究，风险自负。
@@ -32,6 +32,7 @@
 
 - **Gemini 原生接口**：`generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，可直接用 `google-genai` 等 SDK
 - **Anthropic 接口**：`/v1/messages`（流式和非流式）和 `count_tokens`，Claude Code 等客户端可以直接接入；官方模型名按模型别名映射到号池里的模型
+- **OpenAI 接口**：`/v1/chat/completions`（流式和非流式）和模型列表，支持工具调用、图片、思考内容和结构化输出，OpenAI SDK、Cherry Studio 等客户端可以直接接入
 - **号池调度**：按账号和模型冷却，失败自动换号，额度低的账号避让，同一对话优先用同一账号，每个账号有并发上限
 - **账号管理**：Google 登录添加或批量导入，令牌自动刷新，失效自动停用，可单独检测
 - **出口代理**：每个账号绑定固定的出口代理（http、https、socks5）
@@ -46,6 +47,7 @@
 flowchart LR
     client["Gemini 客户端<br/>google-genai 等"] -->|Gemini v1beta| auth
     claude["Claude Code 等<br/>Anthropic 客户端"] -->|Anthropic Messages| auth
+    openai["OpenAI SDK 等<br/>OpenAI 客户端"] -->|OpenAI Chat Completions| auth
     subgraph gw["AGY2API"]
         auth["API Key 鉴权与限额"] --> pool["号池调度<br/>冷却 · 换号 · 额度避让"]
         pool -.-> usage["用量与费用记录"]
@@ -100,6 +102,27 @@ claude
 - **Claude Code 兼容（默认开）**：上游会识别写在系统提示里的 Claude Code 等客户端特征，返回伪装成额度耗尽的 429。
   网关默认把客户端的 system 降为开头的一条用户消息（上游只检查系统提示、不看对话内容）即可放行，代价是客户端 system
   从 system 级降到 user 级、可能略改模型遵循方式。可在"设置 → 模型别名 → Claude Code 兼容"里关掉。
+
+## 在 OpenAI 兼容客户端中使用
+
+Base URL 填 `http://127.0.0.1:8249/v1`，API Key 填管理端新建的 Key，模型用号池里的模型（`/v1/models` 可以列出）：
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8249/v1", api_key="agy-xxxxx")
+resp = client.chat.completions.create(
+    model="gemini-3-flash",
+    messages=[{"role": "user", "content": "你好"}],
+)
+print(resp.choices[0].message.content)
+```
+
+- 支持流式（含 `stream_options.include_usage`）、工具调用、图片（data URL；http 地址要在"设置 → 请求处理"里打开远程图片内联）、
+  `reasoning_effort`。客户端用的模型名不在号池里时，可以在"设置 → 模型别名"里加规则映射。
+- 思考内容放在 `reasoning_content` 字段（不是 OpenAI 的标准字段，Cherry Studio 等客户端会显示），可以在"设置 → 请求处理"里关掉。
+- `response_format` 的 `json_schema` 对 Gemini 模型生效；`json_object` 上游不强制，靠提示词；Claude 模型不支持结构化输出（上游报 400）。
+- 不支持：Responses 接口、`n` 大于 1、用 Files API 上传的文件（`file_id`）。
 
 ## 升级
 

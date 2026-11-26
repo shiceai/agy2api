@@ -2,6 +2,19 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+新增 OpenAI Chat Completions 接口，OpenAI SDK、Cherry Studio 等客户端可以直接接入。
+
+### 功能
+
+- **OpenAI Chat Completions 接口。** 提供 `/v1/chat/completions`（流式和非流式），`/v1/models` 返回 OpenAI 格式的模型列表，客户端把 Base URL 设成 `http://<地址>/v1` 就能用。工具调用、图片、音频和文件、`reasoning_effort` 都会转换，思考内容放在 `reasoning_content` 字段；选号、换号、模型别名、用量记录等和其它接口一样，用量页的"接口"筛选多了 OpenAI。
+- **结构化输出。** OpenAI 接口的 `response_format`（`json_schema`）对 Gemini 模型生效，`$ref` 等上游不认的写法会自动整理。Gemini 接口发来的 `responseJsonSchema` 上游原本不生效，现在也会转成上游认的写法。
+
+### 升级说明
+
+- **`/v1/models` 的默认格式改成 OpenAI。** 带 `x-goog-api-key` 或 `?key=` 的请求（Gemini SDK 都带）仍返回 Gemini 格式，带 `anthropic-version` 的仍返回 Anthropic 格式，`/v1beta/models` 不变。只有用 `Authorization: Bearer` 或 `x-api-key` 调 `/v1/models` 又要 Gemini 格式的客户端受影响，改用 `/v1beta/models` 即可。
+
 ## v1.1.0 - 2026-11-25
 
 新增 Anthropic Messages 接口，Claude Code 等 Anthropic 客户端可以直接接入。
