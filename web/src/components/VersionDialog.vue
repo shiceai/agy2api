@@ -63,7 +63,8 @@ async function check(manual = true) {
   }
 }
 
-// poll 轮询升级进度，到重启阶段转去等新版本。
+// poll 轮询升级进度，到重启阶段转去等新版本。服务原地重启很快（没有进行中的请求时不到 1 秒），两次轮询之间可能
+// 已经重启完：这时读到的是新进程，进度已清空，也按重启处理，等版本对上再刷新页面。
 function poll() {
   clearTimeout(timer)
   timer = setTimeout(async () => {
@@ -73,8 +74,8 @@ function poll() {
       apply(v)
       const p = v.progress
       if (working.includes(p.state)) poll()
-      else if (p.state === 'restarting') waitFor(target, `已升级到 ${target}`)
       else if (p.state === 'failed') toastError(`升级到 ${target} 失败`, new Error(p.error))
+      else waitFor(target, `已升级到 ${target}`) // 重启中，或已经重启完（进度清空）
     } catch {
       waitFor(target, `已升级到 ${target}`) // 连不上：两次轮询之间已经开始重启
     }
