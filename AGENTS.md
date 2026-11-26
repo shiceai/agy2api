@@ -53,7 +53,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 - 前端构建产物不入库：`internal/server/webdist` 只提交 `.gitkeep`，Vite 构建后会自动补回。
 - 完整构建：`bash scripts/build.sh`；交叉编译传 `os/arch`，如 `bash scripts/build.sh linux/amd64`。版本号默认取 `git describe --tags --always --dirty`，注入 `main.version`。
 - 发版按语义化版本打附注标签，如 `git tag -a v0.2.0`。1.0 之前用 `v0.x.y`：新功能升 MINOR，只修 bug 升 PATCH；预发布用 `v0.2.0-rc.1`。
-- 打标签前先在 `CHANGELOG.md` 加 `## vX.Y.Z - YYYY-MM-DD` 一节：简体中文，写给使用者看，分"功能""修复""升级说明"等小节，每条先用一句加粗的话说清变化，再补一两句细节；`bash scripts/release-notes.sh vX.Y.Z` 可预览发布说明。推送 `v*` 标签后 `.github/workflows/release.yml` 依次做完整检查、推送 ghcr.io 镜像（多架构）、构建 5 个平台的二进制包，并用这一节创建 Release；没有这一节时发布中止。
+- 打标签前先在 `CHANGELOG.md` 加 `## vX.Y.Z - YYYY-MM-DD` 一节：简体中文，写给使用者看，分"功能""改动""修复""升级说明"等小节。每条一句加粗的话说清使用者能感知的变化，必要时补一句用法或影响；不写实现原理、内部机制和排查过程，语气简洁专业，不用口语；`bash scripts/release-notes.sh vX.Y.Z` 可预览发布说明。推送 `v*` 标签后 `.github/workflows/release.yml` 依次做完整检查、推送 ghcr.io 镜像（多架构）、构建 5 个平台的二进制包，并用这一节创建 Release；没有这一节时发布中止。
 - 演示站：`cd web && pnpm build:demo`（`--mode demo`，输出 `web/dist-demo`）构建，管理接口由 `web/src/demo/server.ts` 在浏览器里模拟，数据只在内存里；正式构建不含模拟后端。**新增或修改管理接口时同步改模拟后端**，否则演示站对应页面会报"演示站没有模拟这个接口"；模型目录、价格等快照用 `node scripts/demo-catalog.mjs` 从运行中的服务更新。推送正式版标签时 `.github/workflows/demo.yml` 部署到 Cloudflare Pages（要配 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`）。
 - 工作流里的第三方 Action 按提交 SHA 固定（注释写版本），升级时连 SHA 一起换；每个任务只给需要的权限，不引入 `GITHUB_TOKEN` 以外的密钥。
 
