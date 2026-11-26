@@ -58,16 +58,21 @@ const longCooldown = 24 * time.Hour
 type Account struct {
 	*store.Account
 	models map[string]antigravity.ModelInfo
+	// known 是有模型目录（哪怕目录里只有占位条目）；没有目录的账号视为未知，什么模型都放行。
+	known bool
 }
 
 // NewAccount 用库里的账号构造号池账号（解析模型目录）。号池只放启用的账号；检测停用的账号时直接用它构造。
+// 上游的占位条目（见 antigravity.IsUnavailablePlaceholder）不算这个账号的模型。
 func NewAccount(a *store.Account) *Account {
 	catalog := antigravity.UnmarshalModels(a.ModelsJSON)
 	models := make(map[string]antigravity.ModelInfo, len(catalog))
 	for _, m := range catalog {
-		models[m.ID] = m
+		if !antigravity.IsUnavailablePlaceholder(m.ID) {
+			models[m.ID] = m
+		}
 	}
-	return &Account{Account: a, models: models}
+	return &Account{Account: a, models: models, known: len(catalog) > 0}
 }
 
 // Model 返回账号目录里某模型的信息。
@@ -79,7 +84,7 @@ func (a *Account) Model(id string) (antigravity.ModelInfo, bool) {
 // resolve 在账号目录里解析请求的模型（见 antigravity.ResolveModel）。
 // 目录为空时视为未知，原样放行，由上游兜底。
 func (a *Account) resolve(requested, tier string) (string, bool) {
-	if len(a.models) == 0 {
+	if !a.known {
 		return requested, true
 	}
 	return antigravity.ResolveModel(a.hasModel, requested, tier)
@@ -88,7 +93,7 @@ func (a *Account) resolve(requested, tier string) (string, bool) {
 // MissingEnum 判断目录里有该模型但缺枚举名：一般是升级前存下的旧目录，需要刷新。
 // 目录为空（未知）时返回 false，那种账号刷新了也拿不到。
 func (a *Account) MissingEnum(model string) bool {
-	if len(a.models) == 0 {
+	if !a.known {
 		return false
 	}
 	m, ok := a.models[model]
@@ -471,7 +476,7 @@ func (p *Pool) InFlightAll() map[int64]int {
 // Lookup 在启用账号的目录里解析请求的模型，返回第一个解析成功的模型信息（ID 是解析后的）。
 func (p *Pool) Lookup(requested, tier string) (antigravity.ModelInfo, bool) {
 	for _, a := range p.snapshot() {
-		if len(a.models) == 0 {
+		if !a.known {
 			continue
 		}
 		if id, ok := antigravity.ResolveModel(a.hasModel, requested, tier); ok {

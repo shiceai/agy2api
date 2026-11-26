@@ -182,6 +182,18 @@ func PublicModels(catalog []ModelInfo) []ListedModel {
 	return out
 }
 
+// IsUnavailablePlaceholder 报告模型 ID 是不是上游的占位条目：某个模型对这个账号不开放时，目录里不给它的各档，
+// 只放一个 <家族>-disabled（如 gemini-4-carbon-disabled，显示名仍是 Gemini 4 Carbon，2026-11-23 的目录里见过）。
+// 它不是能调用的模型：不参与解析、选号和对外列表，管理端显示成"不能用"。
+func IsUnavailablePlaceholder(id string) bool {
+	for _, seg := range strings.FieldsFunc(strings.ToLower(id), func(r rune) bool { return r == '-' || r == '_' }) {
+		if seg == "disabled" {
+			return true
+		}
+	}
+	return false
+}
+
 // MarshalModels 把模型列表序列化为存库用的 JSON 文本。
 func MarshalModels(models []ModelInfo) string {
 	if len(models) == 0 {

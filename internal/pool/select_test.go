@@ -408,3 +408,31 @@ func TestPreferAccount(t *testing.T) {
 		t.Fatalf("paused: %d %q", l.Account.ID, l.Affinity)
 	}
 }
+
+// 上游的占位条目（<家族>-disabled）不是这个账号的模型：只有占位条目的账号选不到这个家族，也不当成"目录未知"放行；
+// 占位条目自己既解析不到，也不进模型汇总。
+func TestUnavailablePlaceholder(t *testing.T) {
+	f := newFixture(t)
+	f.addAccount("a@example.com", "p-a", "enabled", "gemini-4-carbon-disabled", "gemini-3-flash")
+	b := f.addAccount("b@example.com", "p-b", "enabled", "gemini-4-carbon-low", "gemini-4-carbon-high")
+	only := f.addAccount("c@example.com", "p-c", "enabled", "gemini-4-carbon-disabled")
+	f.reload()
+
+	for range 4 {
+		id, model, err := f.pick("gemini-4-carbon", "high")
+		if err != nil || id != b || model != "gemini-4-carbon-high" {
+			t.Fatalf("Carbon 只应选到 b：id=%d model=%s err=%v", id, model, err)
+		}
+	}
+	if id, _, err := f.pick("gemini-3-flash", "medium"); err != nil || id == only {
+		t.Fatalf("只有占位条目的账号不应当成目录未知放行：id=%d err=%v", id, err)
+	}
+	if _, ok := f.pool.Lookup("gemini-4-carbon-disabled", "medium"); ok {
+		t.Fatal("占位条目不应解析成模型")
+	}
+	for _, m := range f.pool.Models() {
+		if m.ID == "gemini-4-carbon-disabled" {
+			t.Fatal("占位条目不应进模型汇总")
+		}
+	}
+}
