@@ -346,6 +346,10 @@ type Request struct {
 	UserAgent string
 	// FakeStream 表示客户端请求的是假流式（Stream 为 false，结果由入站协议按流式返回），只记进用量详情。
 	FakeStream bool
+	// Session 是客户端给的会话标识（会话头等），会话粘性按它认对话；为空时按首条用户消息认。
+	// SessionSource 是它的来源（store.SessionClaudeCode 等），记进用量详情。
+	Session       string
+	SessionSource string
 }
 
 // requestModel 返回记进用量的请求模型：客户端原始的模型名。
@@ -407,10 +411,10 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 	tried := map[int64]bool{}
 	tr := &trace{start: start, fakeStream: req.FakeStream}
 	// 会话粘性：同一对话优先用上次成功服务它的账号。
-	stickyKey := ""
+	stickyKey, stickySource := "", ""
 	var prefer int64
 	if p.Sticky {
-		if stickyKey = affinityKey(req); stickyKey != "" {
+		if stickyKey, stickySource = affinityKey(req); stickyKey != "" {
 			prefer = r.affinity.get(stickyKey, start, p.StickyTTL)
 		}
 	}
@@ -461,7 +465,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 		}
 		tried[lease.Account.ID] = true
 		if stickyKey != "" {
-			tr.affinity = r.affinityDetail(prefer, lease)
+			tr.affinity = r.affinityDetail(prefer, lease, stickySource)
 		}
 		log := slog.With("account_id", lease.Account.ID, "model", req.Model, "resolved_model", lease.Model, "stream", req.Stream, "try", try)
 		log.DebugContext(ctx, "选号", "affinity", lease.Affinity)

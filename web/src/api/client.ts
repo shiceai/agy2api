@@ -392,12 +392,14 @@ export interface UsageDetail {
   affinity?: UsageAffinity
 }
 // UsageAffinity 是会话粘性的结果：hit 沿用上次的账号，switched 换了账号（reason 是原账号这次不能接的原因，
-// from_account 是原账号），new 新对话。
+// from_account 是原账号），new 新对话。source 是按什么认的对话（Claude Code 会话头、X-Session-Id、prompt_cache_key、
+// 首条消息），老记录没有。
 export interface UsageAffinity {
   result: 'hit' | 'switched' | 'new'
   reason?: string
   from_account_id?: number
   from_account?: string
+  source?: 'claude_code' | 'claude_code_agent' | 'header' | 'prompt_cache_key' | 'first_message'
 }
 // UsageCost 是一条用量的费用和算法：nanos 是费用（十亿分之一美元）；input、cache_read、output 是用的单价
 // （百万分之一美元每百万 token），model、source 是价格对应的型号和来源；tier、promo 表示用了长提示分档价、限时价；

@@ -33,7 +33,8 @@
 - **Gemini 原生接口**：`generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，可直接用 `google-genai` 等 SDK
 - **Anthropic 接口**：`/v1/messages`（流式和非流式）和 `count_tokens`，Claude Code 等客户端可以直接接入；官方模型名按模型别名映射到号池里的模型
 - **OpenAI 接口**：`/v1/chat/completions`（流式和非流式）和模型列表，支持工具调用、图片、思考内容和结构化输出，OpenAI SDK、Cherry Studio 等客户端可以直接接入
-- **号池调度**：按账号和模型冷却，失败自动换号，额度低的账号避让，同一对话优先用同一账号，每个账号有并发上限
+- **号池调度**：按账号和模型冷却，失败自动换号，额度低的账号避让，同一对话优先用同一账号（认 Claude Code 的会话头和
+  `X-Session-Id`），每个账号有并发上限
 - **账号管理**：Google 登录添加或批量导入，令牌自动刷新，失效自动停用，可单独检测
 - **出口代理**：每个账号绑定固定的出口代理（http、https、socks5）
 - **API Key**：到期时间、Token 上限、允许的模型

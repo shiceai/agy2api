@@ -200,13 +200,27 @@ server {
   Anthropic 入站。开头的 `system`、`developer` 消息进系统提示，对话中间的转成用户消息里的 `<system-reminder>`。
 - 转换：工具调用和 `tool_choice`；图片（data URL，http 地址要打开远程图片内联）、音频（`input_audio`）、文件（`file_data`）；
   `max_completion_tokens`（或 `max_tokens`）、`temperature`、`top_p`、`stop`；`reasoning_effort`（none、minimal 按 low）。
-  其它参数（如 `presence_penalty`、`seed`、`logprobs`）忽略。
+  `prompt_cache_key` 用来认对话（见"会话粘性"）。其它参数（如 `presence_penalty`、`seed`、`logprobs`）忽略。
 - 思考内容在 `reasoning_content` 字段返回（非标准字段，DeepSeek 带起来的写法）。OpenAI 格式没有放思考签名的位置，下一轮
   历史里的工具调用由网关补占位签名，多轮工具调用照常可用。用量按 OpenAI 口径：`prompt_tokens` 含命中缓存，
   `completion_tokens` 含思考。
 - 结构化输出：`response_format` 的 `json_schema` 转成上游认的 `responseSchema`（内联 `$ref`、去掉不支持的关键字），
   对 Gemini 模型生效；Claude 模型上游报 400。`json_object` 上游不强制，靠提示词。
 - 不支持：Responses 接口、`n` 大于 1、用 Files API 上传的文件（`file_id`）。
+
+## 会话粘性
+
+同一对话优先用上次的账号：上游的缓存按账号算，换号就命中不了、多花额度。在"设置 → 账号调度 → 会话粘性"里开关（默认开）
+和设置闲置多久后失效。三种接口都生效，对话按"API Key + 模型 + 会话标识"认，会话标识按下面的顺序取：
+
+1. `X-Claude-Code-Session-Id` 请求头：Claude Code 每个请求都带。子代理还带 `X-Claude-Code-Agent-Id`，单独认对话，
+   不会影响主会话用的账号。
+2. `X-Session-Id` 请求头：通用写法。多人共用一个 Key，或前面还有一层网关时，按人或按会话设置这个头，
+   首条消息相同的不同对话就不会被认成一个。
+3. OpenAI 接口请求体里的 `prompt_cache_key`。
+4. 都没有时用第一条用户消息（客户端的 system 被转成用户消息时跳过那一条）。
+
+用量详情的"会话"一行显示沿用账号、换了账号还是新对话，以及按什么认的对话。
 
 ## 环境变量
 

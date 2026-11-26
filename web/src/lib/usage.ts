@@ -98,10 +98,21 @@ const affinityReasons: Record<string, string> = {
   low_quota: '原账号这个模型的额度低于避让阈值',
 }
 
-// affinityText 是用量详情里"会话"一行：沿用上次的账号、换了账号（原因）、新对话。
+// 会话粘性按什么认的对话（老记录没有，当时都按首条消息）。
+const affinitySources: Record<string, string> = {
+  claude_code: '按 Claude Code 会话',
+  claude_code_agent: '按 Claude Code 子代理',
+  header: '按 X-Session-Id',
+  prompt_cache_key: '按 prompt_cache_key',
+  first_message: '按首条消息',
+}
+
+// affinityText 是用量详情里"会话"一行：沿用上次的账号、换了账号（原因）、新对话；灰色补充原账号和认对话的依据。
 export function affinityText(a: UsageAffinity): { value: string; muted?: string } {
-  if (a.result === 'hit') return { value: '沿用上次的账号' }
-  if (a.result === 'new') return { value: '新对话' }
+  const source = a.source ? affinitySources[a.source] : undefined
+  if (a.result === 'hit') return { value: '沿用上次的账号', muted: source }
+  if (a.result === 'new') return { value: '新对话', muted: source }
   const from = a.from_account || (a.from_account_id ? `#${a.from_account_id}` : '')
-  return { value: `换了账号：${affinityReasons[a.reason ?? ''] ?? '原账号不能接'}`, muted: from ? `原 ${from}` : undefined }
+  const muted = [from ? `原 ${from}` : '', source ?? ''].filter(Boolean).join(' · ')
+  return { value: `换了账号：${affinityReasons[a.reason ?? ''] ?? '原账号不能接'}`, muted: muted || undefined }
 }

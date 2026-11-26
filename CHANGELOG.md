@@ -2,6 +2,16 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+### 功能
+
+- **会话粘性认会话头。** 同一对话优先用上次账号时，先看客户端给的会话标识：Claude Code 的 `X-Claude-Code-Session-Id`（子代理单独认，不影响主会话的账号）、通用的 `X-Session-Id` 请求头、OpenAI 接口的 `prompt_cache_key`，都没有时才按首条用户消息。多人共用一个 Key 时，给每人设上 `X-Session-Id`，首条消息相同的对话也不会混在一起。用量详情的"会话"一行会写明按什么认的对话。
+
+### 修复
+
+- **Claude Code 的不同会话被认成同一个对话。** "Claude Code 兼容"把客户端的系统提示转成第一条用户消息后，会话粘性和发给上游的会话 ID 都拿它认对话；同一项目里的几个 Claude Code 会话系统提示几乎一样，于是粘到同一个账号、共用一个会话 ID。现在认对话时跳过这条转出来的消息，"系统提示词伪装"的"客户端转用户"模式也一样。
+
 ## v1.2.0 - 2026-11-25
 
 新增 OpenAI Chat Completions 接口，OpenAI SDK、Cherry Studio 等客户端可以直接接入。

@@ -40,7 +40,8 @@ avoidance. It exposes the native Gemini `v1beta` API, the Anthropic Messages API
 - **OpenAI API**: `/v1/chat/completions` (streaming and non-streaming) and model listing, with tool calls, images,
   thinking content and structured output; the OpenAI SDK, Cherry Studio and other clients can connect directly
 - **Pool scheduling**: cooldowns per account and model, automatic failover, avoids accounts with low quota, keeps a
-  conversation on the same account, per-account concurrency limits
+  conversation on the same account (recognizes Claude Code's session header and `X-Session-Id`), per-account
+  concurrency limits
 - **Account management**: add accounts with Google sign-in or bulk import, automatic token refresh, automatic disabling
   of revoked accounts, per-account testing
 - **Egress proxies**: bind each account to a fixed egress proxy (http, https, socks5)

@@ -23,6 +23,8 @@ type Request struct {
 	Stream bool
 	// IncludeUsage 是 stream_options.include_usage：流式最后多发一块用量。
 	IncludeUsage bool
+	// PromptCacheKey 是 prompt_cache_key（OpenAI 的缓存路由字段），会话粘性用它认对话。
+	PromptCacheKey string
 	// Body 是 Gemini 请求体（contents、systemInstruction、tools、toolConfig、generationConfig）。
 	Body map[string]any
 	// Dropped 是去掉的不支持内容，记日志用。
@@ -52,6 +54,9 @@ func ParseRequest(raw []byte) (*Request, error) {
 	req := &Request{Model: model, Stream: stream}
 	if opts, ok := in["stream_options"].(map[string]any); ok && stream {
 		req.IncludeUsage, _ = opts["include_usage"].(bool)
+	}
+	if key, ok := in["prompt_cache_key"].(string); ok {
+		req.PromptCacheKey = strings.TrimSpace(key)
 	}
 	if n, ok := number(in["n"]); ok && n != 1 {
 		return nil, invalid("n: only 1 is supported")

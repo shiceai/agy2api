@@ -10,6 +10,7 @@ import (
 
 	"github.com/shiceai/agy2api/internal/openai"
 	"github.com/shiceai/agy2api/internal/relay"
+	"github.com/shiceai/agy2api/internal/store"
 )
 
 // OpenAI Chat Completions 入站：/v1/chat/completions，以及不带 Gemini、Anthropic 区分头的 GET /v1/models。
@@ -57,6 +58,10 @@ func (s *Service) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	}
 	model := s.resolveModel(in.Model)
 	req := inboundRequest(r, model, in.Model, in.Stream)
+	if req.Session == "" && in.PromptCacheKey != "" {
+		// OpenAI 官方的缓存路由字段：同一个 key 的请求共享缓存，正好用来认对话。会话头优先。
+		req.Session, req.SessionSource = in.PromptCacheKey, store.SessionPromptCacheKey
+	}
 	if !keyAllowsModel(apiKeyFromContext(r.Context()), model) {
 		s.relay.RecordRejected(r.Context(), req, start, http.StatusForbidden,
 			relay.KindModelNotAllowed, "model "+model+" is not allowed for this API key")

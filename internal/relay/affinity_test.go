@@ -9,6 +9,7 @@ import (
 
 	"github.com/shiceai/agy2api/internal/logx"
 	"github.com/shiceai/agy2api/internal/pool"
+	"github.com/shiceai/agy2api/internal/store"
 )
 
 func withRequestID(id string) context.Context {
@@ -98,15 +99,16 @@ func TestStickyUsageDetail(t *testing.T) {
 	gen("r-new", 1)
 	gen("r-hit", 2)
 	owner := ""
+	key, _ := affinityKey(Request{Model: "m1", Body: turn("detail", 1)})
 	for rt, id := range e.ids {
-		if e.relay.affinity.get(affinityKey(Request{Model: "m1", Body: turn("detail", 1)}), time.Now(), time.Hour) == id {
+		if e.relay.affinity.get(key, time.Now(), time.Hour) == id {
 			owner = rt
 		}
 	}
 	e.relay.pool.Cooldown(withRequestID("x"), e.ids[owner], time.Now().Add(time.Minute), "rate_limit", "m1")
 	gen("r-switch", 3)
 
-	if _, d := e.usageByRequest("r-new"); d.Affinity == nil || d.Affinity.Result != AffinityNew {
+	if _, d := e.usageByRequest("r-new"); d.Affinity == nil || d.Affinity.Result != AffinityNew || d.Affinity.Source != store.SessionFirstMessage {
 		t.Fatalf("new: %+v", d.Affinity)
 	}
 	if _, d := e.usageByRequest("r-hit"); d.Affinity == nil || d.Affinity.Result != AffinityHit {
@@ -137,7 +139,40 @@ func TestAffinityStore(t *testing.T) {
 	if len(s.entries) > 10 || s.get("k0", now.Add(time.Minute), time.Hour) != 0 || s.get("new", now.Add(time.Minute), time.Hour) != 99 {
 		t.Fatalf("eviction: %d entries", len(s.entries))
 	}
-	if affinityKey(Request{Model: "m", Body: map[string]any{}}) != "" {
+	if key, _ := affinityKey(Request{Model: "m", Body: map[string]any{}}); key != "" {
 		t.Fatal("request without user message should not be sticky")
+	}
+}
+
+// 客户端给了会话标识时按它认对话：首条消息相同、标识不同的是两个对话（分到不同账号），标识相同、首条消息不同的是
+// 同一个对话（沿用账号）；用量详情记下依据。没有用户消息但有标识时也粘。
+func TestStickyExplicitSession(t *testing.T) {
+	e := stickyEnv(t, "a", "b")
+	e.setCatalog("a", "m1")
+	e.setCatalog("b", "m1")
+	gen := func(id, session, first string) {
+		t.Helper()
+		resp, err := e.relay.Generate(withRequestID(id), Request{Model: "m1", Body: turn(first, 1),
+			Session: session, SessionSource: store.SessionHeader})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Close()
+	}
+	gen("s1", "user-1", "hi")
+	gen("s2", "user-2", "hi")
+	gen("s3", "user-1", "a different first message")
+	for id, want := range map[string]string{"s1": AffinityNew, "s2": AffinityNew, "s3": AffinityHit} {
+		if _, d := e.usageByRequest(id); d.Affinity == nil || d.Affinity.Result != want || d.Affinity.Source != store.SessionHeader {
+			t.Fatalf("%s: affinity = %+v, want %s", id, d.Affinity, want)
+		}
+	}
+	k1, _ := affinityKey(Request{Model: "m1", Session: "user-1", SessionSource: store.SessionHeader, Body: turn("hi", 1)})
+	k2, _ := affinityKey(Request{Model: "m1", Session: "user-2", SessionSource: store.SessionHeader, Body: turn("hi", 1)})
+	if e.relay.affinity.get(k1, time.Now(), time.Hour) == e.relay.affinity.get(k2, time.Now(), time.Hour) {
+		t.Fatal("two conversations on two accounts should be remembered separately")
+	}
+	if key, source := affinityKey(Request{Model: "m1", Session: "x", SessionSource: store.SessionHeader, Body: map[string]any{}}); key == "" || source != store.SessionHeader {
+		t.Fatal("a session without user message should still be sticky")
 	}
 }

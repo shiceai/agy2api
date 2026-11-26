@@ -194,10 +194,11 @@ func (s *Service) quotaExceeded(w http.ResponseWriter, r *http.Request, req rela
 }
 
 // inboundRequest 用入站请求的模型、调用方和 Key 构造执行层请求（请求体另填）。model 是别名解析后的模型名，
-// requested 是客户端原来的模型名（记进用量）。接口按请求判断（见 inboundProtocol）。
+// requested 是客户端原来的模型名（记进用量）。接口按请求判断（见 inboundProtocol），会话标识取自请求头（见 clientSession）。
 func inboundRequest(r *http.Request, model, requested string, stream bool) relay.Request {
 	req := relay.Request{Model: model, RequestModel: requested, Stream: stream, ClientIP: clientIP(r), UserAgent: r.UserAgent(),
 		Protocol: inboundProtocol(r)}
+	req.Session, req.SessionSource = clientSession(r)
 	if key := apiKeyFromContext(r.Context()); key != nil {
 		req.APIKeyID = key.ID
 	}

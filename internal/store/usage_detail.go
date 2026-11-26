@@ -28,12 +28,23 @@ type UsageDetail struct {
 
 // UsageAffinity 是会话粘性的结果：Result 为 hit（沿用上次的账号）、switched（换了账号）、new（新对话）。
 // 换号时 Reason 是上次的账号这次不能接的原因（见 pool.Affinity*），FromAccountID、FromAccount 是上次的账号。
+// Source 是按什么认的对话（Session*），老记录为空（当时都按首条用户消息）。
 type UsageAffinity struct {
 	Result        string `json:"result"`
 	Reason        string `json:"reason,omitempty"`
 	FromAccountID int64  `json:"from_account_id,omitempty"`
 	FromAccount   string `json:"from_account,omitempty"`
+	Source        string `json:"source,omitempty"`
 }
+
+// 会话粘性认对话的依据（UsageAffinity.Source）：客户端给的会话标识，没有时按首条用户消息。
+const (
+	SessionClaudeCode      = "claude_code"       // 请求头 X-Claude-Code-Session-Id
+	SessionClaudeCodeAgent = "claude_code_agent" // 同上，另有 X-Claude-Code-Agent-Id（子代理）
+	SessionHeader          = "header"            // 请求头 X-Session-Id
+	SessionPromptCacheKey  = "prompt_cache_key"  // OpenAI 请求体的 prompt_cache_key
+	SessionFirstMessage    = "first_message"     // 首条用户消息
+)
 
 // UsageCost 是一条用量的费用和算法。单价是美元每百万 token，按百万分之一美元存整数。
 type UsageCost struct {

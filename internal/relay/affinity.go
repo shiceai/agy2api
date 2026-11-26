@@ -15,9 +15,10 @@ import (
 // 会话粘性：同一对话优先用上次的账号。上游的隐式缓存按账号，换号就命中不了；账号变了派生出的会话 ID
 // 也会变，绑了代理时还会在几个出口之间跳。
 //
-// 对话按"API Key + 请求的模型名 + 首条用户消息"认（Gemini 客户端每次带完整历史、不带会话标识），
-// 记下最近一次成功服务它的账号。只在内存里，闲置超过 Policy.StickyTTL 失效，最多 affinityLimit 个对话，
-// 重启后清空（对话重新选号）。
+// 对话按"API Key + 请求的模型名 + 会话标识"认：客户端给了会话标识（Claude Code 的会话头、X-Session-Id、
+// OpenAI 的 prompt_cache_key，见 Request.Session）就用它，没有时用首条用户消息（Gemini 客户端每次带完整历史、
+// 不带会话标识）。记下最近一次成功服务它的账号。只在内存里，闲置超过 Policy.StickyTTL 失效，最多 affinityLimit
+// 个对话，重启后清空（对话重新选号）。
 
 // affinityLimit 是最多记住的对话数。
 const affinityLimit = 50_000
@@ -84,25 +85,30 @@ func (s *affinityStore) set(key string, accountID int64, now time.Time, ttl time
 	s.entries[key] = affinityEntry{accountID: accountID, used: now}
 }
 
-// affinityKey 是请求所属对话的粘性键；没有用户消息时为空（不粘）。
-func affinityKey(req Request) string {
-	first := antigravity.FirstUserContent(req.Body)
-	if first == "" {
-		return ""
+// affinityKey 返回请求所属对话的粘性键和认对话的依据（store.Session*）；既没有会话标识也没有用户消息时为空（不粘）。
+// 依据也进哈希，不同来源的标识不会撞在一起。
+func affinityKey(req Request) (key, source string) {
+	id, source := req.Session, req.SessionSource
+	if id == "" {
+		id, source = antigravity.FirstUserContent(req.Body), store.SessionFirstMessage
 	}
-	sum := sha256.Sum256([]byte(caller(req) + "\x00" + req.Model + "\x00" + first))
-	return hex.EncodeToString(sum[:16])
+	if id == "" {
+		return "", ""
+	}
+	sum := sha256.Sum256([]byte(caller(req) + "\x00" + req.Model + "\x00" + source + "\x00" + id))
+	return hex.EncodeToString(sum[:16]), source
 }
 
-// affinityDetail 是用量详情里的会话粘性：prefer 是上次的账号（0 表示新对话），lease 是这次选中的账号。
-func (r *Relay) affinityDetail(prefer int64, lease *pool.Lease) *store.UsageAffinity {
+// affinityDetail 是用量详情里的会话粘性：prefer 是上次的账号（0 表示新对话），lease 是这次选中的账号，
+// source 是认对话的依据。
+func (r *Relay) affinityDetail(prefer int64, lease *pool.Lease, source string) *store.UsageAffinity {
 	switch {
 	case prefer == 0:
-		return &store.UsageAffinity{Result: AffinityNew}
+		return &store.UsageAffinity{Result: AffinityNew, Source: source}
 	case lease.Account.ID == prefer:
-		return &store.UsageAffinity{Result: AffinityHit}
+		return &store.UsageAffinity{Result: AffinityHit, Source: source}
 	}
-	d := &store.UsageAffinity{Result: AffinitySwitched, Reason: lease.Affinity, FromAccountID: prefer}
+	d := &store.UsageAffinity{Result: AffinitySwitched, Reason: lease.Affinity, FromAccountID: prefer, Source: source}
 	for _, a := range r.pool.Accounts() {
 		if a.ID == prefer {
 			d.FromAccount = a.Email
