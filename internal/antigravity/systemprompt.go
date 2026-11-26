@@ -46,10 +46,17 @@ func MoveSystemToUser(body map[string]any) bool {
 }
 
 // ApplySystemPrompt 按模式把模板注入请求体的 systemInstruction，返回是否改过 body。
-// template 为空（去空白后）时不动。原地修改 body。
+// 模板为空时只有 as_user 生效：把客户端 system 降为用户消息、不注入模板（见 MoveSystemToUser），
+// 用于规避上游对客户端 system 的识别；prepend、replace 空模板不动。原地修改 body。
 func ApplySystemPrompt(body map[string]any, mode SystemPromptMode, template string) bool {
 	template = strings.TrimSpace(template)
-	if body == nil || template == "" {
+	if body == nil {
+		return false
+	}
+	if template == "" {
+		if mode == SystemPromptAsUser {
+			return MoveSystemToUser(body)
+		}
 		return false
 	}
 	existing := systemParts(body)

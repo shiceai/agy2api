@@ -98,10 +98,11 @@ func (r *Relay) SetClientFilter(f *antigravity.ClientFilter) {
 	r.updateConfig(func(c *runtimeConfig) { c.clientFilter = f })
 }
 
-// SetSystemPrompt 设置系统提示词伪装，立即生效；模板为空时不注入。
+// SetSystemPrompt 设置系统提示词伪装，立即生效。模板为空时只有 as_user 生效（把客户端 system 降为用户消息）；
+// 其它模式模板为空时不注入。关闭伪装时调用方传空模式清掉。
 func (r *Relay) SetSystemPrompt(mode antigravity.SystemPromptMode, template string) {
 	var sp *systemPromptConfig
-	if strings.TrimSpace(template) != "" {
+	if strings.TrimSpace(template) != "" || mode == antigravity.SystemPromptAsUser {
 		sp = &systemPromptConfig{mode: mode, template: template}
 	}
 	r.updateConfig(func(c *runtimeConfig) { c.systemPrompt = sp })

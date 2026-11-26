@@ -90,6 +90,14 @@ func TestJSONSettingEndpoints(t *testing.T) {
 	if p.Settings != (systemPromptView{Enabled: true, Mode: "prepend", Template: "T"}) {
 		t.Fatalf("系统提示词保存后读回不对：%+v", p.Settings)
 	}
+	// prepend 开启时模板不能为空；as_user 允许空模板（只把客户端 system 降为用户消息）。
+	if r := doReq(t, srv, http.MethodPut, sp, nil, `{"enabled":true,"mode":"prepend","template":""}`); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("prepend 开启空模板应返回 400，实际 %d", r.StatusCode)
+	}
+	decode(t, doReq(t, srv, http.MethodPut, sp, nil, `{"enabled":true,"mode":"as_user","template":""}`), &p)
+	if p.Settings != (systemPromptView{Enabled: true, Mode: "as_user", Template: ""}) {
+		t.Fatalf("as_user 空模板应保存成功：%+v", p.Settings)
+	}
 
 	const rh = "/api/admin/settings/request-handling"
 	var h resp[requestHandlingView]

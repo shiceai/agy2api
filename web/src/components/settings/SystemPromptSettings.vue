@@ -25,7 +25,7 @@ const modeOptions = [
 const modeHelp: Record<string, string> = {
   prepend: '模板加在客户端 system 前面，两者都保留',
   replace: '只用模板，丢掉客户端的 system',
-  as_user: '客户端 system 转成一条 user 消息，伪装最彻底',
+  as_user: '客户端 system 转成一条 user 消息；模板可留空（规避上游对客户端 system 的识别）',
 }
 
 const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== saved.value)
@@ -84,7 +84,7 @@ async function save() {
 
     <SettingCard title="模板" raw :class="!form.enabled && 'opacity-60'">
       <template #info>
-        <p>项目不内置官方提示词，要自己从官方客户端抓取后粘贴进来。对所有账号统一使用，与账号 UA 版本无关（相邻补丁版本的基础 system 基本一致）。开启时模板不能为空。</p>
+        <p>项目不内置官方提示词，要自己从官方客户端抓取后粘贴进来。对所有账号统一使用，与账号 UA 版本无关（相邻补丁版本的基础 system 基本一致）。前置、替换开启时模板不能为空；转用户可以留空，此时只把客户端 system 降为用户消息、不注入模板，用来规避上游对客户端 system 的识别（对 Gemini 入站的 Claude Code 等有用）。</p>
       </template>
       <Textarea
         id="sp-template"

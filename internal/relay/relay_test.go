@@ -753,6 +753,30 @@ func TestSystemPromptInjection(t *testing.T) {
 	}
 }
 
+// 系统提示词伪装 as_user 空模板：不注入模板，只把客户端 system 降为开头的 user 消息，systemInstruction 清空。
+func TestSystemPromptAsUserEmptyTemplate(t *testing.T) {
+	e := newEnv(t, "a")
+	e.relay.SetSystemPrompt(antigravity.SystemPromptAsUser, "")
+	body := map[string]any{
+		"systemInstruction": map[string]any{"parts": []any{map[string]any{"text": "You are Cline."}}},
+		"contents":          []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": "hi"}}}},
+	}
+	if status, _, _, err := e.generateBody("gemini-2.5-flash", false, body); err != nil || status != http.StatusOK {
+		t.Fatalf("请求应成功：status=%d err=%v", status, err)
+	}
+	req := e.up.last("a")["request"].(map[string]any)
+	if _, ok := req["systemInstruction"]; ok {
+		t.Fatalf("上游 system 应清空，实际 %v", req["systemInstruction"])
+	}
+	contents := req["contents"].([]any)
+	if len(contents) != 2 || contents[0].(map[string]any)["role"] != "user" {
+		t.Fatalf("客户端原 system 应转成开头的 user 消息，实际 %v", contents)
+	}
+	if contents[0].(map[string]any)["parts"].([]any)[1].(map[string]any)["text"] != "You are Cline." {
+		t.Fatalf("开头 user 消息应带上客户端原 system")
+	}
+}
+
 // 返回思考内容开关：关闭后请求侧 thinkingConfig.includeThoughts 置 false。
 func TestHideThoughtsRequestSide(t *testing.T) {
 	e := newEnv(t, "a")

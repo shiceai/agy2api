@@ -108,14 +108,26 @@ func TestApplySystemPromptSnakeAndString(t *testing.T) {
 	}
 }
 
-// 模板为空或 body 为空时不动。
+// prepend、replace 空模板不动；as_user 空模板把客户端 system 降为用户消息（等同 MoveSystemToUser）。
 func TestApplySystemPromptEmpty(t *testing.T) {
 	body := clientBody()
 	if ApplySystemPrompt(body, SystemPromptReplace, "   ") {
-		t.Fatal("空模板不应改动")
+		t.Fatal("replace 空模板不应改动")
 	}
 	if got := sysText(body); len(got) != 1 || got[0] != "You are Cline." {
 		t.Fatalf("空模板时 system 应原样：%v", got)
+	}
+
+	body = clientBody()
+	if !ApplySystemPrompt(body, SystemPromptAsUser, "  ") {
+		t.Fatal("as_user 空模板应把客户端 system 降为用户消息")
+	}
+	if _, ok := body["systemInstruction"]; ok {
+		t.Fatal("as_user 空模板应清空 systemInstruction")
+	}
+	contents := body["contents"].([]any)
+	if len(contents) != 2 || contents[0].(map[string]any)["role"] != "user" {
+		t.Fatalf("应在开头插一条 user 消息：%v", contents)
 	}
 }
 

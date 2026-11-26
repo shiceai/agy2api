@@ -30,23 +30,24 @@ var systemPromptSetting = jsonSetting[systemPromptView]{
 	validate: systemPromptView.validate,
 }
 
-// validate 检查模式取值；开启时模板不能为空（空模板什么都不注入，开着没有意义）。
+// validate 检查模式取值；开启 prepend、replace 时模板不能为空（空模板什么都不注入，开着没有意义）；
+// as_user 允许空模板（此时只把客户端 system 降为用户消息，用于规避上游对客户端 system 的识别）。
 func (v systemPromptView) validate() error {
 	switch antigravity.SystemPromptMode(v.Mode) {
 	case antigravity.SystemPromptPrepend, antigravity.SystemPromptReplace, antigravity.SystemPromptAsUser:
 	default:
 		return errors.New("mode must be prepend, replace or as_user")
 	}
-	if v.Enabled && strings.TrimSpace(v.Template) == "" {
-		return errors.New("template is required when enabled")
+	if v.Enabled && strings.TrimSpace(v.Template) == "" && antigravity.SystemPromptMode(v.Mode) != antigravity.SystemPromptAsUser {
+		return errors.New("template is required when enabled unless mode is as_user")
 	}
 	return nil
 }
 
-// apply 把设置下发给 relay；关闭时清空（不注入）。
+// apply 把设置下发给 relay；关闭时传空模式清掉（as_user 空模板也会生效，不能只靠空模板表示关闭）。
 func (v systemPromptView) apply(s *Service) {
 	if !v.Enabled {
-		s.relay.SetSystemPrompt(antigravity.SystemPromptMode(v.Mode), "")
+		s.relay.SetSystemPrompt("", "")
 		return
 	}
 	s.relay.SetSystemPrompt(antigravity.SystemPromptMode(v.Mode), v.Template)
