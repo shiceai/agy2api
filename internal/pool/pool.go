@@ -481,14 +481,22 @@ func (p *Pool) Lookup(requested, tier string) (antigravity.ModelInfo, bool) {
 	return antigravity.ModelInfo{}, false
 }
 
-// Models 返回启用账号模型目录的并集，按 ID 排序。
+// Models 返回启用账号模型目录的并集，按 ID 排序。同一个模型取第一个账号的条目，对外列出的标记取并集：
+// 任一账号的目录列出它就列出（各账号的目录可能新旧不一，见 antigravity.PublicModels）。
 func (p *Pool) Models() []antigravity.ModelInfo {
 	seen := map[string]antigravity.ModelInfo{}
 	for _, a := range p.snapshot() {
 		for id, m := range a.models {
-			if _, ok := seen[id]; !ok {
+			old, ok := seen[id]
+			if !ok {
 				seen[id] = m
+				continue
 			}
+			old.Listed = old.Listed || m.Listed
+			if old.Family == "" {
+				old.Family, old.FamilyDisplayName = m.Family, m.FamilyDisplayName
+			}
+			seen[id] = old
 		}
 	}
 	out := make([]antigravity.ModelInfo, 0, len(seen))

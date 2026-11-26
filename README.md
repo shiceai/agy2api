@@ -79,11 +79,14 @@ curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.s
 打开 `http://127.0.0.1:8249`，用管理口令登录，在"账号"页添加账号，在"密钥"页新建 API Key，然后调用：
 
 ```bash
-curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
+curl http://127.0.0.1:8249/v1beta/models/gemini-3-flash:generateContent \
   -H "x-goog-api-key: agy-xxxxx" \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"role":"user","parts":[{"text":"你好"}]}]}'
 ```
+
+模型列表（`/v1/models`）和官方客户端一致：分档的模型只列家族名（如 `gemini-4-neon`、`claude-opus-5-5`），档位按请求里的
+思考参数（`reasoning_effort`、`thinkingLevel` 等）选，没给时用"设置 → 思考档位"的默认档；带档位的名字（如 `gemini-4-neon-high`）也能直接用。
 
 上公网前请看[部署说明](docs/deploy.md)：HTTPS 反向代理、管理端访问限制、备份和升级、卸载，以及手动部署方式。
 各接口的转换规则和限制见[接口说明](docs/api.md)。

@@ -90,11 +90,16 @@ Open `http://127.0.0.1:8249`, sign in with the admin password, add accounts on t
 the keys page, then call:
 
 ```bash
-curl http://127.0.0.1:8249/v1beta/models/gemini-2.5-flash:generateContent \
+curl http://127.0.0.1:8249/v1beta/models/gemini-3-flash:generateContent \
   -H "x-goog-api-key: agy-xxxxx" \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}'
 ```
+
+The model list (`/v1/models`) matches the official client: models with thinking tiers are listed once by family name (such as
+`gemini-4-neon` or `claude-opus-5-5`), and the tier follows the request's thinking parameters (`reasoning_effort`,
+`thinkingLevel` and so on), falling back to the default tier under Settings -> Thinking tiers. Tiered names (such as
+`gemini-4-neon-high`) work as well.
 
 Before exposing it to the internet, read the [deployment guide](docs/deploy.md) (in Chinese): HTTPS reverse proxy,
 admin access control, backup and upgrade, uninstalling, and manual deployment. The conversion rules and limits of each

@@ -27,24 +27,33 @@ import (
 // inboundBodyLimit 是入站 Gemini 请求体上限（16 MiB）。
 const inboundBodyLimit = 16 << 20
 
-// listModels 返回启用账号目录的并集；Key 限制了模型时只列允许的。格式按调用的接口（见 inboundProtocol）：
-// Gemini 的 models[]，Anthropic 或 OpenAI 的 data[]。
+// listModels 返回对外列出的模型（见 antigravity.PublicModels：官方客户端的模型选择器和辅助用途里有的，分档的
+// 合成家族名）；Key 限制了模型时只列允许的，家族不允许但允许了其中某些档位时列这些档位。格式按调用的接口
+// （见 inboundProtocol）：Gemini 的 models[]，Anthropic 或 OpenAI 的 data[]。
 func (s *Service) listModels(w http.ResponseWriter, r *http.Request) {
 	key := apiKeyFromContext(r.Context())
-	catalog := s.relay.Models()
-	models := make([]map[string]any, 0, len(catalog))
+	listed := antigravity.PublicModels(s.relay.Models())
+	models := make([]map[string]any, 0, len(listed))
 	protocol := inboundProtocol(r)
-	for _, m := range catalog {
-		if !keyAllowsModel(key, m.ID) {
-			continue
-		}
+	add := func(id, displayName string) {
 		switch protocol {
 		case store.ProtocolAnthropic:
-			models = append(models, anthropic.ModelRecord(m.ID, m.DisplayName))
+			models = append(models, anthropic.ModelRecord(id, displayName))
 		case store.ProtocolOpenAI:
-			models = append(models, openai.ModelRecord(m.ID))
+			models = append(models, openai.ModelRecord(id))
 		default:
-			models = append(models, geminiModelRecord(m.ID, m))
+			models = append(models, geminiModelRecord(id, displayName))
+		}
+	}
+	for _, m := range listed {
+		if keyAllowsModel(key, m.ID) {
+			add(m.ID, m.DisplayName)
+			continue
+		}
+		for _, t := range m.Tiers {
+			if keyAllowsModel(key, t.ID) {
+				add(t.ID, t.DisplayName)
+			}
 		}
 	}
 	switch protocol {
@@ -57,11 +66,11 @@ func (s *Service) listModels(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// geminiModelRecord 构造 Gemini 模型记录。id 是对外的模型名，家族名请求时与 m.ID 不同。
-func geminiModelRecord(id string, m antigravity.ModelInfo) map[string]any {
-	name := m.DisplayName
+// geminiModelRecord 构造 Gemini 模型记录。id 是对外的模型名（可能是家族名），displayName 为空时用 id。
+func geminiModelRecord(id, displayName string) map[string]any {
+	name := displayName
 	if name == "" {
-		name = m.ID
+		name = id
 	}
 	return map[string]any{
 		"name":                       "models/" + id,
@@ -70,7 +79,8 @@ func geminiModelRecord(id string, m antigravity.ModelInfo) map[string]any {
 	}
 }
 
-// getModel 返回单个模型记录，家族名按默认档位解析；带假流式前缀的按去掉前缀的模型查。
+// getModel 返回单个模型记录，家族名按默认档位解析（显示名是解析到的档位的，看得出会用哪一档）；
+// 带假流式前缀的按去掉前缀的模型查。
 func (s *Service) getModel(w http.ResponseWriter, r *http.Request) {
 	model := strings.TrimPrefix(modelPath(r), "models/")
 	base, _ := stripFakeStream(model)
@@ -86,7 +96,7 @@ func (s *Service) getModel(w http.ResponseWriter, r *http.Request) {
 		case store.ProtocolOpenAI:
 			writeJSON(w, http.StatusOK, openai.ModelRecord(model))
 		default:
-			writeJSON(w, http.StatusOK, geminiModelRecord(model, m))
+			writeJSON(w, http.StatusOK, geminiModelRecord(model, m.DisplayName))
 		}
 		return
 	}

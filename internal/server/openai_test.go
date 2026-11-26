@@ -124,7 +124,7 @@ func TestOpenAIModels(t *testing.T) {
 		} `json:"data"`
 	}
 	decode(t, doReq(t, srv, http.MethodGet, "/v1/models", h, ""), &list)
-	if list.Object != "list" || len(list.Data) != 3 || list.Data[0].Object != "model" || list.Data[0].OwnedBy == "" {
+	if list.Object != "list" || len(list.Data) != 2 || list.Data[0].Object != "model" || list.Data[0].OwnedBy == "" {
 		t.Fatalf("openai models = %+v", list)
 	}
 	var one struct {
@@ -148,7 +148,7 @@ func TestOpenAIModels(t *testing.T) {
 			Models []map[string]any `json:"models"`
 		}
 		decode(t, doReq(t, srv, http.MethodGet, tc.path, tc.headers, ""), &gemini)
-		if len(gemini.Models) != 3 {
+		if len(gemini.Models) != 2 {
 			t.Fatalf("%s: gemini models = %+v", tc.path, gemini)
 		}
 	}

@@ -113,14 +113,14 @@ func TestMessagesCountTokensAndModels(t *testing.T) {
 		HasMore bool `json:"has_more"`
 	}
 	decode(t, doReq(t, srv, http.MethodGet, "/v1/models", h, ""), &list)
-	if len(list.Data) != 3 || list.Data[0].Type != "model" || list.HasMore {
+	if len(list.Data) != 2 || list.Data[0].ID != "gemini-3-flash-high" || list.Data[1].ID != "gemini-3-pro" || list.Data[0].Type != "model" || list.HasMore {
 		t.Fatalf("anthropic models = %+v", list)
 	}
 	var gemini struct {
 		Models []map[string]any `json:"models"`
 	}
 	decode(t, doReq(t, srv, http.MethodGet, "/v1/models", map[string]string{"x-goog-api-key": h["x-api-key"]}, ""), &gemini)
-	if len(gemini.Models) != 3 {
+	if len(gemini.Models) != 2 {
 		t.Fatalf("gemini models = %+v", gemini)
 	}
 }

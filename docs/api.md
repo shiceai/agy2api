@@ -2,6 +2,24 @@
 
 各客户端怎么接入见 [README](../README.md)，这里是各接口的细节：请求怎么转换、哪些不支持、会话粘性怎么认对话。部署见[部署说明](deploy.md)。
 
+## 模型列表和档位
+
+`/v1/models`（三种接口共用，按请求头区分格式）列出的模型和官方客户端一致，取自上游模型目录里给官方客户端用的信息：
+
+- 模型选择器里的模型。分档的模型（官方分组里同一家族的 Low、Medium、High、XHigh）合成一个家族名，如 `gemini-4-neon`、
+  `claude-opus-5-5`，显示名用家族的（Gemini 4 Neon）；不分档的照原名，如 Orchestrator、`gpt-oss-120b-medium`。
+- 官方客户端辅助用途的模型：`gemini-3-flash`（命令）、`gemini-3.5-flash-lite`（网页搜索、提交信息）、`gemini-3.1-flash-image`（生图）。
+- 其余的不列出：旧名字（如 `gemini-2.5-flash`，上游指向 Gemini 3.5 Flash Lite）、自动分档和监控用的变体（`*-tiered*`、
+  `gemini-4-hydrogen-sonar`）、编辑器补全模型（`tab_*`）等。它们和各档位的名字（如 `gemini-4-neon-high`）一样照样能调用，
+  只是不保证能当普通模型用。
+- 账号的模型目录还没刷新到带这些信息时（刚升级上来），列出目录里的全部模型。各账号的目录取并集。
+- API Key 限制了模型时只列允许的；允许了家族名就列家族，只允许了其中某些档位（如 `gemini-4-neon-high`）就列这些档位。
+
+用家族名时，档位按请求里的思考参数选：Gemini 的 `thinkingLevel`（或 `thinkingBudget` 换算），OpenAI 的 `reasoning_effort`、
+`reasoning.effort`，Anthropic 的 `thinking` 预算或 `output_config.effort`；都没有时用管理端"设置 → 思考档位"里这个家族单独设的
+档位，再用默认档位。家族没有这一档时先往低、再往高取最接近的。按家族名查单个模型（`/v1/models/{家族名}`）时，显示名是
+按默认档位解析到的那一档。
+
 ## Anthropic 接口
 
 除了 Gemini 原生接口，网关还提供 Anthropic Messages 接口，Claude Code 等客户端可以直接接入（用法见 README）：

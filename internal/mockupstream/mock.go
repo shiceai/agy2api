@@ -95,6 +95,16 @@ func handleFetchModels(w http.ResponseWriter, r *http.Request) {
 				"quotaInfo":        map[string]any{"remainingFraction": 0.95, "resetTime": time.Now().Add(5 * time.Hour).UTC().Format(time.RFC3339)},
 			},
 		},
+		// 官方客户端挑模型用的信息：选择器里有 gemini-3-pro 的两档，gemini-3-pro 按档位分组；gemini-3-flash-high
+		// 是辅助用途（命令）的模型。对外列表因此是 gemini-3-pro 和 gemini-3-flash-high。
+		"agentModelSorts": []any{map[string]any{"displayName": "Recommended", "groups": []any{
+			map[string]any{"modelIds": []any{"gemini-3-pro-high", "gemini-3-pro-low"}},
+		}}},
+		"groupedModels": map[string]any{"gemini-3-pro": map[string]any{"displayName": "Gemini 3 Pro", "supportedThinkingLevels": []any{
+			map[string]any{"thinkingSuffix": "low", "thinkingDisplayName": "Low"},
+			map[string]any{"thinkingSuffix": "high", "thinkingDisplayName": "High"},
+		}}},
+		"commandModelIds": []any{"gemini-3-flash-high"},
 	})
 }
 

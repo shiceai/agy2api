@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,5 +90,40 @@ func TestGeminiCompat(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), key) {
 		t.Fatal("API key from ?key= leaked into logs")
+	}
+}
+
+// 模型列表按官方客户端的口径：选择器和辅助用途里有的模型，分档的合成家族名（显示名用家族的）；带档位的名字
+// 不列出但照样能调用。Key 只允许了家族里某一档时列这一档。
+func TestModelListFamilies(t *testing.T) {
+	svc, _ := newTestService(t)
+	srv := httptest.NewServer(svc.Router())
+	defer srv.Close()
+	auth := importAndKey(t, srv)
+
+	var list struct {
+		Models []struct {
+			Name        string `json:"name"`
+			DisplayName string `json:"displayName"`
+		} `json:"models"`
+	}
+	decode(t, doReq(t, srv, http.MethodGet, "/v1beta/models", auth, ""), &list)
+	got := fmt.Sprint(list.Models)
+	if got != "[{models/gemini-3-flash-high Gemini 3 Flash (High)} {models/gemini-3-pro Gemini 3 Pro}]" {
+		t.Fatalf("models = %s", got)
+	}
+	body := `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`
+	if resp := doReq(t, srv, http.MethodPost, "/v1beta/models/gemini-3-pro-high:generateContent", auth, body); resp.StatusCode != http.StatusOK {
+		t.Fatalf("不列出的档位应照样能调用：%d %s", resp.StatusCode, readBody(resp))
+	}
+
+	resp := doReq(t, srv, http.MethodPost, "/api/admin/keys", nil, `{"name":"tier","allowed_models":["gemini-3-pro-high"]}`)
+	var key struct {
+		Secret string `json:"secret"`
+	}
+	decode(t, resp, &key)
+	decode(t, doReq(t, srv, http.MethodGet, "/v1beta/models", map[string]string{"x-goog-api-key": key.Secret}, ""), &list)
+	if got := fmt.Sprint(list.Models); got != "[{models/gemini-3-pro-high Gemini 3 Pro (High)}]" {
+		t.Fatalf("只允许一档时 models = %s", got)
 	}
 }
