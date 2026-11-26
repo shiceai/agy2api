@@ -2,7 +2,9 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## 未发布
+## v1.4.0 - 2026-11-25
+
+新增 OpenAI Responses 接口，Codex 可以直接接入；"客户端兼容"也作用于 Codex。
 
 ### 功能
 
