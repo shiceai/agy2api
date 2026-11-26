@@ -2,6 +2,13 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+### 功能
+
+- **OpenAI Responses 接口，Codex 可以直接接入。** 提供 `/v1/responses`（流式和非流式），Codex 在 `config.toml` 里加一个 `wire_api = "responses"` 的服务商就能用（见 README）。工具调用（含 Codex 的命名空间工具和自定义工具）、图片和文件、`reasoning.effort`、结构化输出都会转换，思考签名经 reasoning 条目的 `encrypted_content` 在多轮对话里来回传递，同一个 Codex 会话优先用同一个账号。网关不存响应，`previous_response_id` 这类要服务端保存状态的用法不支持。用量页的"接口"筛选多了 OpenAI Responses。
+- **"Claude Code 兼容"改名"客户端兼容"，也作用于 Codex。** 上游同样会拦截 Codex 的系统提示（返回伪装成额度耗尽的 429），开着这个开关（默认开）时 Responses 接口也把客户端 system 降为用户消息。开关还在"设置 → 模型别名"。
+
 ## v1.3.0 - 2026-11-25
 
 会话粘性改为优先认客户端给的会话标识（Claude Code 的会话头等），并修复 Claude Code 的不同会话被认成同一个对话的问题。

@@ -15,7 +15,7 @@ import SettingGrid from './SettingGrid.vue'
 import SettingRow from './SettingRow.vue'
 
 // 设置页"模型别名"标签：客户端用的模型名（Claude Code 的官方名等）不在号池里时，按规则换成号池里的模型。
-// Gemini、Anthropic、OpenAI 三个接口都生效。右边的"试一下"按已保存的规则解析。
+// 所有接口都生效。右边的"试一下"按已保存的规则解析。
 const form = ref<ModelAliasSettings | null>(null)
 const presets = ref<ModelAliasResponse['presets']>([])
 const saved = ref('')
@@ -27,7 +27,7 @@ const testModel = ref('claude-haiku-5-5')
 const testing = ref(false)
 const result = ref<AliasTestResult | null>(null)
 
-// Claude Code 兼容：单独的开关，切换即保存（见下方卡片）。
+// 客户端兼容：单独的开关，切换即保存（见下方卡片）。
 const systemAsUser = ref(true)
 const savingCompat = ref(false)
 
@@ -60,7 +60,7 @@ async function setCompat(value: boolean) {
     systemAsUser.value = res.settings.system_as_user
   } catch (e) {
     systemAsUser.value = !value
-    toastError('保存 Claude Code 兼容失败', e)
+    toastError('保存客户端兼容失败', e)
   } finally {
     savingCompat.value = false
   }
@@ -151,12 +151,12 @@ async function test() {
         </dl>
       </SettingCard>
 
-      <SettingCard title="Claude Code 兼容" description="把客户端 system 降为用户消息，绕过上游对 Claude Code 的拦截">
+      <SettingCard title="客户端兼容" description="把客户端 system 降为用户消息，绕过上游对 Claude Code、Codex 的拦截">
         <template #info>
           <p>上游会识别第三方客户端写在系统提示里的内容，返回伪装成额度耗尽的 429（与模型、措辞都无关，删改也躲不掉）。检测只看系统提示、不看对话内容，所以把客户端 system 降为开头的一条用户消息即可放行。</p>
-          <p>代价：客户端 system 从 system 级降到 user 级，可能略微改变模型遵循指令的方式。只作用于 Anthropic 接口，不影响 Gemini、OpenAI 接口。</p>
+          <p>代价：客户端 system 从 system 级降到 user 级，可能略微改变模型遵循指令的方式。只作用于 Anthropic 接口和 OpenAI Responses 接口（Claude Code、Codex 走这两个），不影响 Gemini 和 OpenAI Chat Completions 接口。</p>
         </template>
-        <SettingRow label="降客户端 system 为用户消息" description="关掉后 Claude Code 等直接接入会一直被上游拦截（429）" input-id="compat-sysuser">
+        <SettingRow label="降客户端 system 为用户消息" description="关掉后 Claude Code、Codex 等会被上游拦截（429）" input-id="compat-sysuser">
           <Switch id="compat-sysuser" :model-value="systemAsUser" :disabled="savingCompat" @update:model-value="setCompat(Boolean($event))" />
         </SettingRow>
       </SettingCard>

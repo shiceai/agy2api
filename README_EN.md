@@ -24,8 +24,8 @@
 <p align="center"><a href="README.md">简体中文</a> | English</p>
 
 AGY2API manages multiple Antigravity accounts, handling account selection, cooldown recovery, failover and low-quota
-avoidance. It exposes the native Gemini `v1beta` API, the Anthropic Messages API and the OpenAI Chat Completions API
-(Claude Code, the OpenAI SDK and others connect directly), and comes with an admin console.
+avoidance. It exposes the native Gemini `v1beta` API, the Anthropic Messages API, and the OpenAI Chat Completions and Responses
+APIs (Claude Code, Codex, the OpenAI SDK and others connect directly), and comes with an admin console.
 
 > **Risk notice**: this project reaches Google Cloud Code's internal API through Antigravity accounts. This kind of use
 > may violate Google's Terms of Service; accounts may be restricted or banned, and paid subscriptions will not be
@@ -37,10 +37,10 @@ avoidance. It exposes the native Gemini `v1beta` API, the Anthropic Messages API
   such as `google-genai`
 - **Anthropic API**: `/v1/messages` (streaming and non-streaming) and `count_tokens`, so Claude Code and other Anthropic clients
   can connect directly; official model names are mapped to models in the pool by model aliases
-- **OpenAI API**: `/v1/chat/completions` (streaming and non-streaming) and model listing, with tool calls, images,
-  thinking content and structured output; the OpenAI SDK, Cherry Studio and other clients can connect directly
+- **OpenAI API**: `/v1/chat/completions` and `/v1/responses` (both with streaming) and model listing, with tool calls,
+  images, thinking content and structured output; the OpenAI SDK, Cherry Studio, Codex and other clients can connect directly
 - **Pool scheduling**: cooldowns per account and model, automatic failover, avoids accounts with low quota, keeps a
-  conversation on the same account (recognizes Claude Code's session header and `X-Session-Id`), per-account
+  conversation on the same account (recognizes Claude Code and Codex sessions and `X-Session-Id`), per-account
   concurrency limits
 - **Account management**: add accounts with Google sign-in or bulk import, automatic token refresh, automatic disabling
   of revoked accounts, per-account testing
@@ -58,7 +58,7 @@ avoidance. It exposes the native Gemini `v1beta` API, the Anthropic Messages API
 flowchart LR
     client["Gemini clients<br/>google-genai, etc."] -->|Gemini v1beta| auth
     claude["Claude Code and other<br/>Anthropic clients"] -->|Anthropic Messages| auth
-    openai["OpenAI SDK and other<br/>OpenAI clients"] -->|OpenAI Chat Completions| auth
+    openai["OpenAI SDK, Codex and other<br/>OpenAI clients"] -->|OpenAI Chat Completions / Responses| auth
     subgraph gw["AGY2API"]
         auth["API key auth and limits"] --> pool["Account pool scheduling<br/>cooldown · failover · low-quota avoidance"]
         pool -.-> usage["Usage and cost records"]
@@ -114,11 +114,33 @@ claude
 - Other models in the pool work too, including Gemini, e.g. `claude --model gemini-3-flash`.
 - Claude on Antigravity does not return its thinking, so Claude Code shows no thinking content; Anthropic server tools
   (such as WebSearch) are not supported.
-- **Claude Code compatibility (on by default)**: the upstream flags client fingerprints such as Claude Code's in the
-  system prompt and returns a 429 that looks like quota exhaustion. The gateway moves the client's system into a leading
+- **Client compatibility (on by default)**: the upstream flags client fingerprints such as those of Claude Code and Codex
+  in the system prompt and returns a 429 that looks like quota exhaustion. The gateway moves the client's system into a leading
   user message (only the system prompt is inspected, not the conversation), which gets the request through; the cost is
   that the client's system drops from system to user level and may slightly change how the model follows it. Turn it off
-  under Settings -> Model aliases -> Claude Code compatibility.
+  under Settings -> Model aliases -> Client compatibility.
+
+## Use with Codex
+
+Create an API key on the Keys page of the admin console, put it in the `AGY2API_KEY` environment variable, and add a
+provider to `~/.codex/config.toml`:
+
+```toml
+model = "gemini-3-flash"
+model_provider = "agy2api"
+
+[model_providers.agy2api]
+name = "AGY2API"
+base_url = "http://127.0.0.1:8249/v1"
+env_key = "AGY2API_KEY"
+wire_api = "responses"
+```
+
+- Use models from the pool, or switch for one run, e.g. `codex -m claude-sonnet-5-5-medium`. Codex does not know these
+  model names and prints "Model metadata ... not found" at startup; this does no harm.
+- A Codex session stays on the same account where possible (the conversation is recognized by its session ID).
+- The upstream blocks Codex's system prompt too; the client compatibility above covers Codex as well.
+- Codex's built-in web search (`web_search`) has no upstream counterpart and is dropped.
 
 ## Use with OpenAI-compatible clients
 
@@ -143,7 +165,11 @@ print(resp.choices[0].message.content)
   clients display it). Turn it off under Settings -> Request handling.
 - `response_format` with `json_schema` works with Gemini models; `json_object` is not enforced by the upstream and relies
   on the prompt; Claude models do not support structured output (the upstream returns 400).
-- Not supported: the Responses API, `n` greater than 1, and files uploaded through the Files API (`file_id`).
+- The Responses API (`/v1/responses`) does not store responses: send the whole conversation every turn;
+  `previous_response_id` and `background` are not supported (400). Thinking goes into the summary of reasoning items;
+  when `include` asks for `reasoning.encrypted_content`, the thought signature comes with it, so just send the items back
+  in the next turn.
+- Not supported: `n` greater than 1, and files uploaded through the Files API (`file_id`).
 
 ## Upgrade
 

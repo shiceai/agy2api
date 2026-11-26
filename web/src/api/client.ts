@@ -124,7 +124,7 @@ export interface AliasTestResult {
   resolved?: string
 }
 
-// AnthropicCompat 是 Anthropic 入站兼容设置：system_as_user 为真时把客户端 system 降为开头的用户消息。
+// AnthropicCompat 是客户端兼容设置（作用于 Anthropic、OpenAI Responses 入站）：system_as_user 为真时把客户端 system 降为开头的用户消息。
 export interface AnthropicCompat {
   system_as_user: boolean
 }
@@ -337,8 +337,9 @@ export interface UsageRecord {
   request_model: string
   resolved_model: string
   upstream_model: string
-  // protocol 是入站接口：gemini（Gemini 原生接口）、anthropic（Anthropic Messages 接口）或 openai（OpenAI Chat Completions 接口）。
-  protocol: 'gemini' | 'anthropic' | 'openai'
+  // protocol 是入站接口：gemini（Gemini 原生接口）、anthropic（Anthropic Messages 接口）、openai（OpenAI Chat Completions 接口）
+  // 或 openai_responses（OpenAI Responses 接口）。
+  protocol: 'gemini' | 'anthropic' | 'openai' | 'openai_responses'
   reasoning: string
   prompt_tokens: number
   output_tokens: number

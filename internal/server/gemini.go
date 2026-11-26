@@ -142,7 +142,7 @@ func modelNotAllowed(w http.ResponseWriter, r *http.Request, model string) {
 }
 
 // inboundProtocol 判断请求走的入站接口（store.ProtocolGemini 等）：
-//   - /v1/chat/ 下的路径是 OpenAI；
+//   - /v1/chat/ 下的路径是 OpenAI（Chat Completions），/v1/responses 是 OpenAI Responses；
 //   - /v1/messages 下的路径，或带 anthropic-version 头（Anthropic SDK 每个请求都带）是 Anthropic；
 //   - 不带 Gemini 客户端 Key 头的 GET /v1/models（见 isOpenAIModelsRequest）是 OpenAI；
 //   - 其余是 Gemini。
@@ -150,6 +150,8 @@ func inboundProtocol(r *http.Request) string {
 	switch {
 	case strings.HasPrefix(r.URL.Path, "/v1/chat/"):
 		return store.ProtocolOpenAI
+	case strings.HasPrefix(r.URL.Path, "/v1/responses"):
+		return store.ProtocolOpenAIResponses
 	case strings.HasPrefix(r.URL.Path, "/v1/messages"), r.Header.Get("anthropic-version") != "":
 		return store.ProtocolAnthropic
 	case isOpenAIModelsRequest(r):
@@ -158,12 +160,12 @@ func inboundProtocol(r *http.Request) string {
 	return store.ProtocolGemini
 }
 
-// inboundError 按入站接口的格式写错误：Anthropic、OpenAI 接口用各自的错误格式，其余用 Gemini 的。
+// inboundError 按入站接口的格式写错误：Anthropic、OpenAI（两种接口同一格式）用各自的错误格式，其余用 Gemini 的。
 func inboundError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
 	switch inboundProtocol(r) {
 	case store.ProtocolAnthropic:
 		writeJSON(w, status, anthropic.ErrorBody(status, msg))
-	case store.ProtocolOpenAI:
+	case store.ProtocolOpenAI, store.ProtocolOpenAIResponses:
 		writeJSON(w, status, openai.ErrorBody(status, msg))
 	default:
 		geminiError(w, status, code, msg)

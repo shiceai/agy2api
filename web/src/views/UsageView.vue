@@ -95,7 +95,7 @@ interface DimFilter {
 }
 const status = ref<'all' | 'success' | 'error'>('all')
 const stream = ref<'all' | 'stream' | 'sync'>('all')
-const protocol = ref<'all' | 'gemini' | 'anthropic' | 'openai'>('all')
+const protocol = ref<'all' | 'gemini' | 'anthropic' | 'openai' | 'openai_responses'>('all')
 const dimFilters = ref<Partial<Record<Dimension, DimFilter>>>({})
 const activeDims = computed(() => (['model', 'account', 'apiKey'] as const).filter((d) => dimFilters.value[d]))
 const requestIdInput = ref('')
@@ -280,12 +280,13 @@ const clickable = 'cursor-pointer decoration-dotted underline-offset-2 hover:und
 const dimLabels: Record<Dimension, string> = { model: '模型', account: '账号', apiKey: '密钥' }
 const statusOptions = [{ value: 'all', label: '全部' }, { value: 'success', label: '成功' }, { value: 'error', label: '错误' }] as const
 const streamOptions = [{ value: 'all', label: '全部' }, { value: 'stream', label: '流式' }, { value: 'sync', label: '非流式' }] as const
-const protocolLabels: Record<string, string> = { gemini: 'Gemini', anthropic: 'Anthropic', openai: 'OpenAI' }
+const protocolLabels: Record<string, string> = { gemini: 'Gemini', anthropic: 'Anthropic', openai: 'OpenAI', openai_responses: 'OpenAI Responses' }
 const protocolOptions = [
   { value: 'all', label: '全部' },
   { value: 'gemini', label: 'Gemini' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'openai', label: 'OpenAI' },
+  { value: 'openai_responses', label: 'OpenAI Responses' },
 ] as const
 const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
 </script>

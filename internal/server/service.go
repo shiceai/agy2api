@@ -39,8 +39,8 @@ type Service struct {
 	upgrade *upgrade.Manager
 	// aliases 是生效的模型别名规则（见 modelalias.go），零值可用。
 	aliases modelAliases
-	// anthropicSystemAsUser 为真时把 Anthropic 入站客户端的 system 降为用户消息（见 anthropic_compat.go），默认开。
-	anthropicSystemAsUser atomic.Bool
+	// clientSystemAsUser 为真时把 Anthropic、Responses 入站客户端的 system 降为用户消息（见 anthropic_compat.go），默认开。
+	clientSystemAsUser atomic.Bool
 	// oauth 是进行中的 Google 登录会话，零值可用。
 	oauth oauthSessions
 	// bgStop、bg 控制服务自己的后台任务：代理定时测试（egress.go）、用量记录清理（retention.go）。

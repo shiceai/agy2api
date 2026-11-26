@@ -16,7 +16,7 @@ func anthropicHeaders(t *testing.T, srv *httptest.Server) map[string]string {
 
 func TestMessagesNonStream(t *testing.T) {
 	svc, _ := newTestService(t)
-	svc.anthropicSystemAsUser.Store(false) // 只测转换，不动 system
+	svc.clientSystemAsUser.Store(false) // 只测转换，不动 system
 	srv := httptest.NewServer(svc.Router())
 	defer srv.Close()
 	h := anthropicHeaders(t, srv)

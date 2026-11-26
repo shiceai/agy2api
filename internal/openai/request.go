@@ -345,16 +345,9 @@ func (c *converter) assistant(msg map[string]any, i int) ([]any, error) {
 
 // arguments 把工具调用的 arguments（JSON 字符串）解析成对象；解析不了时用空对象，不让一条坏历史拖垮整个请求。
 func (c *converter) arguments(v any) map[string]any {
-	s, _ := v.(string)
-	if strings.TrimSpace(s) == "" {
-		return map[string]any{}
-	}
-	dec := json.NewDecoder(strings.NewReader(s))
-	dec.UseNumber()
-	var args map[string]any
-	if err := dec.Decode(&args); err != nil || args == nil {
+	args, ok := decodeArguments(v)
+	if !ok {
 		c.drop("tool call arguments that are not a JSON object")
-		return map[string]any{}
 	}
 	return args
 }

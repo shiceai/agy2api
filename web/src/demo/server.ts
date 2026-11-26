@@ -263,21 +263,23 @@ function fakeRecord(at: number): UsageRecord {
   const price = ok ? priceOf(resolved) : null
   const nanos = price ? Math.round(((prompt - (cached ?? 0)) * price.price.input + (cached ?? 0) * (price.price.cache_read ?? price.price.input) + (output + (thoughts ?? 0)) * price.price.output) / 1000) : null
   const last = attempts.at(-1)
-  // Claude 的请求大约一半来自 Claude Code（Anthropic 接口），请求模型是官方名；其余约两成来自 OpenAI 兼容客户端
+  // Claude 的请求大约一半来自 Claude Code（Anthropic 接口），请求模型是官方名；其余约两成来自 OpenAI 兼容客户端，
+  // 一成多来自 Codex（Responses 接口）
+  const pick = rand()
   const origin = fam.startsWith('claude') && rand() < 0.5
     ? { protocol: 'anthropic' as const, request_model: `${fam}-20261015` }
-    : { protocol: rand() < 0.2 ? ('openai' as const) : ('gemini' as const), request_model: fam }
-  // 会话粘性的依据：Claude Code 带会话头（部分是子代理），OpenAI 客户端有的带 prompt_cache_key，其余按首条消息
+    : { protocol: pick < 0.2 ? ('openai' as const) : pick < 0.35 ? ('openai_responses' as const) : ('gemini' as const), request_model: fam }
+  // 会话粘性的依据：Claude Code 带会话头（部分是子代理），Codex 和部分 OpenAI 客户端带 prompt_cache_key，其余按首条消息
   const affinitySource = origin.protocol === 'anthropic'
     ? (rand() < 0.2 ? 'claude_code_agent' as const : 'claude_code' as const)
-    : origin.protocol === 'openai' && rand() < 0.3 ? 'prompt_cache_key' as const : 'first_message' as const
+    : origin.protocol === 'openai_responses' || (origin.protocol === 'openai' && rand() < 0.3) ? 'prompt_cache_key' as const : 'first_message' as const
   return {
     id: nextUsageId++, request_id: hex(16), api_key_id: keyId, account_id: ok && last ? last.account_id : 0,
     ...origin,
     resolved_model: resolved, upstream_model: resolved, reasoning: tier,
     prompt_tokens: ok ? prompt : 0, output_tokens: output, cached_tokens: cached, thoughts_tokens: thoughts, total_tokens: totalTokens,
     status_code: status, stream, first_token_ms: stream && ok ? header + between(20, 400) : null, latency_ms: ok ? total : between(40, 3000),
-    created_at: at, client_ip: ip, user_agent: ua,
+    created_at: at, client_ip: ip, user_agent: origin.protocol === 'openai_responses' ? 'codex_cli_rs/0.172.0 (Mac OS 15.5.0; arm64) iTerm.app/3.5.14' : ua,
     detail: {
       timings: ok ? { acquire_ms: 0, token_ms: 0, header_ms: header, upstream_ms: total - 30, ...(stream ? { first_event_ms: header + 5, first_text_ms: header + 120 } : {}) } : undefined,
       slot: ok ? { in_use: between(1, 3), limit: 15 } : undefined,

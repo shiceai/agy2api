@@ -20,7 +20,7 @@ import (
 // （转换见 internal/anthropic）。
 
 // readAnthropicRequest 读取并转换 Messages 请求体，失败时已写回 413 或 400。
-// 开启 Anthropic 兼容（默认）时把客户端 system 降为开头的用户消息（见 anthropic_compat.go）。
+// 开启客户端兼容（默认）时把客户端 system 降为开头的用户消息（见 anthropic_compat.go）。
 func (s *Service) readAnthropicRequest(w http.ResponseWriter, r *http.Request, countOnly bool) (*anthropic.Request, bool) {
 	body, err := readRequestBody(w, r, inboundBodyLimit)
 	switch {
@@ -40,7 +40,7 @@ func (s *Service) readAnthropicRequest(w http.ResponseWriter, r *http.Request, c
 		// Claude Code 每个请求都带 web_search 等服务端工具，记 debug，不刷屏。
 		slog.DebugContext(r.Context(), "Messages 请求里有上游不支持的内容，已去掉", "dropped", req.Dropped)
 	}
-	if s.anthropicSystemAsUser.Load() {
+	if s.clientSystemAsUser.Load() {
 		antigravity.MoveSystemToUser(req.Body)
 	}
 	return req, true

@@ -23,9 +23,10 @@ type geminiResponse struct {
 }
 
 type geminiPart struct {
-	Text         string `json:"text"`
-	Thought      bool   `json:"thought"`
-	FunctionCall *struct {
+	Text             string `json:"text"`
+	Thought          bool   `json:"thought"`
+	ThoughtSignature string `json:"thoughtSignature"`
+	FunctionCall     *struct {
 		ID   string          `json:"id"`
 		Name string          `json:"name"`
 		Args json.RawMessage `json:"args"`
@@ -82,13 +83,18 @@ func finishReason(finish string, toolUse bool) string {
 
 // toolCall 是 OpenAI 的一个工具调用。arguments 是 JSON 字符串，压成一行（上游非流式的参数带缩进）。
 func toolCall(p geminiPart) map[string]any {
-	args := argsOrEmpty(p.FunctionCall.Args)
+	return map[string]any{"id": toolID(p.FunctionCall.ID), "type": "function",
+		"function": map[string]any{"name": p.FunctionCall.Name, "arguments": compactArgs(p.FunctionCall.Args)}}
+}
+
+// compactArgs 把工具参数压成一行 JSON 字符串，缺省时是空对象。
+func compactArgs(raw json.RawMessage) string {
+	args := argsOrEmpty(raw)
 	var buf bytes.Buffer
 	if json.Compact(&buf, args) == nil {
-		args = buf.Bytes()
+		return buf.String()
 	}
-	return map[string]any{"id": toolID(p.FunctionCall.ID), "type": "function",
-		"function": map[string]any{"name": p.FunctionCall.Name, "arguments": string(args)}}
+	return string(args)
 }
 
 // ConvertResponse 把非流式 Gemini 响应转成 chat.completion。model 原样回传客户端请求的模型名。

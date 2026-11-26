@@ -23,7 +23,7 @@
 
 <p align="center">简体中文 | <a href="README_EN.md">English</a></p>
 
-管理多个 Antigravity 账号，负责选号、冷却恢复、失败换号和额度避让，对外提供 Gemini 原生 `v1beta`、Anthropic Messages 和 OpenAI Chat Completions 接口（Claude Code、OpenAI SDK 等可直接接入），自带管理端。
+管理多个 Antigravity 账号，负责选号、冷却恢复、失败换号和额度避让，对外提供 Gemini 原生 `v1beta`、Anthropic Messages、OpenAI Chat Completions 和 Responses 接口（Claude Code、Codex、OpenAI SDK 等可直接接入），自带管理端。
 
 > **风险提示**：本项目经 Antigravity 账号访问 Google Cloud Code 的内部接口，这种用法可能违反 Google 的服务条款，
 > 账号可能被限制或封禁，已付费的订阅不会因此退款。仅供学习和技术研究，风险自负。
@@ -32,8 +32,8 @@
 
 - **Gemini 原生接口**：`generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，可直接用 `google-genai` 等 SDK
 - **Anthropic 接口**：`/v1/messages`（流式和非流式）和 `count_tokens`，Claude Code 等客户端可以直接接入；官方模型名按模型别名映射到号池里的模型
-- **OpenAI 接口**：`/v1/chat/completions`（流式和非流式）和模型列表，支持工具调用、图片、思考内容和结构化输出，OpenAI SDK、Cherry Studio 等客户端可以直接接入
-- **号池调度**：按账号和模型冷却，失败自动换号，额度低的账号避让，同一对话优先用同一账号（认 Claude Code 的会话头和
+- **OpenAI 接口**：`/v1/chat/completions`、`/v1/responses`（都支持流式）和模型列表，支持工具调用、图片、思考内容和结构化输出，OpenAI SDK、Cherry Studio、Codex 等客户端可以直接接入
+- **号池调度**：按账号和模型冷却，失败自动换号，额度低的账号避让，同一对话优先用同一账号（认 Claude Code、Codex 的会话和
   `X-Session-Id`），每个账号有并发上限
 - **账号管理**：Google 登录添加或批量导入，令牌自动刷新，失效自动停用，可单独检测
 - **出口代理**：每个账号绑定固定的出口代理（http、https、socks5）
@@ -48,7 +48,7 @@
 flowchart LR
     client["Gemini 客户端<br/>google-genai 等"] -->|Gemini v1beta| auth
     claude["Claude Code 等<br/>Anthropic 客户端"] -->|Anthropic Messages| auth
-    openai["OpenAI SDK 等<br/>OpenAI 客户端"] -->|OpenAI Chat Completions| auth
+    openai["OpenAI SDK、Codex 等<br/>OpenAI 客户端"] -->|OpenAI Chat Completions / Responses| auth
     subgraph gw["AGY2API"]
         auth["API Key 鉴权与限额"] --> pool["号池调度<br/>冷却 · 换号 · 额度避让"]
         pool -.-> usage["用量与费用记录"]
@@ -100,9 +100,30 @@ claude
   Haiku 默认映射到 `claude-sonnet-5-5-low`，可以在管理端"设置 → 模型别名"里改。
 - 也可以直接用号池里的其它模型，包括 Gemini，如 `claude --model gemini-3-flash`。
 - Antigravity 上的 Claude 不返回思考过程，Claude Code 里看不到思考内容；Anthropic 的服务端工具（如 WebSearch）不支持。
-- **Claude Code 兼容（默认开）**：上游会识别写在系统提示里的 Claude Code 等客户端特征，返回伪装成额度耗尽的 429。
+- **客户端兼容（默认开）**：上游会识别写在系统提示里的 Claude Code、Codex 等客户端特征，返回伪装成额度耗尽的 429。
   网关默认把客户端的 system 降为开头的一条用户消息（上游只检查系统提示、不看对话内容）即可放行，代价是客户端 system
-  从 system 级降到 user 级、可能略改模型遵循方式。可在"设置 → 模型别名 → Claude Code 兼容"里关掉。
+  从 system 级降到 user 级、可能略改模型遵循方式。可在"设置 → 模型别名 → 客户端兼容"里关掉。
+
+## 在 Codex 中使用
+
+在管理端"密钥"页新建一个 API Key，放进环境变量 `AGY2API_KEY`，然后在 `~/.codex/config.toml` 里加一个服务商：
+
+```toml
+model = "gemini-3-flash"
+model_provider = "agy2api"
+
+[model_providers.agy2api]
+name = "AGY2API"
+base_url = "http://127.0.0.1:8249/v1"
+env_key = "AGY2API_KEY"
+wire_api = "responses"
+```
+
+- 模型用号池里的模型，也可以临时换，如 `codex -m claude-sonnet-5-5-medium`。Codex 不认识这些模型名，启动时提示
+  "Model metadata ... not found"，不影响使用。
+- 同一个 Codex 会话优先用同一个账号（按会话 ID 认对话）。
+- Codex 的系统提示同样会被上游拦截，上面的"客户端兼容"对 Codex 也生效。
+- Codex 的内置网页搜索（`web_search`）上游没有对应，会被去掉。
 
 ## 在 OpenAI 兼容客户端中使用
 
@@ -123,7 +144,9 @@ print(resp.choices[0].message.content)
   `reasoning_effort`。客户端用的模型名不在号池里时，可以在"设置 → 模型别名"里加规则映射。
 - 思考内容放在 `reasoning_content` 字段（不是 OpenAI 的标准字段，Cherry Studio 等客户端会显示），可以在"设置 → 请求处理"里关掉。
 - `response_format` 的 `json_schema` 对 Gemini 模型生效；`json_object` 上游不强制，靠提示词；Claude 模型不支持结构化输出（上游报 400）。
-- 不支持：Responses 接口、`n` 大于 1、用 Files API 上传的文件（`file_id`）。
+- Responses 接口（`/v1/responses`）不存响应：每轮要带上完整对话，`previous_response_id`、`background` 不支持（返回 400）。
+  思考放在 reasoning 条目的摘要里；`include` 里要了 `reasoning.encrypted_content` 时带上思考签名，下一轮原样传回即可。
+- 不支持：`n` 大于 1、用 Files API 上传的文件（`file_id`）。
 
 ## 升级
 

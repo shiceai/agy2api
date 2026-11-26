@@ -335,7 +335,7 @@ type Request struct {
 	Model string
 	// RequestModel 是客户端请求的原始模型名，记进用量；为空时同 Model。
 	RequestModel string
-	// Protocol 是入站接口（store.ProtocolGemini、ProtocolAnthropic、ProtocolOpenAI），记进用量；为空按 Gemini。
+	// Protocol 是入站接口（store.ProtocolGemini 等），记进用量；为空按 Gemini。
 	Protocol string
 	// Body 是 Gemini 原生请求体（contents、tools、generationConfig 等）。
 	Body     map[string]any
