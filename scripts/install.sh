@@ -9,6 +9,7 @@
 #   ... | sudo bash -s -- --dir /opt/agy2api      装到指定目录
 #   ... | sudo bash -s -- --version v1.5.0        安装指定版本
 #   ... | sudo bash -s -- --listen 0.0.0.0:8249   不经反向代理直接对外（只在首次安装、生成配置时生效）
+#   ... | sudo bash -s -- --listen 127.0.0.1:8249,10.8.0.1:8249   同时在本机和内网（如 WireGuard）地址上监听
 #   ... | bash -s -- --docker                     用 Docker Compose 部署，不装程序
 #   ... | sudo bash -s -- --uninstall             停掉并删除服务（Docker 方式是删除容器），目录里的配置和数据保留
 #
@@ -58,7 +59,8 @@ agy2api 一键安装
 选项（放在 bash -s -- 后面）：
   --dir 路径          安装目录，默认当前目录下的 agy2api；升级、卸载时会自己找到原来的目录
   --version vX.Y.Z   安装指定版本，默认最新正式版
-  --listen 地址       监听地址，默认 127.0.0.1:8249（只在本机，由反向代理对外提供 HTTPS）
+  --listen 地址       监听地址，默认 127.0.0.1:8249（只在本机，由反向代理对外提供 HTTPS）；
+                     多个用逗号分隔，如 127.0.0.1:8249,10.8.0.1:8249（Docker 方式只能一个）
   --docker           用 Docker Compose 部署（不装程序）
   --uninstall        卸载：停掉并删除服务或容器，目录里的配置和数据保留
   -h, --help         显示这段说明
@@ -101,8 +103,18 @@ done
 if [ -n "$version" ] && [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
   die "版本号格式不对：$version（应为 v1.5.0 这样）"
 fi
-if [ -n "$listen" ] && [[ ! "$listen" =~ ^(\[[0-9A-Fa-f:]+\]|[0-9A-Za-z.-]*):[0-9]{1,5}$ ]]; then
-  die "监听地址格式不对：$listen（应为 0.0.0.0:8249、127.0.0.1:8249 或 :8249）"
+if [ -n "$listen" ]; then
+  listen="${listen// /}"
+  IFS=, read -ra listen_list <<<"$listen"
+  [ "${#listen_list[@]}" -gt 0 ] || die "--listen 后面要写地址，如 0.0.0.0:8249"
+  for a in "${listen_list[@]}"; do
+    if [[ ! "$a" =~ ^(\[[0-9A-Fa-f:]+\]|[0-9A-Za-z.-]*):[0-9]{1,5}$ ]]; then
+      die "监听地址格式不对：$a（应为 0.0.0.0:8249、127.0.0.1:8249 或 :8249，多个用逗号分隔）"
+    fi
+  done
+  if [ "$mode" = docker ] && [ "${#listen_list[@]}" -gt 1 ]; then
+    die "Docker 方式只能写一个监听地址；其他地址在 compose.yaml 旁边的 compose.override.yaml 里加端口映射，见 deploy.md"
+  fi
 fi
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -142,9 +154,17 @@ http_ok() {
   fi
 }
 
-# wait_healthy 等服务的 /healthz 通过，最多 30 秒。$1 是监听地址，0.0.0.0 和空主机按本机访问。
+# first_addr 取监听地址列表（逗号分隔）里的第一个，去掉空格。
+first_addr() {
+  local a="${1// /}"
+  echo "${a%%,*}"
+}
+
+# wait_healthy 等服务的 /healthz 通过，最多 30 秒。$1 是监听地址（多个时用第一个），0.0.0.0 和空主机按本机访问。
 wait_healthy() {
-  local host="${1%:*}" port="${1##*:}"
+  local addr
+  addr=$(first_addr "$1")
+  local host="${addr%:*}" port="${addr##*:}"
   case "$host" in "" | 0.0.0.0 | "[::]") host=127.0.0.1 ;; esac
   local url="http://$host:$port/healthz"
   for _ in $(seq 1 30); do
@@ -283,22 +303,60 @@ write_env() {
   )
 }
 
-# show_access 打印管理端地址、首次生成的口令和对外访问的提示。$1 是监听地址，$2 是配置文件。
+# show_access 打印管理端地址（每个监听地址一行）和首次生成的口令。$1 是监听地址（逗号分隔），$2 是配置文件。
 show_access() {
-  local addr="$1" host="${1%:*}"
-  case "$host" in "" | 0.0.0.0 | "[::]") host=服务器IP ;; esac
-  echo "  管理端：http://$host:${addr##*:}"
+  local a host
+  local -a list
+  IFS=, read -ra list <<<"${1// /}"
+  for a in "${list[@]}"; do
+    host="${a%:*}"
+    case "$host" in "" | 0.0.0.0 | "[::]") host=服务器IP ;; esac
+    echo "  管理端：http://$host:${a##*:}"
+  done
   [ -z "$password" ] || echo "  管理口令：$password（只显示这一次，之后可以在 $2 里查看）"
 }
 
-show_listen_hint() {
-  case "${1%:*}" in
-    127.0.0.1 | localhost | "[::1]")
-      echo "默认只在本机监听。对外提供服务请在前面放 HTTPS 反向代理（Caddy、nginx），见 deploy.md；"
-      echo "远程服务器上可以先用 SSH 隧道打开管理端：ssh -L 8249:127.0.0.1:${1##*:} <服务器>"
-      ;;
-    *) warn "现在直接对外监听，管理口令和 API Key 会以明文在网络上传输；正式使用请改回本机监听，前面放 HTTPS 反向代理" ;;
+# addr_kind 判断一个监听地址：loopback（只在本机）、private（内网，含 WireGuard、Tailscale 常用的网段）、
+# public（所有网卡或公网地址）。
+addr_kind() {
+  local host="${1%:*}"
+  host="${host#[}"
+  host="${host%]}"
+  case "$host" in
+    127.* | localhost | ::1) echo loopback ;;
+    "" | 0.0.0.0 | ::) echo public ;;
+    10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[01].*) echo private ;;
+    100.6[4-9].* | 100.[7-9][0-9].* | 100.1[01][0-9].* | 100.12[0-7].*) echo private ;;
+    fc* | fd* | FC* | FD*) echo private ;;
+    *) echo public ;;
   esac
+}
+
+# show_listen_hint 按监听地址给提示：对外的警告明文传输，内网的说明谁能访问，只在本机的提示反向代理和 SSH 隧道。
+show_listen_hint() {
+  local a loopback="" private="" public=""
+  local -a list
+  IFS=, read -ra list <<<"${1// /}"
+  for a in "${list[@]}"; do
+    case "$(addr_kind "$a")" in
+      loopback) loopback="$a" ;;
+      private) private="${private:+$private, }$a" ;;
+      *) public="${public:+$public, }$a" ;;
+    esac
+  done
+  if [ -n "$public" ]; then
+    warn "现在直接对外监听（$public），管理口令和 API Key 会以明文在网络上传输；正式使用请改回本机或内网监听，前面放 HTTPS 反向代理"
+    return
+  fi
+  if [ -n "$private" ]; then
+    echo "在内网地址上监听（$private），同一内网（如 WireGuard）里的机器可以直接访问；"
+    echo "管理端可以用 AGY2API_ADMIN_ALLOW 只允许内网网段，开机时要等内网网卡起来再启动，见 deploy.md。"
+  fi
+  if [ -n "$loopback" ]; then
+    [ -n "$private" ] || echo -n "默认只在本机监听。"
+    echo "对外提供服务请在前面放 HTTPS 反向代理（Caddy、nginx），见 deploy.md；"
+    echo "远程服务器上可以先用 SSH 隧道打开管理端：ssh -L 8249:127.0.0.1:${loopback##*:} <服务器>"
+  fi
 }
 
 # install_program 把程序装进安装目录，原来的程序备份成 agy2api.old。$1、$2 是所有者和组（为空时不改）。

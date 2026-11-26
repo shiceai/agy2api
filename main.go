@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -101,7 +102,6 @@ func run(cfg config.Config) (restart bool) {
 	}
 
 	srv := &http.Server{
-		Addr:              cfg.Addr,
 		Handler:           svc.Router(),
 		ReadHeaderTimeout: 15 * time.Second,
 		// 不设 IdleTimeout 时，ReadTimeout 为 0 的 keep-alive 空闲连接永不超时。
@@ -110,18 +110,28 @@ func run(cfg config.Config) (restart bool) {
 		// 请求体大小由 MaxBytesReader 限制，上游调用按请求 ctx 控制截止时间。
 	}
 
-	ln, err := net.Listen("tcp", cfg.Addr)
-	if err != nil {
-		fatal("监听失败", "addr", cfg.Addr, "err", err)
+	// 每个地址各开一个监听，共用同一个服务；有一个监听不了就不启动（只绑上一部分时，漏掉的地址不好发现）。
+	listeners := make([]net.Listener, 0, len(cfg.Addrs))
+	for _, addr := range cfg.Addrs {
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			for _, l := range listeners {
+				_ = l.Close()
+			}
+			fatal("监听失败", "addr", addr, "err", err)
+		}
+		listeners = append(listeners, ln)
 	}
-	slog.Info("agy2api 监听", "version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir)
+	slog.Info("agy2api 监听", "version", version, "addr", strings.Join(cfg.Addrs, ", "), "data_dir", cfg.DataDir)
 	// 能监听了才算在线升级的程序正常启动；之前退出的都计入启动失败次数。
 	upgrade.Confirm(cfg.DataDir)
-	go func() {
-		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fatal("服务退出", "err", err)
-		}
-	}()
+	for _, ln := range listeners {
+		go func() {
+			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fatal("服务退出", "addr", ln.Addr().String(), "err", err)
+			}
+		}()
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

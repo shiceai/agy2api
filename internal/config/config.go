@@ -13,9 +13,10 @@ import (
 
 // Config 是进程级运行配置。
 type Config struct {
-	// Addr 是 HTTP 监听地址，默认 :8249：避开 8080 这类常用端口和同类工具的端口（8045、8317、7861），
+	// Addrs 是 HTTP 监听地址，AGY2API_ADDR 里逗号分隔可写多个（如本机加 WireGuard 内网地址），去重，
+	// 至少一个。默认 :8249：避开 8080 这类常用端口和同类工具的端口（8045、8317、7861），
 	// 249 是 AGY 在电话键盘上的位置，好记。
-	Addr string
+	Addrs []string
 	// DataDir 存放 SQLite 数据库与自动生成的加密密钥。
 	DataDir string
 	// AdminPassword 保护管理端；为空则管理端拒绝启动（除非 AllowNoAdminAuth）。
@@ -66,7 +67,7 @@ type Config struct {
 // Load 读取环境变量构造 Config。
 func Load() Config {
 	return Config{
-		Addr:             env("AGY2API_ADDR", ":8249"),
+		Addrs:            listenAddrs(os.Getenv("AGY2API_ADDR")),
 		DataDir:          env("AGY2API_DATA_DIR", "./data"),
 		AdminPassword:    os.Getenv("AGY2API_ADMIN_PASSWORD"),
 		AllowNoAdminAuth: boolEnv("AGY2API_ALLOW_NO_ADMIN_AUTH"),
@@ -118,6 +119,25 @@ func AdminPasswordWeakness(pw string) string {
 		return "只有一类字符"
 	}
 	return ""
+}
+
+// DefaultAddr 是没设置 AGY2API_ADDR（或只有空项）时的监听地址。
+const DefaultAddr = ":8249"
+
+// listenAddrs 解析 AGY2API_ADDR：逗号分隔，去掉空项和重复项，一个都没有时用 DefaultAddr。
+func listenAddrs(raw string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, a := range strings.Split(raw, ",") {
+		if a = strings.TrimSpace(a); a != "" && !seen[a] {
+			seen[a] = true
+			out = append(out, a)
+		}
+	}
+	if len(out) == 0 {
+		return []string{DefaultAddr}
+	}
+	return out
 }
 
 // listEnv 读逗号分隔的列表，去掉空项；没设置时用 def。

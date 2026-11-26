@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAdminPasswordWeakness(t *testing.T) {
 	cases := []struct {
@@ -21,6 +24,21 @@ func TestAdminPasswordWeakness(t *testing.T) {
 	for _, c := range cases {
 		if got := AdminPasswordWeakness(c.pw) != ""; got != c.weak {
 			t.Errorf("AdminPasswordWeakness(%q) 弱=%v，应为 %v（%q）", c.pw, got, c.weak, AdminPasswordWeakness(c.pw))
+		}
+	}
+}
+
+// AGY2API_ADDR 可写多个地址：逗号分隔，去掉空格、空项和重复项；没有地址时用默认值。
+func TestListenAddrs(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{"", ":8249"},
+		{" , ,", ":8249"},
+		{"127.0.0.1:8249", "127.0.0.1:8249"},
+		{" 127.0.0.1:8249 , 10.8.0.1:8249,,127.0.0.1:8249 ", "127.0.0.1:8249|10.8.0.1:8249"},
+		{"[::1]:8249,:9000", "[::1]:8249|:9000"},
+	} {
+		if got := strings.Join(listenAddrs(tc.raw), "|"); got != tc.want {
+			t.Errorf("listenAddrs(%q) = %q, want %q", tc.raw, got, tc.want)
 		}
 	}
 }

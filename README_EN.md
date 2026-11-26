@@ -198,7 +198,7 @@ Common environment variables, set in `.env`; see the [deployment guide](docs/dep
 | Variable | Description | Default |
 | --- | --- | --- |
 | `AGY2API_ADMIN_PASSWORD` | Admin password, required | — |
-| `AGY2API_ADDR` | Listen address | `:8249` |
+| `AGY2API_ADDR` | Listen address; separate several with commas (such as localhost plus a WireGuard address) | `:8249` |
 | `AGY2API_DATA_DIR` | Data directory (database and encryption key) | `./data` |
 | `AGY2API_ADMIN_ALLOW` | Only these IPs may access the admin console (IPs or CIDRs, comma-separated) | No restriction |
 | `AGY2API_TRUSTED_PROXIES` | Trusted reverse proxies; the client IP is taken only from what they forward | Loopback and private addresses |

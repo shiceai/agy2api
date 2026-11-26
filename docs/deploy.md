@@ -143,6 +143,43 @@ server {
 - 客户端用 `?key=` 传 API Key 时，反代的访问日志默认会记下带 Key 的完整地址。让客户端改用请求头
   （`x-goog-api-key` 或 `Authorization: Bearer`），或者把反代的日志格式改成不记查询串（nginx 用 `$uri` 代替 `$request`）。
 
+## 内网访问（如 WireGuard）
+
+机器之间组了内网（WireGuard、Tailscale 等）时，可以让网关同时在本机和内网地址上监听：本机的反向代理照常对外，内网里的
+机器直接访问内网地址。`AGY2API_ADDR` 写多个地址，用逗号分隔：
+
+```bash
+AGY2API_ADDR=127.0.0.1:8249,10.8.0.1:8249   # 10.8.0.1 换成本机的内网地址
+```
+
+- 每个地址各开一个监听，共用同一个服务；有一个地址监听不了，服务就不启动，日志里写明是哪个地址。
+- 只要内网访问的话，只写内网地址也行：本机的反向代理连这个地址照样通（本机进程能访问本机任意网卡上的地址）。
+- 开机时内网网卡要先起来，否则监听失败、服务反复重启；在线升级的新程序连续 3 次没能开始监听还会被当成起不来、
+  退回原来的版本。systemd 里加上启动顺序（WireGuard 的服务名按实际的写）：
+
+  ```bash
+  sudo systemctl edit agy2api
+  # 写入：
+  # [Unit]
+  # After=wg-quick@wg0.service
+  # Wants=wg-quick@wg0.service
+  ```
+
+- Docker 方式的 `.env` 里 `AGY2API_BIND` 是端口映射，只能写一个地址；要多监听一个，在 `compose.yaml` 旁边建
+  `compose.override.yaml`（`docker compose` 会自动合并，再次运行安装脚本也不会动它），然后 `docker compose up -d`：
+
+  ```yaml
+  services:
+    agy2api:
+      ports:
+        - "10.8.0.1:8249:8249"
+  ```
+
+  Docker 先于内网网卡启动时容器会起不来，`restart: unless-stopped` 会自动重试，网卡起来后就正常了。
+- 不建议改成监听所有地址（`0.0.0.0`）再靠防火墙挡公网：防火墙配错时 8249 就以明文对公网开放，而且 Docker 的端口映射
+  会绕过 ufw 的规则。
+- 管理端可以用 `AGY2API_ADMIN_ALLOW` 只允许内网网段，如 `10.8.0.0/24`（见下一节）。
+
 ## 客户端 IP 和管理端访问限制
 
 客户端 IP 用于访问日志、用量记录和管理端白名单。
@@ -231,7 +268,7 @@ Docker 是 `docker compose up -d`，`run.sh` 重新运行。
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `AGY2API_ADMIN_PASSWORD` | 管理口令，必填 | — |
-| `AGY2API_ADDR` | 监听地址 | `:8249` |
+| `AGY2API_ADDR` | 监听地址，多个用逗号分隔（如 `127.0.0.1:8249,10.8.0.1:8249`，见"内网访问"） | `:8249` |
 | `AGY2API_DATA_DIR` | 数据目录（SQLite 库和凭据加密密钥） | `./data` |
 | `AGY2API_ADMIN_ALLOW` | 只允许这些客户端 IP 访问管理端（接口和页面），逗号分隔的 IP 或 CIDR；网关接口不受限 | 不限 |
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理（IP 或 CIDR）：只有直连的对端在其中时才按 `X-Forwarded-For`、`X-Real-IP` 取客户端 IP；`none` 都不信 | 回环和内网地址 |

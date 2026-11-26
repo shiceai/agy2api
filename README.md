@@ -169,7 +169,7 @@ print(resp.choices[0].message.content)
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `AGY2API_ADMIN_PASSWORD` | 管理口令，必填 | — |
-| `AGY2API_ADDR` | 监听地址 | `:8249` |
+| `AGY2API_ADDR` | 监听地址，多个用逗号分隔（如本机加 WireGuard 内网地址） | `:8249` |
 | `AGY2API_DATA_DIR` | 数据目录（数据库和加密密钥） | `./data` |
 | `AGY2API_ADMIN_ALLOW` | 只允许这些 IP 访问管理端（IP 或 CIDR，逗号分隔） | 不限 |
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理，只认它们转发来的客户端 IP | 回环和内网地址 |
