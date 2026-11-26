@@ -203,7 +203,7 @@ Common environment variables, set in `.env`; see the [deployment guide](docs/dep
 | `AGY2API_ADMIN_ALLOW` | Only these IPs may access the admin console (IPs or CIDRs, comma-separated) | No restriction |
 | `AGY2API_TRUSTED_PROXIES` | Trusted reverse proxies; the client IP is taken only from what they forward | Loopback and private addresses |
 | `AGY2API_LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | `info` |
-| `AGY2API_UPDATE` | Online upgrade: check for new releases daily; `off` turns it off (no calls to GitHub) | On |
+| `AGY2API_UPDATE` | Online upgrade: check for new releases daily and when the admin UI is opened; `off` turns it off (no calls to GitHub) | On |
 
 ## Build from source
 

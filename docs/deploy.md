@@ -216,8 +216,8 @@ AGY2API_ADDR=127.0.0.1:8249,10.8.0.1:8249   # 10.8.0.1 换成本机的内网地�
 
 点管理端侧边栏的版本号（手机上是设置页底部的版本号），弹窗里显示 GitHub 上最新的正式版和更新内容，可以一键升级。
 
-- 服务每天查一次 GitHub Releases（`api.github.com`），有新版本时侧边栏的版本号变成绿色并带向上箭头，手机顶栏出现升级图标。
-  只看正式版，不看预发布版本。
+- 服务每天查一次 GitHub Releases（`api.github.com`），打开管理端或从后台切回管理端时也会查（10 分钟内最多一次）；
+  有新版本时侧边栏的版本号变成绿色并带向上箭头，手机顶栏出现升级图标。只看正式版，不看预发布版本。
 - 升级时下载当前平台的压缩包，按 `SHA256SUMS.txt` 校验，再运行一次新程序核对版本号；把数据库备份到数据目录的
   `backups/agy2api-before-<版本>.db`（只留最近一份），然后把新程序放进数据目录的 `upgrade/`，服务原地重启换成它：
   进程号不变，中断几秒，进行中的请求先完成。
@@ -274,7 +274,7 @@ Docker 是 `docker compose up -d`，`run.sh` 重新运行。
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理（IP 或 CIDR）：只有直连的对端在其中时才按 `X-Forwarded-For`、`X-Real-IP` 取客户端 IP；`none` 都不信 | 回环和内网地址 |
 | `AGY2API_ENCRYPTION_KEY` | 凭据加密密钥；留空时在数据目录生成 `agy2api.key` | 自动生成 |
 | `AGY2API_LOG_LEVEL` | 日志级别：`debug`、`info`、`warn`、`error`（debug 会记每次选号和上游响应） | `info` |
-| `AGY2API_UPDATE` | 在线升级：每天查一次新版本，管理端可以一键升级（见"在线升级"）；`off` 关闭 | 开启 |
+| `AGY2API_UPDATE` | 在线升级：每天和打开管理端时查新版本，管理端可以一键升级（见"在线升级"）；`off` 关闭 | 开启 |
 | `AGY2API_PRICE_SYNC` | 每天从官方价格页同步模型价格，用来估算用量的费用；`off` 关闭（只用已同步的价格和手动设的价格） | 开启 |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` | 全局出口代理：没绑代理的账号和价格同步走它；账号单独绑的代理在管理端"代理"页配置 | 不设 |
 | `AGY2API_UPSTREAM_BASES` | 上游基址（逗号分隔，按顺序回退），一般不用改 | 内置 |

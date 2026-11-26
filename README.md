@@ -174,7 +174,7 @@ print(resp.choices[0].message.content)
 | `AGY2API_ADMIN_ALLOW` | 只允许这些 IP 访问管理端（IP 或 CIDR，逗号分隔） | 不限 |
 | `AGY2API_TRUSTED_PROXIES` | 可信的反向代理，只认它们转发来的客户端 IP | 回环和内网地址 |
 | `AGY2API_LOG_LEVEL` | 日志级别：`debug`、`info`、`warn`、`error` | `info` |
-| `AGY2API_UPDATE` | 在线升级：每天查一次新版本；`off` 关闭（不连 GitHub） | 开启 |
+| `AGY2API_UPDATE` | 在线升级：每天和打开管理端时查新版本；`off` 关闭（不连 GitHub） | 开启 |
 
 ## 从源码构建
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/shiceai/agy2api/internal/config"
@@ -33,13 +34,15 @@ func TestSystemDevBuild(t *testing.T) {
 	}
 }
 
-// 查到新版本后，版本页和侧边栏用的 session 都带上它。
+// 查到新版本后，版本页和侧边栏用的 session 都带上它；自动检查（auto=1）10 分钟内查过就不再连 GitHub。
 func TestSystemCheckUpdate(t *testing.T) {
+	var fetches atomic.Int32
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/repos/"+upgrade.Repo+"/releases/latest" {
 			http.NotFound(w, r)
 			return
 		}
+		fetches.Add(1)
 		_, _ = w.Write([]byte(`{"tag_name":"v0.2.0","body":"- **新功能。**","html_url":"https://github.com/shiceai/agy2api/releases/tag/v0.2.0","assets":[]}`))
 	}))
 	defer gh.Close()
@@ -50,12 +53,15 @@ func TestSystemCheckUpdate(t *testing.T) {
 	defer srv.Close()
 
 	var v systemView
-	resp := doReq(t, srv, http.MethodPost, "/api/admin/system/check", nil, "")
+	resp := doReq(t, srv, http.MethodPost, "/api/admin/system/check?auto=1", nil, "")
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		t.Fatal(err)
 	}
 	if !v.CanCheck || !v.UpdateAvailable || v.Latest == nil || v.Latest.Version != "v0.2.0" || v.CheckError != "" {
 		t.Fatalf("view = %+v", v)
+	}
+	if resp := doReq(t, srv, http.MethodPost, "/api/admin/system/check?auto=1", nil, ""); resp.StatusCode != http.StatusOK || fetches.Load() != 1 {
+		t.Fatalf("刚查过时自动检查不应再连 GitHub：%d，查了 %d 次", resp.StatusCode, fetches.Load())
 	}
 	var s sessionView
 	resp = doReq(t, srv, http.MethodGet, "/api/admin/session", nil, "")

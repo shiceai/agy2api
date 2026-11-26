@@ -5,7 +5,7 @@ import { ArrowUp, ChevronsLeft, ChevronsRight, LogOut } from '@lucide/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
 import { appName } from '@/lib/brand'
-import { openVersionDialog, useVersion } from '@/lib/version'
+import { openVersionDialog, useAutoUpdateCheck, useVersion } from '@/lib/version'
 import GitHubIcon from './GitHubIcon.vue'
 import IconAction from './IconAction.vue'
 import LogoMark from './LogoMark.vue'
@@ -26,6 +26,7 @@ import {
 const route = useRoute()
 const logout = useLogout()
 const version = useVersion()
+useAutoUpdateCheck()
 const { state, toggleSidebar } = useSidebar()
 // 收起按钮的说明带上快捷键（Mac 上是 ⌘B）。
 const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘B' : 'Ctrl+B'

@@ -5,7 +5,7 @@ import { toast } from 'vue-sonner'
 import { api, errorMessage, fetchSession, type SystemView, type UpgradeState } from '@/api/client'
 import { useConfirm } from '@/lib/confirm'
 import { toastError } from '@/lib/toast'
-import { setUpdate, versionDialogOpen } from '@/lib/version'
+import { AUTO_CHECK_INTERVAL, checkUpdate, setUpdate, versionDialogOpen } from '@/lib/version'
 import { fmtAgo, fmtTime } from '@/lib/utils'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,6 @@ const acting = ref(false)
 const waiting = ref('')
 let timer: ReturnType<typeof setTimeout> | undefined
 
-const HOUR = 3_600_000
 const RESTART_TIMEOUT = 90_000
 const working: (UpgradeState | undefined)[] = ['downloading', 'verifying', 'backing_up']
 const busy = computed(() => !!waiting.value || working.includes(view.value?.progress.state) || view.value?.progress.state === 'restarting')
@@ -35,7 +34,7 @@ function apply(v: SystemView) {
   setUpdate(v.update_available ? v.latest?.version : undefined)
 }
 
-// 每次打开都重新读一次；升级进行中时接着轮询，距上次检查超过 1 小时就自动查一次。
+// 每次打开都重新读一次；升级进行中时接着轮询，距上次检查超过自动检查的间隔就查一次。
 watch(versionDialogOpen, async (open) => {
   if (!open || busy.value) return
   loadError.value = ''
@@ -48,13 +47,13 @@ watch(versionDialogOpen, async (open) => {
   const v = view.value!
   if (working.includes(v.progress.state)) poll()
   else if (v.progress.state === 'restarting') waitFor(v.progress.target ?? '', `已运行 ${v.progress.target}`)
-  else if (v.can_check && (!v.checked_at || Date.now() - v.checked_at > HOUR)) check(false)
+  else if (v.can_check && (!v.checked_at || Date.now() - v.checked_at > AUTO_CHECK_INTERVAL)) check(false)
 })
 
 async function check(manual = true) {
   checking.value = true
   try {
-    const v = await api.post<SystemView>('/api/admin/system/check')
+    const v = await checkUpdate(!manual)
     apply(v)
     if (manual && v.check_error) toastError('检查新版本失败', new Error(v.check_error))
   } catch (e) {
@@ -282,7 +281,7 @@ function fmtDate(ms: number): string {
                 </div>
                 <div v-else class="mt-1 text-base font-semibold">{{ view.latest?.version ?? '—' }}</div>
                 <div v-if="view.check_error" class="mt-0.5 text-xs text-destructive">检查失败：{{ view.check_error }}</div>
-                <div v-else class="mt-0.5 text-xs text-muted-foreground" title="每天自动检查一次">
+                <div v-else class="mt-0.5 text-xs text-muted-foreground" title="每天和打开管理端时自动检查">
                   {{ checking ? '检查中…' : view.checked_at ? `${fmtAgo(view.checked_at)}检查` : '还没检查' }}
                 </div>
               </template>

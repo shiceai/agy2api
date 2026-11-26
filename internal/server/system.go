@@ -38,11 +38,20 @@ func (s *Service) adminSystem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.systemView(r.Context()))
 }
 
-// adminCheckUpdate 查一次新版本（10 秒内重复点不重复查），失败的原因在返回的 check_error 里。
+// autoCheckMaxAge 是自动检查新版本的间隔：管理端打开或切回前台时带 auto=1 来查，这段时间内查过就直接返回
+// 上次的结果，多个页面同时开着也不会频繁连 GitHub。
+const autoCheckMaxAge = 10 * time.Minute
+
+// adminCheckUpdate 查一次新版本，失败的原因在返回的 check_error 里。手动检查 10 秒内重复点不重复查；
+// auto=1 是管理端的自动检查，按 autoCheckMaxAge。
 func (s *Service) adminCheckUpdate(w http.ResponseWriter, r *http.Request) {
+	maxAge := 10 * time.Second
+	if r.URL.Query().Get("auto") == "1" {
+		maxAge = autoCheckMaxAge
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	_ = s.upgrade.Check(ctx, 10*time.Second)
+	_ = s.upgrade.Check(ctx, maxAge)
 	writeJSON(w, http.StatusOK, s.systemView(r.Context()))
 }
 
