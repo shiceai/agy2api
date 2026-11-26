@@ -83,6 +83,7 @@ func buildRequest(p BuildParams) map[string]any {
 	adaptForModel(inner, p)
 
 	sanitizeTools(inner)
+	sanitizeResponseSchema(inner)
 	stubToolThoughtSignatures(inner)
 	if IsTierModel(p.WireModel) {
 		stripTierThinking(inner)

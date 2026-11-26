@@ -54,6 +54,63 @@ func applyDeclarationSchema(decl map[string]any) {
 	decl["parametersJsonSchema"] = cleaned
 }
 
+// sanitizeResponseSchema 处理 generationConfig 的输出 schema。上游只认 responseSchema（OpenAPI 子集），
+// responseJsonSchema 不报错也不生效（2026-11-25 实测 gemini-3-flash）：只有 responseJsonSchema 时改写成
+// responseSchema。清洗同工具参数（内联本地 $ref、展平联合、去掉不认的关键字；上游对 $defs、$ref 报 400），
+// 另外 type 数组（如 ["string","null"]）上游也报 400，改成单个类型加 nullable。客户端自己给的 responseSchema 不动。
+func sanitizeResponseSchema(inner map[string]any) {
+	gen, _ := inner["generationConfig"].(map[string]any)
+	raw, ok := gen["responseJsonSchema"]
+	if !ok {
+		return
+	}
+	if _, has := gen["responseSchema"]; has {
+		return
+	}
+	delete(gen, "responseJsonSchema")
+	root, _ := raw.(map[string]any)
+	if root == nil {
+		return
+	}
+	gen["responseSchema"] = collapseTypeArrays(cleanSchema(root, collectDefs(root), map[string]bool{}))
+}
+
+// collapseTypeArrays 递归把 type 数组改成单个类型：取第一个非 null 的类型，含 null 时加 nullable。
+func collapseTypeArrays(v any) any {
+	switch typed := v.(type) {
+	case []any:
+		for i, item := range typed {
+			typed[i] = collapseTypeArrays(item)
+		}
+	case map[string]any:
+		for k, child := range typed {
+			switch k {
+			case "enum", "const", "default", "example", "examples":
+				continue // 字面量数据，原样保留
+			}
+			types, isList := child.([]any)
+			if k != "type" || !isList {
+				typed[k] = collapseTypeArrays(child)
+				continue
+			}
+			var first string
+			for _, t := range types {
+				s, _ := t.(string)
+				if strings.EqualFold(s, "null") {
+					typed["nullable"] = true
+				} else if first == "" {
+					first = s
+				}
+			}
+			if first == "" {
+				first = "string"
+			}
+			typed["type"] = first
+		}
+	}
+	return v
+}
+
 func collectDefs(root map[string]any) map[string]any {
 	defs := map[string]any{}
 	if root == nil {

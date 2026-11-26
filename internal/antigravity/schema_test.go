@@ -5,6 +5,38 @@ import (
 	"testing"
 )
 
+// responseJsonSchema（上游不生效）改写成清洗过的 responseSchema：$ref 内联、去掉 $defs 和 additionalProperties、
+// type 数组改成单个类型加 nullable，enum 里的字面量不动；客户端自己给了 responseSchema 时不动。
+func TestSanitizeResponseSchema(t *testing.T) {
+	var inner map[string]any
+	if err := json.Unmarshal([]byte(`{"generationConfig":{"responseMimeType":"application/json","responseJsonSchema":{
+		"title":"Basket","type":"object","additionalProperties":false,"required":["items"],
+		"properties":{"items":{"type":"array","items":{"$ref":"#/$defs/Fruit"}}},
+		"$defs":{"Fruit":{"type":"object","properties":{
+			"fruit":{"type":"string","enum":["apple","null"]},
+			"color":{"type":["string","null"]},
+			"type":{"type":"string"}},"required":["fruit"]}}}}}`), &inner); err != nil {
+		t.Fatal(err)
+	}
+	sanitizeResponseSchema(inner)
+	raw, _ := json.Marshal(inner["generationConfig"])
+	want := `{"responseMimeType":"application/json","responseSchema":{"properties":{"items":{"items":{"properties":{` +
+		`"color":{"nullable":true,"type":"string"},"fruit":{"enum":["apple","null"],"type":"string"},"type":{"type":"string"}},` +
+		`"required":["fruit"],"type":"object"},"type":"array"}},"required":["items"],"title":"Basket","type":"object"}}`
+	if string(raw) != want {
+		t.Fatalf("generationConfig = %s\nwant %s", raw, want)
+	}
+
+	inner = map[string]any{"generationConfig": map[string]any{
+		"responseSchema":     map[string]any{"type": "object"},
+		"responseJsonSchema": map[string]any{"type": "array"},
+	}}
+	sanitizeResponseSchema(inner)
+	if raw, _ := json.Marshal(inner["generationConfig"]); string(raw) != `{"responseJsonSchema":{"type":"array"},"responseSchema":{"type":"object"}}` {
+		t.Fatalf("客户端给了 responseSchema 时不该动：%s", raw)
+	}
+}
+
 // TestSanitizeToolsFlattensAndRenames 验证工具参数 schema 被清洗为 parametersJsonSchema，
 // 并完成 $ref 内联、anyOf 展平、去掉不支持关键字。
 func TestSanitizeToolsFlattensAndRenames(t *testing.T) {
