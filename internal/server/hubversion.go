@@ -22,11 +22,11 @@ const (
 
 // antigravityHubView 是官方客户端版本情况，挂在 systemView 里给管理端。
 type antigravityHubView struct {
-	// Shipped 是内置 UA 用的最高版本，始终有值。
+	// Shipped 是当前构建表（内置的，或远程刷新到的）里最高的版本，即请求对上游声明的版本，始终有值。
 	Shipped string `json:"shipped"`
 	// Latest 是官方最新版本，查到了才有。
 	Latest string `json:"latest,omitempty"`
-	// Outdated 为真表示官方比内置新，建议发版更新 UA。
+	// Outdated 为真表示官方比 Shipped 新：构建表还没跟进（通常一天内自动跟上），或关了远程刷新。
 	Outdated bool `json:"outdated"`
 	// CheckedAt 是最近一次查到官方版本的时间（Unix 毫秒），查到了才有。
 	CheckedAt int64 `json:"checked_at,omitempty"`
@@ -92,7 +92,7 @@ func (s *Service) checkHubVersion() {
 	s.hubVersionAt = time.Now()
 	s.hubVersionMu.Unlock()
 	if antigravity.HubVersionNewer(v, antigravity.LatestShippedHubVersion()) {
-		slog.InfoContext(ctx, "官方 Antigravity 客户端已更新，内置 UA 版本偏旧", "latest", v, "shipped", antigravity.LatestShippedHubVersion())
+		slog.InfoContext(ctx, "官方 Antigravity 客户端已更新，构建表还没跟进", "latest", v, "shipped", antigravity.LatestShippedHubVersion())
 	}
 }
 

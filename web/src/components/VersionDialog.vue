@@ -228,9 +228,10 @@ function fmtDate(ms: number): string {
           </Alert>
           <Alert v-if="view.antigravity?.outdated">
             <Info class="text-amber-600 dark:text-amber-400" />
-            <AlertTitle>内置客户端版本偏旧</AlertTitle>
+            <AlertTitle>声明的客户端版本还没跟上官方</AlertTitle>
             <AlertDescription>
-              官方 Antigravity 已更新到 {{ view.antigravity.latest }}，请求对上游声明的版本是 {{ view.antigravity.shipped }}。升级到跟进了新版本的程序可降低被风控的概率。
+              官方 Antigravity 已更新到 {{ view.antigravity.latest }}，请求对上游声明的是 {{ view.antigravity.shipped }}。构建表跟进后自动切换，通常不超过一天；设了
+              AGY2API_UA_BUILDS=off 时需升级程序。
             </AlertDescription>
           </Alert>
 
