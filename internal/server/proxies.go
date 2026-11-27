@@ -41,13 +41,14 @@ type proxyView struct {
 	Host     string `json:"host"` // host:port
 	Username string `json:"username,omitempty"`
 	Status   string `json:"status"`
-	// Egress* 是最近一次测试拿到的出口（IP、国家两位代码、地区、城市、运营商）；LatencyMs 是经代理请求 Google
-	// 的往返耗时，0 表示没测出来；CheckError 是最近一次测试的失败原因。
+	// Egress* 是最近一次测试拿到的出口（IP、国家两位代码、地区、城市、运营商）；ConnectMs 是服务器和代理建立 TCP
+	// 连接的耗时，LatencyMs 是经代理连上 Google 后复用连接的往返，0 表示没测出来；CheckError 是最近一次测试的失败原因。
 	EgressIP        string         `json:"egress_ip"`
 	EgressCountry   string         `json:"egress_country"`
 	EgressRegion    string         `json:"egress_region"`
 	EgressCity      string         `json:"egress_city"`
 	EgressOrg       string         `json:"egress_org"`
+	ConnectMs       int64          `json:"connect_ms"`
 	LatencyMs       int64          `json:"latency_ms"`
 	PrevEgressIP    string         `json:"prev_egress_ip,omitempty"`
 	EgressChangedAt int64          `json:"egress_changed_at"`
@@ -59,7 +60,7 @@ type proxyView struct {
 
 func toProxyView(p *store.Proxy, accounts []proxyAccount) proxyView {
 	v := proxyView{ID: p.ID, Name: p.Name, Status: p.Status, EgressIP: p.EgressIP, EgressCountry: p.EgressCountry,
-		EgressRegion: p.EgressRegion, EgressCity: p.EgressCity, EgressOrg: p.EgressOrg, LatencyMs: p.LatencyMs,
+		EgressRegion: p.EgressRegion, EgressCity: p.EgressCity, EgressOrg: p.EgressOrg, ConnectMs: p.ConnectMs, LatencyMs: p.LatencyMs,
 		PrevEgressIP: p.PrevEgressIP, EgressChangedAt: p.EgressChangedAt, CheckedAt: p.CheckedAt,
 		CheckError: p.CheckError, Accounts: accounts, CreatedAt: p.CreatedAt}
 	if v.Accounts == nil {

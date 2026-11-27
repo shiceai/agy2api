@@ -37,10 +37,10 @@ export function regionText(p: Proxy): string {
   return [country, place].filter(Boolean).join(' · ')
 }
 
-// latencyTone 按延迟快慢上色：300 ms 以内绿，1 秒以内橙，更慢红。
+// latencyTone 按延迟快慢上色（到代理、到 Google 都是一次往返）：200 ms 以内绿，500 ms 以内橙，更慢红。
 export function latencyTone(ms: number): string {
-  if (ms <= 300) return 'text-emerald-700 dark:text-emerald-400'
-  if (ms <= 1000) return 'text-amber-700 dark:text-amber-400'
+  if (ms <= 200) return 'text-emerald-700 dark:text-emerald-400'
+  if (ms <= 500) return 'text-amber-700 dark:text-amber-400'
   return 'text-red-600 dark:text-red-400'
 }
 

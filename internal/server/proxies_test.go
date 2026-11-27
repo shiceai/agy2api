@@ -19,7 +19,14 @@ import (
 func testForwardProxy(t *testing.T) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
 	var n atomic.Int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(forwardHandler(&n))
+	t.Cleanup(srv.Close)
+	return srv, &n
+}
+
+// forwardHandler 是正向代理的处理函数，每个请求给 n 加一。
+func forwardHandler(n *atomic.Int64) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n.Add(1)
 		out, err := http.NewRequestWithContext(r.Context(), r.Method, r.URL.String(), r.Body)
 		if err != nil {
@@ -38,9 +45,7 @@ func testForwardProxy(t *testing.T) (*httptest.Server, *atomic.Int64) {
 		}
 		w.WriteHeader(resp.StatusCode)
 		_, _ = io.Copy(w, resp.Body)
-	}))
-	t.Cleanup(srv.Close)
-	return srv, &n
+	})
 }
 
 type testProxyView struct {
@@ -252,6 +257,7 @@ type testCheckView struct {
 	EgressCountry string `json:"egress_country"`
 	EgressCity    string `json:"egress_city"`
 	EgressOrg     string `json:"egress_org"`
+	ConnectMs     int64  `json:"connect_ms"`
 	LatencyMs     int64  `json:"latency_ms"`
 	CheckError    string `json:"check_error"`
 }
@@ -276,11 +282,11 @@ func checkOneProxy(t *testing.T, geoStatus int) (testCheckView, int64) {
 	return out.Proxies[0], through.Load()
 }
 
-// 测试代理：经代理取 ipinfo 的出口信息，再测到 Google 的延迟。
+// 测试代理：经代理取 ipinfo 的出口信息，再测到代理和到 Google 的延迟（经代理请求两次 generate_204）。
 func TestTestProxy(t *testing.T) {
 	v, through := checkOneProxy(t, http.StatusOK)
 	if v.EgressIP != "203.0.113.9" || v.EgressCountry != "JP" || v.EgressCity != "Tokyo" || v.EgressOrg != "AS64500 Example" ||
-		v.LatencyMs <= 0 || v.CheckError != "" || through != 2 {
+		v.ConnectMs <= 0 || v.LatencyMs <= 0 || v.CheckError != "" || through != 3 {
 		t.Fatalf("test: %+v via %d", v, through)
 	}
 }
@@ -288,8 +294,39 @@ func TestTestProxy(t *testing.T) {
 // ipinfo 取不到时退回 Cloudflare trace，只有 IP 和国家。
 func TestTestProxyFallsBackToTrace(t *testing.T) {
 	v, _ := checkOneProxy(t, http.StatusTooManyRequests)
-	if v.EgressIP != "203.0.113.10" || v.EgressCountry != "US" || v.EgressCity != "" || v.LatencyMs <= 0 || v.CheckError != "" {
+	if v.EgressIP != "203.0.113.10" || v.EgressCountry != "US" || v.EgressCity != "" || v.ConnectMs <= 0 || v.LatencyMs <= 0 || v.CheckError != "" {
 		t.Fatalf("fallback: %+v", v)
+	}
+}
+
+// 测延迟：第二次请求复用第一次的连接（代理只收到一条新连接），所以到 Google 不含建连；
+// 代理连得上、经代理请求失败时，到代理的耗时仍然记下。
+func TestLatency(t *testing.T) {
+	testEndpoints(t, http.StatusOK)
+	var requests, conns atomic.Int64
+	proxy := httptest.NewUnstartedServer(forwardHandler(&requests))
+	proxy.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	proxy.Start()
+	t.Cleanup(proxy.Close)
+
+	connect, rtt, err := latency(context.Background(), proxy.URL)
+	if err != nil || connect <= 0 || rtt <= 0 || requests.Load() != 2 || conns.Load() != 1 {
+		t.Fatalf("latency: connect=%d rtt=%d err=%v requests=%d conns=%d", connect, rtt, err, requests.Load(), conns.Load())
+	}
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	latencyURL = "http://" + l.Addr().String() // testEndpoints 的 Cleanup 会换回来
+	l.Close()
+	connect, rtt, err = latency(context.Background(), proxy.URL)
+	if err == nil || connect <= 0 || rtt != 0 {
+		t.Fatalf("google down: connect=%d rtt=%d err=%v", connect, rtt, err)
 	}
 }
 

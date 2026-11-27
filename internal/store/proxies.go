@@ -18,12 +18,14 @@ type Proxy struct {
 	// Status 是 enabled / disabled：停用的不参与自动分配，绑定它的账号暂停调度。
 	Status string
 	// EgressIP、EgressCountry 等是最近一次测试拿到的出口：IP、国家（两位代码）、地区、城市、运营商；
-	// CheckError 是最近一次测试的失败原因，LatencyMs 是经代理请求 Google 的往返耗时（0 表示没测出来）。
+	// CheckError 是最近一次测试的失败原因；ConnectMs 是服务器和代理建立 TCP 连接的耗时，LatencyMs 是经代理连上 Google 后
+	// 在同一连接上再请求一次的往返（都是毫秒，0 表示没测出来）。
 	EgressIP      string
 	EgressCountry string
 	EgressRegion  string
 	EgressCity    string
 	EgressOrg     string
+	ConnectMs     int64
 	LatencyMs     int64
 	// PrevEgressIP、EgressChangedAt：检测到出口和上次不同时记下原来的 IP 和时间。
 	PrevEgressIP    string
@@ -34,14 +36,14 @@ type Proxy struct {
 	UpdatedAt       int64
 }
 
-const proxyCols = `id,name,url_enc,status,egress_ip,egress_country,egress_region,egress_city,egress_org,latency_ms,
+const proxyCols = `id,name,url_enc,status,egress_ip,egress_country,egress_region,egress_city,egress_org,connect_ms,latency_ms,
 	prev_egress_ip,egress_changed_at,checked_at,check_error,created_at,updated_at`
 
 func scanProxy(enc Encryptor, row interface{ Scan(...any) error }) (*Proxy, error) {
 	var p Proxy
 	var urlEnc string
 	if err := row.Scan(&p.ID, &p.Name, &urlEnc, &p.Status, &p.EgressIP, &p.EgressCountry, &p.EgressRegion, &p.EgressCity,
-		&p.EgressOrg, &p.LatencyMs, &p.PrevEgressIP, &p.EgressChangedAt, &p.CheckedAt, &p.CheckError, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		&p.EgressOrg, &p.ConnectMs, &p.LatencyMs, &p.PrevEgressIP, &p.EgressChangedAt, &p.CheckedAt, &p.CheckError, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		return nil, err
 	}
 	var err error
@@ -86,7 +88,7 @@ func (s *Store) UpdateProxy(ctx context.Context, enc Encryptor, id int64, name, 
 	}
 	_, err = s.execCtx(ctx, `
 		UPDATE proxies SET name=?, url_enc=?, egress_ip='', egress_country='', egress_region='', egress_city='', egress_org='',
-		  latency_ms=0, prev_egress_ip='', egress_changed_at=0, checked_at=0, check_error='', updated_at=? WHERE id=?`,
+		  connect_ms=0, latency_ms=0, prev_egress_ip='', egress_changed_at=0, checked_at=0, check_error='', updated_at=? WHERE id=?`,
 		name, urlEnc, nowMs(), id)
 	return err
 }
@@ -143,19 +145,19 @@ func (s *Store) DeleteProxy(ctx context.Context, id int64) error {
 }
 
 // ProxyCheck 是一次代理测试的结果。IP 为空表示没拿到出口（连不上代理）；Error 不为空表示测试没通过
-// （连不上代理，或出口拿到了但经代理连不上 Google），LatencyMs 为 0 表示没测出延迟。
+// （连不上代理，或出口拿到了但经代理连不上 Google）。ConnectMs、LatencyMs 见 Proxy，为 0 表示没测出来。
 type ProxyCheck struct {
 	IP, Country, Region, City, Org string
-	LatencyMs                      int64
+	ConnectMs, LatencyMs           int64
 	Error                          string
 }
 
 // SetProxyCheck 记下一次测试的结果。拿到了出口就更新出口信息，出口和上次不同时记下原来的 IP 和时间；
-// 没拿到出口时保留上次的出口，只记失败原因和延迟（0）。
+// 没拿到出口时保留上次的出口，只记失败原因，延迟清零。
 func (s *Store) SetProxyCheck(ctx context.Context, id int64, c ProxyCheck) error {
 	now := nowMs()
 	if c.IP == "" {
-		_, err := s.execCtx(ctx, `UPDATE proxies SET checked_at=?, check_error=?, latency_ms=0 WHERE id=?`, now, c.Error, id)
+		_, err := s.execCtx(ctx, `UPDATE proxies SET checked_at=?, check_error=?, connect_ms=0, latency_ms=0 WHERE id=?`, now, c.Error, id)
 		return err
 	}
 	_, err := s.execCtx(ctx, `
@@ -163,8 +165,8 @@ func (s *Store) SetProxyCheck(ctx context.Context, id int64, c ProxyCheck) error
 		  prev_egress_ip    = CASE WHEN egress_ip != '' AND egress_ip != ?1 THEN egress_ip ELSE prev_egress_ip END,
 		  egress_changed_at = CASE WHEN egress_ip != '' AND egress_ip != ?1 THEN ?3 ELSE egress_changed_at END,
 		  egress_ip = ?1, egress_country = ?2, checked_at = ?3, check_error = ?4,
-		  egress_region = ?5, egress_city = ?6, egress_org = ?7, latency_ms = ?8
-		WHERE id = ?9`, c.IP, c.Country, now, c.Error, c.Region, c.City, c.Org, c.LatencyMs, id)
+		  egress_region = ?5, egress_city = ?6, egress_org = ?7, connect_ms = ?8, latency_ms = ?9
+		WHERE id = ?10`, c.IP, c.Country, now, c.Error, c.Region, c.City, c.Org, c.ConnectMs, c.LatencyMs, id)
 	return err
 }
 

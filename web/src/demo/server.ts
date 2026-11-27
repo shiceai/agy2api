@@ -110,17 +110,17 @@ let proxies: DemoProxy[] = [
   {
     id: 1, name: '美西 1', scheme: 'socks5h', host: '203.0.113.10:1080', username: 'demo', status: 'enabled',
     egress_ip: '203.0.113.10', egress_country: 'US', egress_region: 'California', egress_city: 'San Jose',
-    egress_org: 'AS64500 Example Networks', latency_ms: 182, egress_changed_at: 0, checked_at: start - 2 * HOUR, created_at: start - 6 * DAY,
+    egress_org: 'AS64500 Example Networks', connect_ms: 48, latency_ms: 63, egress_changed_at: 0, checked_at: start - 2 * HOUR, created_at: start - 6 * DAY,
   },
   {
     id: 2, name: '东京 1', scheme: 'http', host: '198.51.100.20:8080', status: 'enabled',
     egress_ip: '198.51.100.20', egress_country: 'JP', egress_region: 'Tokyo', egress_city: 'Tokyo',
-    egress_org: 'AS64501 Example Cloud', latency_ms: 96, prev_egress_ip: '198.51.100.19', egress_changed_at: start - DAY,
+    egress_org: 'AS64501 Example Cloud', connect_ms: 112, latency_ms: 121, prev_egress_ip: '198.51.100.19', egress_changed_at: start - DAY,
     checked_at: start - 2 * HOUR, created_at: start - 6 * DAY,
   },
   {
     id: 3, name: '新加坡 1', scheme: 'socks5', host: '192.0.2.30:1080', status: 'disabled',
-    egress_ip: '', egress_country: '', egress_region: '', egress_city: '', egress_org: '', latency_ms: 0, egress_changed_at: 0,
+    egress_ip: '', egress_country: '', egress_region: '', egress_city: '', egress_org: '', connect_ms: 0, latency_ms: 0, egress_changed_at: 0,
     checked_at: start - 3 * HOUR, check_error: 'proxyconnect tcp: dial tcp 192.0.2.30:1080: i/o timeout', created_at: start - 2 * DAY,
   },
 ]
@@ -782,7 +782,7 @@ on('POST', '/proxies', (_m, _q, b) => {
     const scheme = ((line.match(/^([a-z0-9]+):\/\//i)?.[1] ?? b.scheme ?? 'http') as string).toLowerCase() as ProxyScheme
     proxies.push({
       id, name: host, scheme, host, status: 'enabled', egress_ip: host.split(':')[0], egress_country: 'US', egress_region: 'Virginia',
-      egress_city: 'Ashburn', egress_org: 'AS64502 Example Transit', latency_ms: between(80, 260), egress_changed_at: 0,
+      egress_city: 'Ashburn', egress_org: 'AS64502 Example Transit', connect_ms: between(20, 120), latency_ms: between(30, 160), egress_changed_at: 0,
       checked_at: Date.now(), created_at: Date.now(),
     })
     results.push({ line, status: 'added', id })
@@ -815,7 +815,9 @@ on('POST', '/proxies/check', async (_m, _q, b) => {
   for (const p of proxies) {
     if (!ids.has(p.id)) continue
     p.checked_at = Date.now()
-    if (!p.check_error) p.latency_ms = Math.max(40, p.latency_ms + between(-25, 25))
+    if (p.check_error) continue
+    p.connect_ms = Math.max(5, p.connect_ms + between(-8, 8))
+    p.latency_ms = Math.max(10, p.latency_ms + between(-12, 12))
   }
   return proxyList()
 })

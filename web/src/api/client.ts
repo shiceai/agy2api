@@ -660,7 +660,8 @@ export interface AccountProxy {
   status: 'enabled' | 'disabled'
 }
 // Proxy 是管理端看到的代理，不含密码。egress_* 是最近一次测试拿到的出口（国家为两位代码，地区、城市、运营商
-// 来自 ipinfo，退回 Cloudflare 时为空）；latency_ms 是经代理请求 Google 的往返耗时，0 表示没测出来；
+// 来自 ipinfo，退回 Cloudflare 时为空）；connect_ms 是服务器和代理建立 TCP 连接的耗时（到代理），
+// latency_ms 是经代理连上 Google 后复用连接的往返（到 Google，不含建连和握手），0 表示没测出来；
 // check_error 是最近一次测试的失败原因；prev_egress_ip、egress_changed_at 是出口变化前的 IP 和变化时间。
 // 停用（status 为 disabled）的代理不参与自动分配，绑定它的账号暂停调度。
 export interface Proxy {
@@ -675,6 +676,7 @@ export interface Proxy {
   egress_region: string
   egress_city: string
   egress_org: string
+  connect_ms: number
   latency_ms: number
   prev_egress_ip?: string
   egress_changed_at: number

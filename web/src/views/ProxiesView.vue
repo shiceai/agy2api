@@ -23,8 +23,8 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import ProxyAddDialog from '@/components/proxies/ProxyAddDialog.vue'
 import ProxyEditDialog from '@/components/proxies/ProxyEditDialog.vue'
 
-// 代理：账号绑定代理后，它的所有请求都经代理出网。这里添加、测试（出口和到 Google 的延迟）、改名换地址、
-// 启停、删除（还有账号绑定的不能删）。停用的代理不参与自动分配，绑定它的账号暂停调度。
+// 代理：账号绑定代理后，它的所有请求都经代理出网。这里添加、测试（服务器发起：出口、到代理和到 Google 的延迟）、
+// 改名换地址、启停、删除（还有账号绑定的不能删）。停用的代理不参与自动分配，绑定它的账号暂停调度。
 const router = useRouter()
 const confirm = useConfirm()
 const proxies = ref<Proxy[]>([])
@@ -34,9 +34,10 @@ const columnDefs: ColumnDef[] = [
   { key: 'status', label: '状态', defaultVisible: true },
   { key: 'egressIp', label: '出口 IP', defaultVisible: true },
   { key: 'region', label: '地区', defaultVisible: true },
-  { key: 'latency', label: '延迟', defaultVisible: true },
+  { key: 'connect', label: '到代理', defaultVisible: true },
+  { key: 'latency', label: '到 Google', defaultVisible: true },
   { key: 'accounts', label: '账号', defaultVisible: true },
-  { key: 'checkedAt', label: '测试时间', defaultVisible: true },
+  { key: 'checkedAt', label: '测试时间', defaultVisible: false },
 ]
 const columns = useColumnPrefs('agy2api_proxies_columns_v1', columnDefs)
 const loadError = ref('')
@@ -65,6 +66,10 @@ const showList = computed(() => !loadError.value || proxies.value.length > 0)
 
 const groups = computed(() => sameEgress(proxies.value))
 const issueOf = (p: Proxy) => proxyIssue(p, groups.value)
+// msOf 取延迟列的值：connect 是到代理，latency 是到 Google。
+function msOf(p: Proxy, key: string): number {
+  return key === 'connect' ? p.connect_ms : p.latency_ms
+}
 
 // 测试：出口信息和延迟，结果直接反映在列表里；失败的原因悬停状态看。
 async function test(ids: number[]) {
@@ -198,7 +203,7 @@ async function batchDelete() {
     <LoadError v-if="loadError" :message="loadError" />
 
     <!-- 内容区放不下默认列时：卡片列表。按内容区宽度（容器查询）切换，侧边栏收起展开都准；
-         默认列实测约需 73rem，阈值 74rem（改默认列时重新量） -->
+         默认列实测约需 74rem（测试时间默认隐藏才放得下），阈值 74rem（改默认列时重新量） -->
     <div v-if="showList" class="divide-y overflow-hidden rounded-lg border @min-[74rem]/main:hidden">
       <div v-for="p in proxies" :key="p.id" :class="['flex items-start gap-3 p-4', selected.has(p.id) && 'bg-muted/50']">
         <Checkbox :model-value="selected.has(p.id)" :aria-label="`选择 ${p.name}`" class="mt-0.5" @update:model-value="(v) => pick(p.id, v)" />
@@ -214,7 +219,8 @@ async function batchDelete() {
           <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums">
             <span>{{ p.egress_ip || '—' }}</span>
             <span v-if="regionText(p)">{{ regionText(p) }}</span>
-            <span v-if="p.latency_ms" :class="latencyTone(p.latency_ms)">{{ p.latency_ms }} ms</span>
+            <span v-if="p.connect_ms"><span class="text-muted-foreground">到代理 </span><span :class="latencyTone(p.connect_ms)">{{ p.connect_ms }} ms</span></span>
+            <span v-if="p.latency_ms"><span class="text-muted-foreground">到 Google </span><span :class="latencyTone(p.latency_ms)">{{ p.latency_ms }} ms</span></span>
             <span class="text-muted-foreground">{{ p.checked_at ? `${fmtAgo(p.checked_at)}测试` : '未测试' }}</span>
           </div>
           <div v-if="issueOf(p)?.tip" class="text-xs text-muted-foreground">{{ issueOf(p)!.tip }}</div>
@@ -263,7 +269,14 @@ async function batchDelete() {
               <TableHead v-else-if="key === 'status'">状态</TableHead>
               <TableHead v-else-if="key === 'egressIp'">出口 IP</TableHead>
               <TableHead v-else-if="key === 'region'">地区</TableHead>
-              <TableHead v-else-if="key === 'latency'" class="text-right">延迟</TableHead>
+              <TableHead v-else-if="key === 'connect' || key === 'latency'" class="text-right whitespace-nowrap">
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <span class="cursor-help border-b border-dashed border-muted-foreground/40">{{ key === 'connect' ? '到代理' : '到 Google' }}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ key === 'connect' ? '服务器和代理建立 TCP 连接的耗时' : '服务器经代理请求 Google 的往返，不含建连和握手' }}</TooltipContent>
+                </Tooltip>
+              </TableHead>
               <TableHead v-else-if="key === 'accounts'" class="text-right">账号</TableHead>
               <TableHead v-else-if="key === 'checkedAt'">测试时间</TableHead>
             </template>
@@ -316,10 +329,10 @@ async function batchDelete() {
                 <span v-else :class="!regionText(p) && 'text-muted-foreground'">{{ regionText(p) || '—' }}</span>
               </TableCell>
               <TableCell
-                v-else-if="key === 'latency'"
-                :class="cn('text-right whitespace-nowrap tabular-nums', p.latency_ms ? latencyTone(p.latency_ms) : 'text-muted-foreground')"
+                v-else-if="key === 'connect' || key === 'latency'"
+                :class="cn('text-right whitespace-nowrap tabular-nums', msOf(p, key) ? latencyTone(msOf(p, key)) : 'text-muted-foreground')"
               >
-                {{ p.latency_ms ? `${p.latency_ms} ms` : '—' }}
+                {{ msOf(p, key) ? `${msOf(p, key)} ms` : '—' }}
               </TableCell>
               <TableCell v-else-if="key === 'accounts'" class="text-right">
                 <Tooltip v-if="p.accounts.length">

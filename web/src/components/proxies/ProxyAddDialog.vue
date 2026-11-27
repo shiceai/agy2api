@@ -57,7 +57,7 @@ async function add() {
     <DialogContent class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>添加代理</DialogTitle>
-        <DialogDescription>每行一个。添加后自动测试出口和到 Google 的延迟；之后在账号页给账号绑定，或添加账号时自动分配。</DialogDescription>
+        <DialogDescription>每行一个。添加后自动测试出口和延迟；之后在账号页给账号绑定，或添加账号时自动分配。</DialogDescription>
       </DialogHeader>
 
       <form v-if="!results.length" class="grid min-w-0 gap-4" @submit.prevent="add">
