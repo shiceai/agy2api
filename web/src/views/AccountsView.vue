@@ -5,6 +5,7 @@ import { Check, FileText, Minus, Network, RefreshCw, Trash2, Plus, Power, PowerO
 import { toast, type ExternalToast } from 'vue-sonner'
 import { api, isUnauthorized, errorMessage, ApiError, type Account, type AccountList, type Proxy, type WarmupState } from '@/api/client'
 import { fmtAgo } from '@/lib/utils'
+import { stickyActionCell, stickyActionHead, useColumnPrefs, type ColumnDef } from '@/lib/columns'
 import { useLive } from '@/lib/live'
 import { useConfirm } from '@/lib/confirm'
 import { toastError } from '@/lib/toast'
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import ColumnSettings from '@/components/ColumnSettings.vue'
 import CooldownBadge from '@/components/CooldownBadge.vue'
 import LoadError from '@/components/LoadError.vue'
 import PageActions from '@/components/PageActions.vue'
@@ -34,6 +36,21 @@ function hubVersion(ua: string): string {
   return /antigravity\/hub\/(\S+)/.exec(ua ?? '')?.[1] ?? (ua || '—')
 }
 const accounts = ref<Account[]>([])
+// 宽屏表格的可选列：显示哪些、什么顺序在"显示列"里设置，存在浏览器本地。勾选框、账号和操作列固定。
+// 名称（详情顶部有）、项目、客户端默认隐藏，常见宽度下表格放得下。
+const columnDefs: ColumnDef[] = [
+  { key: 'name', label: '名称', defaultVisible: false },
+  { key: 'plan', label: '套餐', defaultVisible: true },
+  { key: 'quota', label: '额度', defaultVisible: true },
+  { key: 'project', label: '项目', defaultVisible: false },
+  { key: 'client', label: '客户端', defaultVisible: false },
+  { key: 'models', label: '模型', defaultVisible: true },
+  { key: 'concurrency', label: '并发', defaultVisible: true },
+  { key: 'status', label: '状态', defaultVisible: true },
+  { key: 'proxy', label: '代理', defaultVisible: true },
+  { key: 'synced', label: '最近同步', defaultVisible: true },
+]
+const columns = useColumnPrefs('agy2api_accounts_columns_v1', columnDefs)
 // 实时并发：轮询 /api/admin/live，账号列显示"当前 / 上限"。离开页面自动停。
 const live = useLive()
 // 账号此刻进行中的生成请求数：/live 取到后以它为准（没有的账号就是 0），还没取到时用列表里带的快照。
@@ -247,13 +264,16 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
 <template>
   <div class="space-y-6">
     <PageActions>
+      <!-- 显示列只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
+      <div class="hidden @min-[68rem]/main:block"><ColumnSettings v-model="columns" :defs="columnDefs" /></div>
       <Button size="sm" @click="showAdd = true"><Plus />添加账号</Button>
     </PageActions>
 
     <LoadError v-if="loadError" :message="loadError" />
 
-    <!-- 1280 以下：卡片列表（表格列多，1024 宽放不下） -->
-    <div v-if="showList" class="divide-y overflow-hidden rounded-lg border xl:hidden">
+    <!-- 内容区放不下默认列时：卡片列表。按内容区宽度（容器查询）切换，侧边栏收起展开都准；
+         默认列实测约需 67rem，阈值 68rem（改默认列时重新量） -->
+    <div v-if="showList" class="divide-y overflow-hidden rounded-lg border @min-[68rem]/main:hidden">
       <div v-for="a in accounts" :key="a.id" :class="['flex items-start gap-3 p-4', selected.has(a.id) && 'bg-muted/50']">
         <Checkbox
           :model-value="selected.has(a.id)"
@@ -300,9 +320,8 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
       <p v-if="!accounts.length" class="px-4 py-10 text-center text-sm text-muted-foreground">还没有账号，点击上方"添加账号"。</p>
     </div>
 
-    <!-- 1280 起：表格 -->
-    <!-- 列宽按真实数据量过：放不下时横向滚动，不裁掉操作列 -->
-    <div v-if="showList" class="hidden overflow-x-auto rounded-lg border xl:block">
+    <!-- 内容区放得下默认列时：表格。列可在"显示列"里设置，开得多放不下时横向滚动，操作列固定在最右 -->
+    <div v-if="showList" class="hidden overflow-x-auto rounded-lg border @min-[68rem]/main:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -319,60 +338,63 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
               </Checkbox>
             </TableHead>
             <TableHead class="w-full">账号</TableHead>
-            <!-- 名称 1600 以下收起（详情面板顶部有），项目、客户端 1440 以下收起：1280～1599 放不下全部列 -->
-            <TableHead class="hidden min-[1600px]:table-cell">名称</TableHead>
-            <TableHead>套餐</TableHead>
-            <TableHead>额度</TableHead>
-            <TableHead class="hidden min-[1440px]:table-cell">项目</TableHead>
-            <TableHead class="hidden min-[1440px]:table-cell">客户端</TableHead>
-            <TableHead class="text-right">模型</TableHead>
-            <TableHead class="text-right">并发</TableHead>
-            <TableHead>状态</TableHead>
-            <TableHead>代理</TableHead>
-            <TableHead>最近同步</TableHead>
-            <TableHead class="px-4 text-center">操作</TableHead>
+            <template v-for="key in columns.visible" :key="key">
+              <TableHead v-if="key === 'name'">名称</TableHead>
+              <TableHead v-else-if="key === 'plan'">套餐</TableHead>
+              <TableHead v-else-if="key === 'quota'">额度</TableHead>
+              <TableHead v-else-if="key === 'project'">项目</TableHead>
+              <TableHead v-else-if="key === 'client'">客户端</TableHead>
+              <TableHead v-else-if="key === 'models'" class="text-right">模型</TableHead>
+              <TableHead v-else-if="key === 'concurrency'" class="text-right">并发</TableHead>
+              <TableHead v-else-if="key === 'status'">状态</TableHead>
+              <TableHead v-else-if="key === 'proxy'">代理</TableHead>
+              <TableHead v-else-if="key === 'synced'">最近同步</TableHead>
+            </template>
+            <TableHead :class="['px-4 text-center', stickyActionHead]">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow v-for="a in accounts" :key="a.id" :data-state="selected.has(a.id) ? 'selected' : undefined">
+          <TableRow v-for="a in accounts" :key="a.id" class="group" :data-state="selected.has(a.id) ? 'selected' : undefined">
             <TableCell class="pr-0 pl-4">
               <Checkbox :model-value="selected.has(a.id)" :aria-label="`选择 ${a.email}`" @update:model-value="(v) => check(a.id, v)" />
             </TableCell>
             <TableCell>
               <button type="button" :class="['text-left', emailLink]" @click="detail = a">{{ a.email }}</button>
             </TableCell>
-            <TableCell class="hidden text-muted-foreground min-[1600px]:table-cell">{{ a.name || '—' }}</TableCell>
-            <TableCell><PlanBadge :subscription="a.subscription" /></TableCell>
-            <TableCell class="py-1.5"><QuotaSummary :account="a" :low-quota="lowQuota" :quota-refresh="quotaRefresh" /></TableCell>
-            <TableCell class="hidden text-muted-foreground min-[1440px]:table-cell">{{ a.project_id || '—' }}</TableCell>
-            <TableCell class="hidden text-muted-foreground min-[1440px]:table-cell" :title="a.user_agent">hub {{ hubVersion(a.user_agent) }}</TableCell>
-            <TableCell class="text-right tabular-nums">{{ a.model_count }}</TableCell>
-            <!-- 并发：当前进行中 / 生效中的上限（新号预热中是压低后的上限）；当前为 0 时灰色，上限始终灰色。
-                 悬停说明，预热中写出正常上限，上限跟随全局默认时提示可单独设置 -->
-            <TableCell class="text-right tabular-nums">
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <span class="cursor-default">
-                    <span :class="inFlightOf(a) ? undefined : 'text-muted-foreground'">{{ inFlightOf(a) }}</span>
-                    <span class="text-muted-foreground"> / {{ limitOf(a) }}</span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  进行中 {{ inFlightOf(a) }} 个，并发上限 {{ limitOf(a) }}<template v-if="warmupOf(a)">（新号预热中，正常 {{ warmupOf(a)!.normal }}）</template><template v-else-if="!a.max_concurrency">（跟随全局默认，可在详情里单独设置）</template>
-                </TooltipContent>
-              </Tooltip>
-            </TableCell>
-            <!-- 状态：启用/停用，预热中、冷却中时附加徽章。多个徽章竖着叠放（额度列本来就是两行），不把表格撑宽 -->
-            <TableCell>
-              <div class="flex flex-col items-start gap-1">
-                <StatusBadge :enabled="a.status === 'enabled'" :reason="a.disabled_reason" />
-                <WarmupBadge v-if="warmupOf(a)" :state="warmupOf(a)!" />
-                <CooldownBadge v-if="a.cooldowns?.length" :cooldowns="a.cooldowns" />
-              </div>
-            </TableCell>
-            <TableCell><AccountProxy :account="a" /></TableCell>
-            <TableCell class="text-muted-foreground">{{ fmtAgo(a.synced_at) }}</TableCell>
-            <TableCell class="px-4">
+            <template v-for="key in columns.visible" :key="key">
+              <TableCell v-if="key === 'name'" class="text-muted-foreground">{{ a.name || '—' }}</TableCell>
+              <TableCell v-else-if="key === 'plan'"><PlanBadge :subscription="a.subscription" /></TableCell>
+              <TableCell v-else-if="key === 'quota'" class="py-1.5"><QuotaSummary :account="a" :low-quota="lowQuota" :quota-refresh="quotaRefresh" /></TableCell>
+              <TableCell v-else-if="key === 'project'" class="text-muted-foreground">{{ a.project_id || '—' }}</TableCell>
+              <TableCell v-else-if="key === 'client'" class="text-muted-foreground" :title="a.user_agent">hub {{ hubVersion(a.user_agent) }}</TableCell>
+              <TableCell v-else-if="key === 'models'" class="text-right tabular-nums">{{ a.model_count }}</TableCell>
+              <!-- 并发：当前进行中 / 生效中的上限（新号预热中是压低后的上限）；当前为 0 时灰色，上限始终灰色。
+                   悬停说明，预热中写出正常上限，上限跟随全局默认时提示可单独设置 -->
+              <TableCell v-else-if="key === 'concurrency'" class="text-right tabular-nums">
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <span class="cursor-default">
+                      <span :class="inFlightOf(a) ? undefined : 'text-muted-foreground'">{{ inFlightOf(a) }}</span>
+                      <span class="text-muted-foreground"> / {{ limitOf(a) }}</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    进行中 {{ inFlightOf(a) }} 个，并发上限 {{ limitOf(a) }}<template v-if="warmupOf(a)">（新号预热中，正常 {{ warmupOf(a)!.normal }}）</template><template v-else-if="!a.max_concurrency">（跟随全局默认，可在详情里单独设置）</template>
+                  </TooltipContent>
+                </Tooltip>
+              </TableCell>
+              <!-- 状态：启用/停用，预热中、冷却中时附加徽章。多个徽章竖着叠放（额度列本来就是两行），不把表格撑宽 -->
+              <TableCell v-else-if="key === 'status'">
+                <div class="flex flex-col items-start gap-1">
+                  <StatusBadge :enabled="a.status === 'enabled'" :reason="a.disabled_reason" />
+                  <WarmupBadge v-if="warmupOf(a)" :state="warmupOf(a)!" />
+                  <CooldownBadge v-if="a.cooldowns?.length" :cooldowns="a.cooldowns" />
+                </div>
+              </TableCell>
+              <TableCell v-else-if="key === 'proxy'"><AccountProxy :account="a" /></TableCell>
+              <TableCell v-else-if="key === 'synced'" class="text-muted-foreground">{{ fmtAgo(a.synced_at) }}</TableCell>
+            </template>
+            <TableCell :class="['px-4', stickyActionCell]">
               <div class="flex justify-center gap-0.5">
                 <IconAction label="详情" @click="detail = a"><FileText /></IconAction>
                 <IconAction label="同步" :disabled="busy === a.id" @click="sync(a.id)">
@@ -387,15 +409,16 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
               </div>
             </TableCell>
           </TableRow>
-          <TableEmpty v-if="!accounts.length" :colspan="13">还没有账号，点击右上角"添加账号"。</TableEmpty>
+          <!-- 勾选框、账号、操作三列固定，加上显示的可选列 -->
+          <TableEmpty v-if="!accounts.length" :colspan="columns.visible.length + 3">还没有账号，点击右上角"添加账号"。</TableEmpty>
         </TableBody>
       </Table>
     </div>
 
-    <!-- 有勾选时顶栏换成选择栏。卡片列表没有表头勾选框，"全选"只在卡片布局（1280 以下）显示；
+    <!-- 有勾选时顶栏换成选择栏。卡片列表没有表头勾选框，"全选"只在卡片布局显示（顶栏也是 @container/main，同一个切换点）；
          手机上操作按钮只显示图标（文字留给读屏），一行放得下 -->
     <SelectionBar :count="selected.size" @clear="clearSelection">
-      <Button v-if="allChecked !== true" variant="ghost" size="sm" class="xl:hidden" :disabled="!!batchBusy" @click="checkAll(true)">
+      <Button v-if="allChecked !== true" variant="ghost" size="sm" class="@min-[68rem]/main:hidden" :disabled="!!batchBusy" @click="checkAll(true)">
         全选
       </Button>
       <Button variant="ghost" size="sm" class="max-sm:px-2" :disabled="!!batchBusy" @click="batch('enable')">

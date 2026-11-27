@@ -8,8 +8,10 @@ import { fmtCost } from '@/lib/cost'
 import { expiryText, fmtCompact, keyState, keyStateBadge, periodLabels } from '@/lib/keys'
 import { useConfirm } from '@/lib/confirm'
 import { toastError } from '@/lib/toast'
+import { stickyActionCell, stickyActionHead, useColumnPrefs, type ColumnDef } from '@/lib/columns'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import ColumnSettings from '@/components/ColumnSettings.vue'
 import DotBadge from '@/components/DotBadge.vue'
 import IconAction from '@/components/IconAction.vue'
 import LoadError from '@/components/LoadError.vue'
@@ -21,6 +23,15 @@ import KeySheet from '@/components/keys/KeySheet.vue'
 const router = useRouter()
 const confirm = useConfirm()
 const keys = ref<ApiKey[]>([])
+// 宽屏表格的可选列：显示哪些、什么顺序在"显示列"里设置，存在浏览器本地。名称和操作列固定。
+const columnDefs: ColumnDef[] = [
+  { key: 'status', label: '状态', defaultVisible: true },
+  { key: 'tokens', label: 'Token 用量', defaultVisible: true },
+  { key: 'cost', label: '近 30 天费用', defaultVisible: true },
+  { key: 'expires', label: '到期', defaultVisible: true },
+  { key: 'lastUsed', label: '最近使用', defaultVisible: true },
+]
+const columns = useColumnPrefs('agy2api_keys_columns_v1', columnDefs)
 // 列表加载失败的原因，显示在内容区顶部；操作失败用 Toast。
 const loadError = ref('')
 const busy = ref<number | null>(null)
@@ -89,13 +100,16 @@ const keyLink =
 <template>
   <div class="space-y-6">
     <PageActions>
+      <!-- 显示列只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
+      <div class="hidden @3xl/main:block"><ColumnSettings v-model="columns" :defs="columnDefs" /></div>
       <Button size="sm" @click="create"><Plus />新建密钥</Button>
     </PageActions>
 
     <LoadError v-if="loadError" :message="loadError" />
 
-    <!-- 窄屏：卡片列表 -->
-    <div v-if="showList" class="divide-y overflow-hidden rounded-lg border lg:hidden">
+    <!-- 内容区放不下默认列时：卡片列表。按内容区宽度（容器查询）切换，侧边栏收起展开都准；
+         默认列实测约需 46rem，阈值 48rem（@3xl，改默认列时重新量） -->
+    <div v-if="showList" class="divide-y overflow-hidden rounded-lg border @3xl/main:hidden">
       <div v-for="k in keys" :key="k.id" class="flex items-start gap-3 p-4">
         <div class="min-w-0 flex-1 space-y-1.5">
           <div class="flex items-center gap-2">
@@ -128,44 +142,48 @@ const keyLink =
       <p v-if="!keys.length" class="px-4 py-10 text-center text-sm text-muted-foreground">还没有密钥。</p>
     </div>
 
-    <!-- 宽屏：表格 -->
-    <div v-if="showList" class="hidden overflow-x-auto rounded-lg border lg:block">
+    <!-- 内容区放得下默认列时：表格。列可在"显示列"里设置，操作列固定在最右 -->
+    <div v-if="showList" class="hidden overflow-x-auto rounded-lg border @3xl/main:block">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead class="w-full pl-4">名称</TableHead>
-            <TableHead>状态</TableHead>
-            <TableHead>Token 用量</TableHead>
-            <TableHead class="text-right whitespace-nowrap">近 30 天费用</TableHead>
-            <TableHead>到期</TableHead>
-            <TableHead>最近使用</TableHead>
-            <TableHead class="px-4 text-center">操作</TableHead>
+            <template v-for="key in columns.visible" :key="key">
+              <TableHead v-if="key === 'status'">状态</TableHead>
+              <TableHead v-else-if="key === 'tokens'">Token 用量</TableHead>
+              <TableHead v-else-if="key === 'cost'" class="text-right whitespace-nowrap">近 30 天费用</TableHead>
+              <TableHead v-else-if="key === 'expires'">到期</TableHead>
+              <TableHead v-else-if="key === 'lastUsed'">最近使用</TableHead>
+            </template>
+            <TableHead :class="['px-4 text-center', stickyActionHead]">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow v-for="k in keys" :key="k.id">
+          <TableRow v-for="k in keys" :key="k.id" class="group">
             <TableCell class="pl-4">
               <button type="button" :class="['block', keyLink]" @click="detail = k">{{ k.name || '（未命名）' }}</button>
               <div class="font-mono text-xs text-muted-foreground">{{ k.prefix }}…</div>
             </TableCell>
-            <TableCell><DotBadge :tone="badge(k).tone">{{ badge(k).label }}</DotBadge></TableCell>
-            <TableCell>
-              <!-- 设了上限：额度条（已用部分）加已用 / 上限；没设：近 30 天用量 -->
-              <div v-if="k.token_limit" class="space-y-1 text-xs">
-                <QuotaMeter :value="usedRatio(k)" used class="w-32" />
-                <div class="flex gap-1.5 tabular-nums">
-                  <span>{{ fmtCompact(k.period_used) }} / {{ fmtCompact(k.token_limit) }}</span>
-                  <span class="text-muted-foreground">{{ periodLabel(k) }}</span>
+            <template v-for="key in columns.visible" :key="key">
+              <TableCell v-if="key === 'status'"><DotBadge :tone="badge(k).tone">{{ badge(k).label }}</DotBadge></TableCell>
+              <TableCell v-else-if="key === 'tokens'">
+                <!-- 设了上限：额度条（已用部分）加已用 / 上限；没设：近 30 天用量 -->
+                <div v-if="k.token_limit" class="space-y-1 text-xs">
+                  <QuotaMeter :value="usedRatio(k)" used class="w-32" />
+                  <div class="flex gap-1.5 tabular-nums">
+                    <span>{{ fmtCompact(k.period_used) }} / {{ fmtCompact(k.token_limit) }}</span>
+                    <span class="text-muted-foreground">{{ periodLabel(k) }}</span>
+                  </div>
                 </div>
-              </div>
-              <span v-else class="text-muted-foreground">近 30 天 {{ fmtTokens(k.recent.tokens) }}</span>
-            </TableCell>
-            <TableCell :class="['text-right tabular-nums', k.recent.cost_nanos == null && 'text-muted-foreground']">{{ fmtCost(k.recent.cost_nanos) }}</TableCell>
-            <TableCell :class="k.expired ? 'text-destructive' : 'text-muted-foreground'" :title="k.expires_at ? fmtTime(k.expires_at) : undefined">
-              {{ expiryText(k) }}
-            </TableCell>
-            <TableCell class="text-muted-foreground">{{ k.last_used_at ? fmtAgo(k.last_used_at) : '未使用' }}</TableCell>
-            <TableCell class="px-4">
+                <span v-else class="text-muted-foreground">近 30 天 {{ fmtTokens(k.recent.tokens) }}</span>
+              </TableCell>
+              <TableCell v-else-if="key === 'cost'" :class="['text-right tabular-nums', k.recent.cost_nanos == null && 'text-muted-foreground']">{{ fmtCost(k.recent.cost_nanos) }}</TableCell>
+              <TableCell v-else-if="key === 'expires'" :class="k.expired ? 'text-destructive' : 'text-muted-foreground'" :title="k.expires_at ? fmtTime(k.expires_at) : undefined">
+                {{ expiryText(k) }}
+              </TableCell>
+              <TableCell v-else-if="key === 'lastUsed'" class="text-muted-foreground">{{ k.last_used_at ? fmtAgo(k.last_used_at) : '未使用' }}</TableCell>
+            </template>
+            <TableCell :class="['px-4', stickyActionCell]">
               <div class="flex justify-center gap-0.5">
                 <IconAction label="详情" @click="detail = k"><FileText /></IconAction>
                 <IconAction :label="k.status === 'enabled' ? '停用' : '启用'" :tone="k.status === 'enabled' ? 'warning' : 'default'" :disabled="busy === k.id" @click="toggle(k)">
@@ -177,7 +195,8 @@ const keyLink =
               </div>
             </TableCell>
           </TableRow>
-          <TableEmpty v-if="!keys.length" :colspan="7">还没有密钥。</TableEmpty>
+          <!-- 名称、操作两列固定，加上显示的可选列 -->
+          <TableEmpty v-if="!keys.length" :colspan="columns.visible.length + 2">还没有密钥。</TableEmpty>
         </TableBody>
       </Table>
     </div>

@@ -1,4 +1,5 @@
 // 表格列设置：显示哪些列、按什么顺序，存在浏览器本地（个人显示偏好，不存服务端）。
+import { ref, watch, type Ref } from 'vue'
 
 export interface ColumnDef {
   key: string
@@ -61,3 +62,16 @@ export function savePrefs(storageKey: string, prefs: ColumnPrefs) {
     // 存不了就只在本次页面内生效
   }
 }
+
+// useColumnPrefs 读取一个表格的列设置，改动后自动存回浏览器本地。
+export function useColumnPrefs(storageKey: string, defs: ColumnDef[]): Ref<ColumnPrefs> {
+  const prefs = ref(loadPrefs(storageKey, defs))
+  watch(prefs, (p) => savePrefs(storageKey, p))
+  return prefs
+}
+
+// 固定在表格最右侧的操作列：列多时表格横向滚动，操作按钮始终看得到。单元格的底色要跟着行变（悬停、行内弹层打开、
+// 勾选），所以表格行要加 group；底色用和行底色相同效果的不透明混色，滚动时不透出下面的列。
+const stickyEdge = 'sticky right-0 bg-background shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.15)]'
+export const stickyActionHead = stickyEdge
+export const stickyActionCell = `${stickyEdge} transition-colors group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--background))] group-has-aria-expanded:bg-[color-mix(in_oklab,var(--muted)_50%,var(--background))] group-data-[state=selected]:bg-muted`

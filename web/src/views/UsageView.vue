@@ -5,7 +5,7 @@ import { RefreshCw, X, Search, ChevronLeft, ChevronRight, ChevronsLeft, Chevrons
 import { api, errorMessage, type UsageLog } from '@/api/client'
 import { cn, fmtDuration, fmtNum, fmtShortTime, fmtTime, fmtTokens } from '@/lib/utils'
 import { fmtCost } from '@/lib/cost'
-import { loadPrefs, savePrefs, type ColumnDef } from '@/lib/columns'
+import { stickyActionCell, stickyActionHead, useColumnPrefs, type ColumnDef } from '@/lib/columns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -74,8 +74,7 @@ const columnDefs: ColumnDef[] = [
 const rightAligned = new Set(['token', 'cost', 'latency', 'rate'])
 // v3：调整默认列顺序、IP 和客户端默认隐藏，换键让已保存的设置按新默认重置一次。
 const prefsKey = 'agy2api_usage_columns_v3'
-const columnPrefs = ref(loadPrefs(prefsKey, columnDefs))
-watch(columnPrefs, (p) => savePrefs(prefsKey, p))
+const columnPrefs = useColumnPrefs(prefsKey, columnDefs)
 const labelOf = Object.fromEntries(columnDefs.map((d) => [d.key, d.label]))
 
 const route = useRoute()
@@ -307,7 +306,8 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
           <Input v-model="requestIdInput" placeholder="按请求 ID 查找，回车确认" class="h-8 pl-8" aria-label="请求 ID" />
         </form>
         <div class="ml-auto flex items-center gap-2">
-          <div class="hidden lg:block">
+          <!-- 显示列只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
+          <div class="hidden @4xl/main:block">
             <ColumnSettings v-model="columnPrefs" :defs="columnDefs" />
           </div>
           <span v-if="updatedAt" class="hidden text-xs text-muted-foreground tabular-nums sm:inline" aria-live="polite">
@@ -337,8 +337,9 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
         <Button variant="link" size="xs" class="h-6 px-1 text-muted-foreground" @click="clearFilters">清除全部筛选</Button>
       </div>
 
-      <!-- 窄屏：记录卡片，字段固定 -->
-      <div :class="cn('divide-y overflow-hidden rounded-lg border transition-opacity duration-200 lg:hidden', loading && 'opacity-60')">
+      <!-- 内容区窄于 56rem（@4xl，按内容区宽度切换）：记录卡片，字段固定。默认列实测约需 100rem，宽屏也常放不下，
+           表格靠横向滚动、操作列固定在最右 -->
+      <div :class="cn('divide-y overflow-hidden rounded-lg border transition-opacity duration-200 @4xl/main:hidden', loading && 'opacity-60')">
         <div v-for="r in logs" :key="r.id" class="space-y-1.5 p-4">
           <div class="flex items-start justify-between gap-3">
             <div class="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -377,7 +378,7 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
 
       <!-- 宽屏：表格，每条记录一行；列可在"显示列"里设置 -->
       <!-- 加载中保留原有内容、稍微变淡，不闪也不跳 -->
-      <div :class="cn('hidden overflow-hidden rounded-lg border transition-opacity duration-200 lg:block', loading && 'opacity-60')">
+      <div :class="cn('hidden overflow-hidden rounded-lg border transition-opacity duration-200 @4xl/main:block', loading && 'opacity-60')">
         <Table>
           <TableHeader>
             <TableRow>
@@ -396,7 +397,7 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
                 <template v-else>{{ labelOf[key] }}</template>
               </TableHead>
               <!-- 操作列固定在最右：列多时表格横向滚动，详情按钮始终看得到 -->
-              <TableHead class="sticky right-0 shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.15)] w-px bg-background pr-4 text-center">操作</TableHead>
+              <TableHead :class="['w-px pr-4 text-center', stickyActionHead]">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -526,7 +527,7 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
               <!-- 固定列要不透明才能盖住滚动中的内容；悬停色和整行的半透明悬停色混合后一致，
                    渐变时长也和整行（TableRow 的 transition-colors）一样，两边同时变色。按钮用 24px，不把行撑高。 -->
               <TableCell
-                class="sticky right-0 shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.15)] bg-background pr-4 text-center transition-colors group-hover:bg-[color-mix(in_oklab,var(--muted)_50%,var(--background))]"
+                :class="['pr-4 text-center', stickyActionCell]"
               >
                 <IconAction label="详情" size="xs" @click="detailId = r.id"><FileText /></IconAction>
               </TableCell>

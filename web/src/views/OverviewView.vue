@@ -146,8 +146,8 @@ const stats = computed(() => {
             <TableRow>
               <TableHead class="w-full pl-4">模型</TableHead>
               <TableHead class="text-right">请求</TableHead>
-              <TableHead class="hidden text-right sm:table-cell">输入</TableHead>
-              <TableHead class="hidden text-right sm:table-cell">输出</TableHead>
+              <TableHead class="hidden text-right @xl/main:table-cell">输入</TableHead>
+              <TableHead class="hidden text-right @xl/main:table-cell">输出</TableHead>
               <TableHead class="text-right">合计 Token</TableHead>
               <TableHead class="pr-4 text-right">费用</TableHead>
             </TableRow>
@@ -156,8 +156,8 @@ const stats = computed(() => {
             <TableRow v-for="m in data?.usage_by_model ?? []" :key="m.model">
               <TableCell class="pl-4">{{ m.model }}</TableCell>
               <TableCell class="text-right tabular-nums">{{ fmtNum(m.requests) }}</TableCell>
-              <TableCell class="hidden text-right tabular-nums sm:table-cell">{{ fmtTokens(m.prompt_tokens) }}</TableCell>
-              <TableCell class="hidden text-right tabular-nums sm:table-cell">{{ fmtTokens(m.output_tokens) }}</TableCell>
+              <TableCell class="hidden text-right tabular-nums @xl/main:table-cell">{{ fmtTokens(m.prompt_tokens) }}</TableCell>
+              <TableCell class="hidden text-right tabular-nums @xl/main:table-cell">{{ fmtTokens(m.output_tokens) }}</TableCell>
               <TableCell class="text-right tabular-nums">{{ fmtTokens(m.total_tokens) }}</TableCell>
               <TableCell :class="['pr-4 text-right tabular-nums', m.cost_nanos == null && 'text-muted-foreground']">{{ fmtCost(m.cost_nanos) }}</TableCell>
             </TableRow>

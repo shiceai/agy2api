@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { Check, Lock, Minus, Pencil, Plus, Power, PowerOff, Trash2, Users, Wifi } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import { api, isUnauthorized, errorMessage, type Proxy } from '@/api/client'
+import { stickyActionCell, stickyActionHead, useColumnPrefs, type ColumnDef } from '@/lib/columns'
 import { useConfirm } from '@/lib/confirm'
 import { latencyTone, proxyAddress, proxyIssue, regionText, sameEgress } from '@/lib/proxy'
 import { toastError } from '@/lib/toast'
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import ColumnSettings from '@/components/ColumnSettings.vue'
 import DotBadge from '@/components/DotBadge.vue'
 import IconAction from '@/components/IconAction.vue'
 import LoadError from '@/components/LoadError.vue'
@@ -26,6 +28,17 @@ import ProxyEditDialog from '@/components/proxies/ProxyEditDialog.vue'
 const router = useRouter()
 const confirm = useConfirm()
 const proxies = ref<Proxy[]>([])
+// 宽屏表格的可选列：显示哪些、什么顺序在"显示列"里设置，存在浏览器本地。勾选框、名称和操作列固定。
+const columnDefs: ColumnDef[] = [
+  { key: 'address', label: '地址', defaultVisible: true },
+  { key: 'status', label: '状态', defaultVisible: true },
+  { key: 'egressIp', label: '出口 IP', defaultVisible: true },
+  { key: 'region', label: '地区', defaultVisible: true },
+  { key: 'latency', label: '延迟', defaultVisible: true },
+  { key: 'accounts', label: '账号', defaultVisible: true },
+  { key: 'checkedAt', label: '测试时间', defaultVisible: true },
+]
+const columns = useColumnPrefs('agy2api_proxies_columns_v1', columnDefs)
 const loadError = ref('')
 // testing 是正在测试的代理 ID。
 const testing = ref(new Set<number>())
@@ -177,13 +190,16 @@ async function batchDelete() {
 <template>
   <div class="space-y-6">
     <PageActions>
+      <!-- 显示列只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
+      <div class="hidden @min-[74rem]/main:block"><ColumnSettings v-model="columns" :defs="columnDefs" /></div>
       <Button size="sm" @click="showAdd = true"><Plus />添加代理</Button>
     </PageActions>
 
     <LoadError v-if="loadError" :message="loadError" />
 
-    <!-- 窄屏：卡片列表 -->
-    <div v-if="showList" class="divide-y overflow-hidden rounded-lg border lg:hidden">
+    <!-- 内容区放不下默认列时：卡片列表。按内容区宽度（容器查询）切换，侧边栏收起展开都准；
+         默认列实测约需 73rem，阈值 74rem（改默认列时重新量） -->
+    <div v-if="showList" class="divide-y overflow-hidden rounded-lg border @min-[74rem]/main:hidden">
       <div v-for="p in proxies" :key="p.id" :class="['flex items-start gap-3 p-4', selected.has(p.id) && 'bg-muted/50']">
         <Checkbox :model-value="selected.has(p.id)" :aria-label="`选择 ${p.name}`" class="mt-0.5" @update:model-value="(v) => pick(p.id, v)" />
         <div class="min-w-0 flex-1 space-y-1">
@@ -225,8 +241,8 @@ async function batchDelete() {
       <p v-if="!proxies.length" class="px-4 py-10 text-center text-sm text-muted-foreground">还没有代理，点击上方"添加代理"。</p>
     </div>
 
-    <!-- 宽屏：表格 -->
-    <div v-if="showList" class="hidden overflow-x-auto rounded-lg border lg:block">
+    <!-- 内容区放得下默认列时：表格。列可在"显示列"里设置，开得多放不下时横向滚动，操作列固定在最右 -->
+    <div v-if="showList" class="hidden overflow-x-auto rounded-lg border @min-[74rem]/main:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -242,78 +258,85 @@ async function batchDelete() {
               </Checkbox>
             </TableHead>
             <TableHead class="w-full">名称</TableHead>
-            <TableHead>地址</TableHead>
-            <TableHead>状态</TableHead>
-            <TableHead>出口 IP</TableHead>
-            <TableHead>地区</TableHead>
-            <TableHead class="text-right">延迟</TableHead>
-            <TableHead class="text-right">账号</TableHead>
-            <TableHead>测试时间</TableHead>
-            <TableHead class="px-4 text-center">操作</TableHead>
+            <template v-for="key in columns.visible" :key="key">
+              <TableHead v-if="key === 'address'">地址</TableHead>
+              <TableHead v-else-if="key === 'status'">状态</TableHead>
+              <TableHead v-else-if="key === 'egressIp'">出口 IP</TableHead>
+              <TableHead v-else-if="key === 'region'">地区</TableHead>
+              <TableHead v-else-if="key === 'latency'" class="text-right">延迟</TableHead>
+              <TableHead v-else-if="key === 'accounts'" class="text-right">账号</TableHead>
+              <TableHead v-else-if="key === 'checkedAt'">测试时间</TableHead>
+            </template>
+            <TableHead :class="['px-4 text-center', stickyActionHead]">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow v-for="p in proxies" :key="p.id" :data-state="selected.has(p.id) ? 'selected' : undefined">
+          <TableRow v-for="p in proxies" :key="p.id" class="group" :data-state="selected.has(p.id) ? 'selected' : undefined">
             <TableCell class="pr-0 pl-4">
               <Checkbox :model-value="selected.has(p.id)" :aria-label="`选择 ${p.name}`" @update:model-value="(v) => pick(p.id, v)" />
             </TableCell>
             <TableCell>{{ p.name }}</TableCell>
-            <!-- 图标加文字用块级 flex 在单元格里居中，leading-none 让文字的框贴着字形，和图标中心对齐；
-                 行内 flex 会拿图标底边对齐基线，整组偏高 -->
-            <TableCell class="whitespace-nowrap text-muted-foreground">
-              <div class="flex items-center gap-1 leading-none">
-                <Tooltip v-if="p.username">
+            <template v-for="key in columns.visible" :key="key">
+              <!-- 图标加文字用块级 flex 在单元格里居中，leading-none 让文字的框贴着字形，和图标中心对齐；
+                   行内 flex 会拿图标底边对齐基线，整组偏高 -->
+              <TableCell v-if="key === 'address'" class="whitespace-nowrap text-muted-foreground">
+                <div class="flex items-center gap-1 leading-none">
+                  <Tooltip v-if="p.username">
+                    <TooltipTrigger as-child>
+                      <Lock class="size-3.5 shrink-0" tabindex="0" aria-label="带用户名密码" />
+                    </TooltipTrigger>
+                    <TooltipContent>用户名 {{ p.username }}，密码不显示</TooltipContent>
+                  </Tooltip>
+                  {{ proxyAddress(p) }}
+                </div>
+              </TableCell>
+              <TableCell v-else-if="key === 'status'">
+                <div class="flex items-center gap-1.5">
+                  <StatusBadge :enabled="p.status === 'enabled'" />
+                  <Tooltip v-if="issueOf(p)?.tip">
+                    <TooltipTrigger as-child>
+                      <span class="cursor-default"><DotBadge :tone="issueOf(p)!.tone">{{ issueOf(p)!.label }}</DotBadge></span>
+                    </TooltipTrigger>
+                    <TooltipContent class="max-w-80">{{ issueOf(p)!.tip }}</TooltipContent>
+                  </Tooltip>
+                  <DotBadge v-else-if="issueOf(p)" :tone="issueOf(p)!.tone">{{ issueOf(p)!.label }}</DotBadge>
+                </div>
+              </TableCell>
+              <TableCell v-else-if="key === 'egressIp'" class="whitespace-nowrap tabular-nums">{{ p.egress_ip || '—' }}</TableCell>
+              <TableCell v-else-if="key === 'region'" class="whitespace-nowrap">
+                <Tooltip v-if="p.egress_org">
                   <TooltipTrigger as-child>
-                    <Lock class="size-3.5 shrink-0" tabindex="0" aria-label="带用户名密码" />
+                    <span class="cursor-default">{{ regionText(p) || '—' }}</span>
                   </TooltipTrigger>
-                  <TooltipContent>用户名 {{ p.username }}，密码不显示</TooltipContent>
+                  <TooltipContent class="block">
+                    <div>运营商：{{ p.egress_org }}</div>
+                    <div v-if="p.egress_region">地区：{{ p.egress_region }}</div>
+                  </TooltipContent>
                 </Tooltip>
-                {{ proxyAddress(p) }}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div class="flex items-center gap-1.5">
-                <StatusBadge :enabled="p.status === 'enabled'" />
-                <Tooltip v-if="issueOf(p)?.tip">
+                <span v-else :class="!regionText(p) && 'text-muted-foreground'">{{ regionText(p) || '—' }}</span>
+              </TableCell>
+              <TableCell
+                v-else-if="key === 'latency'"
+                :class="cn('text-right whitespace-nowrap tabular-nums', p.latency_ms ? latencyTone(p.latency_ms) : 'text-muted-foreground')"
+              >
+                {{ p.latency_ms ? `${p.latency_ms} ms` : '—' }}
+              </TableCell>
+              <TableCell v-else-if="key === 'accounts'" class="text-right">
+                <Tooltip v-if="p.accounts.length">
                   <TooltipTrigger as-child>
-                    <span class="cursor-default"><DotBadge :tone="issueOf(p)!.tone">{{ issueOf(p)!.label }}</DotBadge></span>
+                    <div class="ml-auto flex w-fit cursor-default items-center gap-1 leading-none tabular-nums">
+                      <Users class="size-3.5 text-muted-foreground" />{{ p.accounts.length }}
+                    </div>
                   </TooltipTrigger>
-                  <TooltipContent class="max-w-80">{{ issueOf(p)!.tip }}</TooltipContent>
+                  <TooltipContent class="max-w-80">{{ p.accounts.map((a) => a.email).join('、') }}</TooltipContent>
                 </Tooltip>
-                <DotBadge v-else-if="issueOf(p)" :tone="issueOf(p)!.tone">{{ issueOf(p)!.label }}</DotBadge>
-              </div>
-            </TableCell>
-            <TableCell class="whitespace-nowrap tabular-nums">{{ p.egress_ip || '—' }}</TableCell>
-            <TableCell class="whitespace-nowrap">
-              <Tooltip v-if="p.egress_org">
-                <TooltipTrigger as-child>
-                  <span class="cursor-default">{{ regionText(p) || '—' }}</span>
-                </TooltipTrigger>
-                <TooltipContent class="block">
-                  <div>运营商：{{ p.egress_org }}</div>
-                  <div v-if="p.egress_region">地区：{{ p.egress_region }}</div>
-                </TooltipContent>
-              </Tooltip>
-              <span v-else :class="!regionText(p) && 'text-muted-foreground'">{{ regionText(p) || '—' }}</span>
-            </TableCell>
-            <TableCell :class="cn('text-right whitespace-nowrap tabular-nums', p.latency_ms ? latencyTone(p.latency_ms) : 'text-muted-foreground')">
-              {{ p.latency_ms ? `${p.latency_ms} ms` : '—' }}
-            </TableCell>
-            <TableCell class="text-right">
-              <Tooltip v-if="p.accounts.length">
-                <TooltipTrigger as-child>
-                  <div class="ml-auto flex w-fit cursor-default items-center gap-1 leading-none tabular-nums">
-                    <Users class="size-3.5 text-muted-foreground" />{{ p.accounts.length }}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent class="max-w-80">{{ p.accounts.map((a) => a.email).join('、') }}</TooltipContent>
-              </Tooltip>
-              <span v-else class="text-muted-foreground">—</span>
-            </TableCell>
-            <TableCell class="whitespace-nowrap text-muted-foreground" :title="p.checked_at ? fmtTime(p.checked_at) : undefined">
-              {{ p.checked_at ? fmtAgo(p.checked_at) : '—' }}
-            </TableCell>
-            <TableCell class="px-4">
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+              <TableCell v-else-if="key === 'checkedAt'" class="whitespace-nowrap text-muted-foreground" :title="p.checked_at ? fmtTime(p.checked_at) : undefined">
+                {{ p.checked_at ? fmtAgo(p.checked_at) : '—' }}
+              </TableCell>
+            </template>
+            <TableCell :class="['px-4', stickyActionCell]">
               <div class="flex justify-center gap-0.5">
                 <IconAction label="测试" :disabled="testing.has(p.id)" @click="test([p.id])">
                   <Wifi :class="testing.has(p.id) && 'animate-pulse'" />
@@ -331,13 +354,15 @@ async function batchDelete() {
               </div>
             </TableCell>
           </TableRow>
-          <TableEmpty v-if="!proxies.length" :colspan="10">还没有代理，点击右上角"添加代理"。</TableEmpty>
+          <!-- 勾选框、名称、操作三列固定，加上显示的可选列 -->
+          <TableEmpty v-if="!proxies.length" :colspan="columns.visible.length + 3">还没有代理，点击右上角"添加代理"。</TableEmpty>
         </TableBody>
       </Table>
     </div>
 
     <SelectionBar :count="selected.size" @clear="clearSelection">
-      <Button v-if="allChecked !== true" variant="ghost" size="sm" class="lg:hidden" :disabled="busy" @click="checkAll(true)">全选</Button>
+      <!-- 卡片列表没有表头勾选框，"全选"只在卡片布局显示（顶栏也是 @container/main，同一个切换点） -->
+      <Button v-if="allChecked !== true" variant="ghost" size="sm" class="@min-[74rem]/main:hidden" :disabled="busy" @click="checkAll(true)">全选</Button>
       <Button variant="ghost" size="sm" class="max-sm:px-2" :disabled="busy" @click="test([...selected])">
         <Wifi :class="[...selected].some((id) => testing.has(id)) && 'animate-pulse'" /><span class="max-sm:sr-only">测试</span>
       </Button>

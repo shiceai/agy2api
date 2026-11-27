@@ -56,7 +56,9 @@ const headerClass = computed(() =>
              页面有勾选时进入选择模式（浅灰底）：页名、页面操作、退出收起，换成页面的选择栏（SelectionBar 传送过来）。
              两个传送目标一直在 DOM 里，只切换显示。 -->
         <header :class="headerClass">
-          <div class="flex h-14 items-center gap-2 px-4 md:h-12 lg:px-6">
+          <!-- 也声明成 @container/main：左右内边距和下面的内容区相同，宽度一致，传送进来的页面操作、选择栏用和页面
+               同样的容器查询（如表格布局才显示的"显示列"） -->
+          <div class="@container/main flex h-14 items-center gap-2 px-4 md:h-12 lg:px-6">
             <div v-show="selectionMode" id="page-selection" class="flex min-w-0 flex-1 items-center" />
             <template v-if="!selectionMode">
               <SidebarTrigger class="-ml-1.5 hidden md:inline-flex" />
