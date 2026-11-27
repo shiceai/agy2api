@@ -608,7 +608,8 @@ func TestTransientRateLimitBackoff(t *testing.T) {
 	e := newEnv(t, "a")
 	p := DefaultPolicy()
 	p.RateLimitBase, p.RateLimitMax = 300*time.Millisecond, 2*time.Second
-	p.CooldownWait = 0 // 冷却很短，开着等冷却就会等到再试
+	p.CooldownWait = 0        // 冷却很短，开着等冷却就会等到再试
+	p.RateLimitRetryDelay = 0 // 这里只验退避时长，不要额外的换号间隔
 	e.relay.SetPolicy(p)
 	e.up.script["a"] = []int{transient429, transient429}
 
@@ -631,6 +632,57 @@ func TestTransientRateLimitBackoff(t *testing.T) {
 	_, _, _, _ = e.generate("gemini-2.5-flash", false)
 	if d := cooldownOfA(); d > 600*time.Millisecond || d < 450*time.Millisecond {
 		t.Fatalf("连续第二次应冷却约 600ms，实际 %v", d)
+	}
+}
+
+// 瞬时限流（不带恢复时间）换下一个账号前先等 RateLimitRetryDelay，不一秒内把每个号都打一遍。
+func TestTransientRateLimitRetryDelay(t *testing.T) {
+	e := newEnv(t, "a", "b")
+	p := DefaultPolicy()
+	p.CooldownWait = 0 // 两个号都冷却后不再等，直接返回
+	p.RateLimitBase, p.RateLimitMax = time.Second, time.Second
+	p.RateLimitRetryDelay = 300 * time.Millisecond
+	e.relay.SetPolicy(p)
+	e.up.script["a"] = []int{transient429}
+	e.up.script["b"] = []int{transient429}
+
+	start := time.Now()
+	_, _, _, err := e.generate("gemini-2.5-flash", false)
+	elapsed := time.Since(start)
+	if re := relayError(t, err); re.Status != http.StatusTooManyRequests {
+		t.Fatalf("两个号都被瞬时限流时应返回 429，实际 %d", re.Status)
+	}
+	// 试 a（429）→ 等 300ms → 试 b（429）→ 等 300ms → 第三次选不到号返回：至少两段间隔。
+	if elapsed < 500*time.Millisecond {
+		t.Fatalf("瞬时 429 换号前应各等约 300ms，总耗时 %v 偏短", elapsed)
+	}
+}
+
+// 换号间隔等待期间客户端取消：立即停止，不睡满 RateLimitRetryDelay。
+func TestRateLimitRetryDelayCanceled(t *testing.T) {
+	e := newEnv(t, "a")
+	p := DefaultPolicy()
+	p.RateLimitRetryDelay = 5 * time.Second
+	e.relay.SetPolicy(p)
+	e.up.script["a"] = []int{transient429}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	resp, err := e.relay.Generate(ctx, Request{Model: "gemini-2.5-flash", Body: map[string]any{
+		"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": "hi"}}}},
+	}, Stream: false})
+	if resp != nil {
+		resp.Close()
+	}
+	if err == nil {
+		t.Fatal("取消后应返回错误")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("取消后应立即返回，实际等了 %v", elapsed)
 	}
 }
 

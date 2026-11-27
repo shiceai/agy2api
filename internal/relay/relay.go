@@ -425,6 +425,8 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 	// waitLeft 是还能等冷却的时间，见 waitCooldown。
 	var readyAt time.Time
 	waitLeft := p.CooldownWait
+	// delayNext > 0 时，下一次换号重试前先等这么久：瞬时 429 后避免一秒内把每个账号都打一遍（见 Policy.RateLimitRetryDelay）。
+	var delayNext time.Duration
 	// lastUpstream 是最近一次换号重试前的上游失败，最终失败时据此补记一条用量。
 	var lastUpstream *call
 	var lastErr antigravity.UpstreamError
@@ -443,6 +445,12 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 		return nil, err
 	}
 	for try := 1; try <= p.MaxAttempts; try++ {
+		if delayNext > 0 {
+			if !sleepCtx(ctx, delayNext) {
+				return canceled()
+			}
+			delayNext = 0
+		}
 		attemptStart := time.Now()
 		lease, err := r.acquire(ctx, req.Model, tier, tried, prefer, p.Sticky == StickyStrict, &refreshed, p.SlotWait)
 		// 选不到账号、而最早恢复的账号很快就能用：等到那时再选一轮，试过的账号也重新参与。
@@ -578,10 +586,29 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 				readyAt = until
 			}
 		}
+		// 瞬时 429（上游没给恢复时间）：换下一个账号前等一下，避免连打；只对还有下一次尝试的情况设。
+		if d.backoff && try < p.MaxAttempts {
+			delayNext = p.RateLimitRetryDelay
+		}
 		last = &failure{kind: ue.Kind, err: fmt.Errorf("upstream HTTP %d %s", ue.Status, ue.Kind), cooldown: cooldown}
 		lastUpstream, lastErr = c, ue
 	}
 	return fail(exhaustedError(nil, last, minCooldown))
+}
+
+// sleepCtx 睡 d，被 ctx 取消时提前返回 false，正常睡满返回 true。d <= 0 直接返回 true。
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
 }
 
 // minCooldownWait 是等冷却的最短时长：冷却刚好到期时也等这么一下，保证等待时间一定会用完，不会原地打转。

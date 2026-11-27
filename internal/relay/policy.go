@@ -25,6 +25,9 @@ type Policy struct {
 	// 同一账号连续触发就翻倍，最多 Max。
 	RateLimitBase time.Duration
 	RateLimitMax  time.Duration
+	// RateLimitRetryDelay 是瞬时限流（上游没给恢复时间）后换下一个账号重试前的等待：不带恢复时间的 429
+	// 往往是模型或项目级的，立刻换号只会在一秒内把每个号都打一遍。等一小段再试，避开这种连打。0 表示不等。
+	RateLimitRetryDelay time.Duration
 	// ServerErrorCooldown 是上游 5xx 后该账号这个模型的休息时间，0 表示不休息。
 	ServerErrorCooldown time.Duration
 	// ValidationCooldown 是 403 需要验证后该账号这个模型的冷却。
@@ -61,6 +64,7 @@ func DefaultPolicy() Policy {
 		CooldownWait:           30 * time.Second,
 		RateLimitBase:          60 * time.Second,
 		RateLimitMax:           300 * time.Second,
+		RateLimitRetryDelay:    800 * time.Millisecond,
 		ServerErrorCooldown:    30 * time.Second,
 		ValidationCooldown:     10 * time.Minute,
 		ModelForbiddenCooldown: 5 * time.Minute,
