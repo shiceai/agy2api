@@ -111,7 +111,7 @@ func (r *Relay) probe(ctx context.Context, lease *pool.Lease, req Request, tr *t
 	p := cfg.policy
 	ue := antigravity.ClassifyError(up.Status, up.Header, raw, now)
 	d := decide(ue, p, now)
-	cooldown := r.applyDecision(ctx, lease.Account, lease.Model, ue, d, p)
+	cooldown, _ := r.applyDecision(ctx, lease.Account, lease.Model, ue, d, p)
 	tr.add(c.try, lease, started, up.Status, string(ue.Kind), ue.Message, cooldown)
 	r.recordFailure(ctx, req, tr, c, ue)
 	res.CooldownMs = cooldown.Milliseconds()

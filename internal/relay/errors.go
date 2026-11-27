@@ -55,6 +55,19 @@ func errRateLimited(retryAfter time.Duration, err error) *Error {
 	}
 }
 
+// errRequestRejected 是请求被拒（见 KindRequestRejected）时给客户端的错误：说明是多个账号都拒绝了这个请求，
+// 原样重试多半还是失败，让使用者去改请求而不是一直重试。
+func errRequestRejected(accounts int, retryAfter time.Duration, err error) *Error {
+	return &Error{
+		Status: http.StatusTooManyRequests,
+		Code:   "RESOURCE_EXHAUSTED",
+		Message: fmt.Sprintf("upstream rate-limited this request on %d accounts; the request itself may be rejected, "+
+			"retrying it unchanged will likely fail again", accounts),
+		RetryAfter: retryAfter,
+		Err:        err,
+	}
+}
+
 // errFromUpstream 把不再换号的上游错误改写成给客户端的错误。
 // 403 改写成 503：Claude Code 等客户端收到 403 会以为要重新登录，而这类问题对它来说只是暂时不可用。
 // 请求本身的问题（4xx）保留状态码和上游的错误说明，去掉其余细节。

@@ -732,6 +732,30 @@ func (p *Pool) Cooldown(ctx context.Context, accountID int64, until time.Time, r
 	}
 }
 
+// RelaxCooldown 把账号这个模型的冷却从 from 缩短到 to、原因改成 reason：只在冷却还是 from 那一次设的时才改
+// （期间别的请求设了更晚的就不动），内存和库都改。事后发现冷却设重了时用（见 relay 的请求被拒）。返回是否改了。
+func (p *Pool) RelaxCooldown(ctx context.Context, accountID int64, model string, from, to time.Time, reason string) bool {
+	if !to.Before(from) {
+		return false
+	}
+	key := cooldownKey{accountID, model}
+	p.mu.Lock()
+	cur, ok := p.cooldowns[key]
+	if !ok || !cur.until.Equal(from) {
+		p.mu.Unlock()
+		return false
+	}
+	p.cooldowns[key] = cooldown{until: to, reason: reason, set: cur.set}
+	p.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	c := store.Cooldown{AccountID: accountID, Model: model, Until: to.UnixMilli(), Reason: reason}
+	if err := p.store.RelaxCooldown(ctx, c, from.UnixMilli()); err != nil {
+		slog.ErrorContext(ctx, "缩短冷却写库失败", "account_id", accountID, "model", model, "err", err)
+	}
+	return true
+}
+
 // ReconcileCooldowns 按当前快照里的额度，提前解除已经恢复的"额度耗尽"冷却：冷却写入后刷新过额度，
 // 该账号这个模型剩余额度大于 0，且冷却剩余不超过 longCooldown；开了每周额度的账号还要每周额度没用完
 // （5 小时额度恢复了、每周额度还是 0 时上游照样回 429）。内存和库都删。返回解除的条数。刷新额度后调用。
@@ -809,6 +833,17 @@ func (p *Pool) NoteRateLimit(accountID int64) int {
 	s.last = now
 	p.strikes[accountID] = s
 	return s.count
+}
+
+// ForgiveRateLimit 撤销一次 NoteRateLimit：事后发现那次 429 不是账号的问题（见 relay 的请求被拒），不让它把
+// 之后的冷却翻倍。
+func (p *Pool) ForgiveRateLimit(accountID int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if s, ok := p.strikes[accountID]; ok && s.count > 0 {
+		s.count--
+		p.strikes[accountID] = s
+	}
 }
 
 // SetRequireProxy 设置是否只用绑定了代理的账号。

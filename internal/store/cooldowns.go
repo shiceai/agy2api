@@ -39,6 +39,14 @@ func (s *Store) SetCooldowns(ctx context.Context, cs ...Cooldown) error {
 	return tx.Commit()
 }
 
+// RelaxCooldown 把一条冷却的截止时间从 from 改成更早的 c.Until、原因改成 c.Reason（都是 Unix 毫秒）：只在记录的截止时间
+// 还是 from 时改，期间被别处延长过就不动。事后发现冷却设重了时用（见 relay 的请求被拒）。
+func (s *Store) RelaxCooldown(ctx context.Context, c Cooldown, from int64) error {
+	_, err := s.execCtx(ctx, `UPDATE account_cooldowns SET until_at=?, reason=? WHERE account_id=? AND model=? AND until_at=?`,
+		c.Until, c.Reason, c.AccountID, c.Model, from)
+	return err
+}
+
 // ActiveCooldowns 删除 now（Unix 毫秒）之前已过期的冷却，返回其余的。
 func (s *Store) ActiveCooldowns(ctx context.Context, now int64) ([]Cooldown, error) {
 	if _, err := s.execCtx(ctx, `DELETE FROM account_cooldowns WHERE until_at <= ?`, now); err != nil {

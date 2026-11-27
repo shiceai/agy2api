@@ -27,6 +27,17 @@ const (
 	KindRemoteImage     = "remote_image"      // 远程图片 URL 下载/内联失败
 	// KindResponseTooLarge：上游非流式响应超过大小上限（antigravity.ErrResponseTooLarge），生成完成了但结果给不了客户端。
 	KindResponseTooLarge = "response_too_large"
+	// KindRequestRejected：rejectedAccounts 个账号都对同一请求回了不带原因、不带恢复时间的 429，按请求本身被上游拒绝处理
+	// （同时段别的请求在这些账号上照常成功）。也用作这时缩短后的冷却原因。
+	KindRequestRejected = "request_rejected"
+)
+
+// 请求被拒的判定：同一请求在 rejectedAccounts 个不同账号上都遇到不带原因、不带恢复时间的 429，就不再换号，
+// 这些账号因这次请求进入的冷却缩短到 rejectedCooldown、也不计入连续限流（不让之后的冷却翻倍）。一条上游不接受的
+// 请求不应让这个模型在所有账号上停一两分钟、误伤别人；真的是所有账号同时被限流时，短冷却仍能挡住连打。
+const (
+	rejectedAccounts = 2
+	rejectedCooldown = 10 * time.Second
 )
 
 // proxyPause 是账号的代理连不上时暂停调度的时长：代理恢复后很快能重新用上，也不至于每个请求都先撞一次。

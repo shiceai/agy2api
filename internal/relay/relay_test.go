@@ -639,22 +639,107 @@ func TestTransientRateLimitBackoff(t *testing.T) {
 func TestTransientRateLimitRetryDelay(t *testing.T) {
 	e := newEnv(t, "a", "b")
 	p := DefaultPolicy()
-	p.CooldownWait = 0 // 两个号都冷却后不再等，直接返回
-	p.RateLimitBase, p.RateLimitMax = time.Second, time.Second
 	p.RateLimitRetryDelay = 300 * time.Millisecond
 	e.relay.SetPolicy(p)
 	e.up.script["a"] = []int{transient429}
-	e.up.script["b"] = []int{transient429}
 
 	start := time.Now()
-	_, _, _, err := e.generate("gemini-2.5-flash", false)
+	status, _, _, err := e.generate("gemini-2.5-flash", false)
 	elapsed := time.Since(start)
-	if re := relayError(t, err); re.Status != http.StatusTooManyRequests {
-		t.Fatalf("两个号都被瞬时限流时应返回 429，实际 %d", re.Status)
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("a 限流后应换 b 成功：%d %v", status, err)
 	}
-	// 试 a（429）→ 等 300ms → 试 b（429）→ 等 300ms → 第三次选不到号返回：至少两段间隔。
-	if elapsed < 500*time.Millisecond {
-		t.Fatalf("瞬时 429 换号前应各等约 300ms，总耗时 %v 偏短", elapsed)
+	if _, n := e.up.calls("b"); n != 1 {
+		t.Fatalf("应换到 b，b 被调用 %d 次", n)
+	}
+	if elapsed < 300*time.Millisecond {
+		t.Fatalf("瞬时 429 换号前应等约 300ms，总耗时 %v 偏短", elapsed)
+	}
+}
+
+// 请求被拒：两个账号都对同一请求回了不带原因的 429，就不再换第三个号，返回说明请求被拒的 429；
+// 两个号这次的冷却缩短到 rejectedCooldown（内存和库都改），也不计入连续限流（之后单独一次限流仍从 RateLimitBase 起）。
+func TestRequestRejectedOnMultipleAccounts(t *testing.T) {
+	e := newEnv(t, "a", "b", "c")
+	p := DefaultPolicy()
+	p.RateLimitRetryDelay = 0
+	e.relay.SetPolicy(p)
+	e.up.script["a"] = []int{transient429, transient429}
+	e.up.script["b"] = []int{transient429}
+	e.up.script["c"] = []int{transient429}
+
+	ctx := logx.WithRequestID(context.Background(), "req-rejected")
+	_, err := e.relay.Generate(ctx, Request{Model: "gemini-2.5-flash", Body: map[string]any{}})
+	re := relayError(t, err)
+	if re.Status != http.StatusTooManyRequests || !strings.Contains(re.Message, "request itself may be rejected") || re.RetryAfter != rejectedCooldown {
+		t.Fatalf("应返回请求被拒的 429，Retry-After 为 %v：%+v", rejectedCooldown, re)
+	}
+	tried := 0
+	for _, name := range []string{"a", "b", "c"} {
+		if _, n := e.up.calls(name); n > 0 {
+			tried++
+		}
+	}
+	if tried != rejectedAccounts {
+		t.Fatalf("凑够 %d 个账号就不再换号，实际试了 %d 个", rejectedAccounts, tried)
+	}
+
+	relaxed := 0
+	for name, id := range e.ids {
+		cds := e.relay.Cooldowns()[id]
+		if len(cds) == 0 {
+			continue
+		}
+		if left := time.Until(cds[0].Until); cds[0].Reason != KindRequestRejected || left > rejectedCooldown || left < rejectedCooldown-2*time.Second {
+			t.Fatalf("%s 的冷却应缩短到约 %v、原因 %s：%+v（剩 %v）", name, rejectedCooldown, KindRequestRejected, cds, left)
+		}
+		relaxed++
+	}
+	if relaxed != rejectedAccounts {
+		t.Fatalf("应有 %d 个账号的冷却被缩短，实际 %d", rejectedAccounts, relaxed)
+	}
+	stored, err := e.store.ActiveCooldowns(context.Background(), time.Now().UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range stored {
+		if left := time.Until(time.UnixMilli(c.Until)); c.Reason != KindRequestRejected || left > rejectedCooldown {
+			t.Fatalf("库里的冷却也应缩短：%+v（剩 %v）", c, left)
+		}
+	}
+
+	_, d := e.usageByRequest("req-rejected")
+	if d.Error == nil || d.Error.Kind != KindRequestRejected || len(d.Attempts) != rejectedAccounts {
+		t.Fatalf("用量应记为请求被拒、带 %d 次尝试：%+v %+v", rejectedAccounts, d.Error, d.Attempts)
+	}
+	for _, a := range d.Attempts {
+		if a.Result != string(antigravity.KindRateLimit) || a.CooldownMs != rejectedCooldown.Milliseconds() {
+			t.Fatalf("每次尝试仍是瞬时限流，冷却记缩短后的时长：%+v", a)
+		}
+	}
+
+	// 不计入连续限流：被拒的两个号（新环境按顺序先试 a、b）下次限流时仍算第一次，冷却从 RateLimitBase 起、不翻倍。
+	for _, name := range []string{"a", "b"} {
+		if n := e.relay.pool.NoteRateLimit(e.ids[name]); n != 1 {
+			t.Fatalf("%s 的连续限流计数应已撤销，下次应是第 1 次，实际第 %d 次", name, n)
+		}
+	}
+}
+
+// 只有一个账号回了不带原因的 429、换号成功：照常按瞬时限流冷却，不缩短。
+func TestSingleTransientRateLimitKeepsCooldown(t *testing.T) {
+	e := newEnv(t, "a", "b")
+	p := DefaultPolicy()
+	p.RateLimitRetryDelay = 0
+	e.relay.SetPolicy(p)
+	e.up.script["a"] = []int{transient429}
+	e.up.script["b"] = nil
+	if _, _, _, err := e.generate("gemini-2.5-flash", false); err != nil {
+		t.Fatalf("应换 b 成功：%v", err)
+	}
+	cds := e.relay.Cooldowns()[e.ids["a"]]
+	if len(cds) != 1 || cds[0].Reason != string(antigravity.KindRateLimit) || time.Until(cds[0].Until) < p.RateLimitBase-5*time.Second {
+		t.Fatalf("a 应照常冷却约 %v：%+v", p.RateLimitBase, cds)
 	}
 }
 

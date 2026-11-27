@@ -432,6 +432,8 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 	waitLeft := p.CooldownWait
 	// delayNext > 0 时，下一次换号重试前先等这么久：瞬时 429 后避免一秒内把每个账号都打一遍（见 Policy.RateLimitRetryDelay）。
 	var delayNext time.Duration
+	// rejected 是这次请求里回了不带原因、不带恢复时间的 429 的尝试，凑够 rejectedAccounts 个账号就按请求被拒处理。
+	var rejected []rejectedTry
 	// lastUpstream 是最近一次换号重试前的上游失败，最终失败时据此补记一条用量。
 	var lastUpstream *call
 	var lastErr antigravity.UpstreamError
@@ -570,7 +572,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 
 		now := time.Now()
 		d := decide(ue, p, now)
-		cooldown := r.applyDecision(ctx, lease.Account, lease.Model, ue, d, p)
+		cooldown, until := r.applyDecision(ctx, lease.Account, lease.Model, ue, d, p)
 		if ue.Kind == antigravity.KindServerError || ue.Kind == antigravity.KindRateLimit {
 			r.pool.NoteFailure(lease.Account.ID) // 账号近期的失败率，智能选号用
 		}
@@ -582,6 +584,19 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 		if d.action == actionReturn {
 			r.recordFailure(ctx, req, tr, c, ue)
 			return nil, errFromUpstream(ue)
+		}
+		// 不带原因、不带恢复时间的 429 凑够 rejectedAccounts 个账号：按请求本身被上游拒绝处理（见 KindRequestRejected）。
+		if ue.Kind == antigravity.KindRateLimit && d.backoff {
+			rejected = append(rejected, rejectedTry{accountID: lease.Account.ID, model: lease.Model, until: until, attempt: len(tr.attempts) - 1})
+			if n := distinctAccounts(rejected); n >= rejectedAccounts {
+				r.relaxRejected(ctx, rejected, tr)
+				log.WarnContext(ctx, "多个账号都对这个请求返回不带原因的 429，按请求本身被上游拒绝处理，不再换号",
+					"accounts", n, "cooldown", rejectedCooldown)
+				rej := ue
+				rej.Kind = KindRequestRejected
+				r.recordFailure(ctx, req, tr, c, rej)
+				return nil, errRequestRejected(n, rejectedCooldown, upstreamCause(ue))
+			}
 		}
 		if cooldown > 0 {
 			if minCooldown == 0 || cooldown < minCooldown {
@@ -673,26 +688,57 @@ func firstFrame(up *antigravity.Response, stream bool) (io.Reader, error) {
 	}
 }
 
-// applyDecision 执行决定里对账号的处理：冷却或停用。返回实际施加的冷却时长。
-func (r *Relay) applyDecision(ctx context.Context, account *pool.Account, model string, ue antigravity.UpstreamError, d decision, p Policy) time.Duration {
+// applyDecision 执行决定里对账号的处理：冷却或停用。返回实际施加的冷却时长和截止时间（没冷却时为零值）。
+func (r *Relay) applyDecision(ctx context.Context, account *pool.Account, model string, ue antigravity.UpstreamError, d decision, p Policy) (time.Duration, time.Time) {
 	id := account.ID
 	if d.disable != "" {
 		r.disableAccount(ctx, id, d.disable)
-		return 0
+		return 0, time.Time{}
 	}
 	cooldown := d.cooldown
 	if d.backoff {
 		cooldown = rateLimitBackoff(r.pool.NoteRateLimit(id), p)
 	}
+	var until time.Time
 	if cooldown > 0 {
 		models := []string{model}
 		// 额度按窗口算：同窗口的其它模型一起冷却，不再挨个撞 429。额度恢复后由 ReconcileCooldowns 一起解除。
 		if ue.Kind == antigravity.KindQuotaExhausted {
 			models = append(models, account.SharedQuota(model)...)
 		}
-		r.pool.Cooldown(ctx, id, time.Now().Add(cooldown), string(ue.Kind), models...)
+		until = time.Now().Add(cooldown)
+		r.pool.Cooldown(ctx, id, until, string(ue.Kind), models...)
 	}
-	return cooldown
+	return cooldown, until
+}
+
+// rejectedTry 是这次请求里一次不带原因、不带恢复时间的 429：哪个账号、哪个模型、因它冷却到什么时候、在尝试列表里的位置。
+type rejectedTry struct {
+	accountID int64
+	model     string
+	until     time.Time
+	attempt   int
+}
+
+// distinctAccounts 返回涉及的不同账号数（等冷却后同一账号可能再试一次）。
+func distinctAccounts(ts []rejectedTry) int {
+	seen := map[int64]bool{}
+	for _, t := range ts {
+		seen[t.accountID] = true
+	}
+	return len(seen)
+}
+
+// relaxRejected 在判定请求被拒后，把这些尝试施加的冷却缩短到 rejectedCooldown（只缩短、别处延长过的不动）、
+// 撤销它们计入的连续限流，并改尝试列表里记的冷却。
+func (r *Relay) relaxRejected(ctx context.Context, rejected []rejectedTry, tr *trace) {
+	to := time.Now().Add(rejectedCooldown)
+	for _, t := range rejected {
+		r.pool.ForgiveRateLimit(t.accountID)
+		if !t.until.IsZero() && r.pool.RelaxCooldown(ctx, t.accountID, t.model, t.until, to, KindRequestRejected) {
+			tr.attempts[t.attempt].CooldownMs = rejectedCooldown.Milliseconds()
+		}
+	}
 }
 
 // disableAccount 自动停用账号并记下原因，刷新号池。不随请求取消。
@@ -895,7 +941,7 @@ func (r *Relay) midStreamError(resp *Response, ue antigravity.UpstreamError) tim
 	ctx := logx.WithRequestID(context.Background(), resp.requestID)
 	lease, p := resp.call.lease, resp.cfg.policy
 	d := decide(ue, p, time.Now())
-	cooldown := r.applyDecision(ctx, lease.Account, lease.Model, ue, d, p)
+	cooldown, _ := r.applyDecision(ctx, lease.Account, lease.Model, ue, d, p)
 	slog.WarnContext(ctx, "上游在流式中途返回错误",
 		"account_id", lease.Account.ID, "model", resp.req.Model, "resolved_model", lease.Model,
 		"status", ue.Status, "kind", ue.Kind, "reason", ue.Reason, "cooldown", cooldown, "disable", d.disable, "message", ue.Message)

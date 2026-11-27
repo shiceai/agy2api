@@ -25,6 +25,7 @@ export const resultLabels: Record<string, string> = {
   remote_image: '图片链接处理失败',
   stream_idle: '流式空闲超时',
   response_too_large: '响应过大',
+  request_rejected: '请求被拒',
 }
 
 export function resultLabel(kind: string): string {
