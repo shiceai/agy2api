@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Activity, CircleDollarSign, Coins, Gauge, KeyRound, RefreshCw, Users } from '@lucide/vue'
 import { api, errorMessage, type Overview } from '@/api/client'
-import { fmtNum, fmtShortTime, fmtTokens } from '@/lib/utils'
+import { fmtNum, fmtShortTime, fmtTokens, todayStart } from '@/lib/utils'
 import { useLive } from '@/lib/live'
 import { useAutoRefresh } from '@/lib/refresh'
 import { fmtCost, sumCost } from '@/lib/cost'
@@ -22,13 +22,6 @@ const error = ref('')
 const live = useLive()
 // 进行中请求总数：/live 取到后以它为准，还没取到时用概览接口里带的快照。
 const inFlight = computed(() => (live.loaded.value ? live.total.value : (data.value?.in_flight ?? 0)))
-
-// 今天零点（浏览器本地时区）：概览按当日统计。服务器可能是 UTC，所以由前端算好传过去；过了零点，下次刷新自然切到新的一天。
-function todayStart(): number {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
 
 // 失败时保留上次的数据，顶部显示原因，下次成功后消失。
 async function load(): Promise<boolean> {

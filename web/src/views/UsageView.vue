@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { RefreshCw, X, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, FileText } from '@lucide/vue'
 import { api, errorMessage, type UsageLog } from '@/api/client'
-import { cn, fmtDuration, fmtNum, fmtShortTime, fmtTime, fmtTokens } from '@/lib/utils'
+import { cn, fmtDuration, fmtNum, fmtShortTime, fmtTime, fmtTokens, todayStart } from '@/lib/utils'
 import { fmtCost } from '@/lib/cost'
 import { stickyActionCell, stickyActionHead, useColumnPrefs, type ColumnDef } from '@/lib/columns'
 import { Badge } from '@/components/ui/badge'
@@ -27,12 +27,13 @@ import UsageDetailDialog from '@/components/usage/UsageDetailDialog.vue'
 import UsageStatus from '@/components/usage/UsageStatus.vue'
 import { PROBE_KEY_ID, PROBE_KEY_LABEL, rateOf, reasoningClass, reasoningText, uaShort } from '@/lib/usage'
 
-type RangeKey = '1h' | '6h' | '24h' | '7d' | '30d'
+type RangeKey = '1h' | 'today' | '24h' | '7d' | '30d'
 type Dimension = 'model' | 'account' | 'apiKey'
 
-const ranges: { value: RangeKey; label: string; ms: number }[] = [
+// 时间范围：今日和概览页一样从浏览器时区的今天零点算起，其他按时长往前推。
+const ranges: { value: RangeKey; label: string; ms?: number }[] = [
   { value: '1h', label: '1 小时', ms: 3600_000 },
-  { value: '6h', label: '6 小时', ms: 6 * 3600_000 },
+  { value: 'today', label: '今日' },
   { value: '24h', label: '24 小时', ms: 24 * 3600_000 },
   { value: '7d', label: '7 天', ms: 7 * 86400_000 },
   { value: '30d', label: '30 天', ms: 30 * 86400_000 },
@@ -79,7 +80,7 @@ const columnPrefs = useColumnPrefs(prefsKey, columnDefs)
 const labelOf = Object.fromEntries(columnDefs.map((d) => [d.key, d.label]))
 
 const route = useRoute()
-const range = ref<RangeKey>('24h')
+const range = ref<RangeKey>('today')
 const logs = ref<UsageLog[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -175,7 +176,8 @@ async function loadLogs() {
 
 // 刷新：按当前时间范围重新取起点再查。
 function reload() {
-  since.value = Date.now() - (ranges.find((r) => r.value === range.value)?.ms ?? 0)
+  const ms = ranges.find((r) => r.value === range.value)?.ms
+  since.value = ms ? Date.now() - ms : todayStart()
   return loadLogs()
 }
 // 从别的页面跳过来时带的筛选（如 Key 详情的"在用量页查看"）：range、api_key_id 和显示用的 key_label。

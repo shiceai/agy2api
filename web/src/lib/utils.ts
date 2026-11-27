@@ -39,6 +39,14 @@ export function fmtDuration(ms: number): string {
   return v < 1000 ? `${v} ms` : `${(v / 1000).toFixed(1)} s`
 }
 
+// 今天零点（浏览器本地时区）的 Unix 毫秒：概览、用量页的"今日"从这里算起。服务器可能是 UTC，所以由前端算好传过去；
+// 过了零点，下次刷新自然切到新的一天。
+export function todayStart(): number {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
 // 紧凑的本地时间：今天只显示时分秒，否则带月日。
 export function fmtShortTime(ms: number): string {
   if (!ms) return '—'
