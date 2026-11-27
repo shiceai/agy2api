@@ -167,6 +167,17 @@ export interface SystemView {
   // new_migrations 是在线升级后新版本执行过的迁移数；unknown_migrations 是当前程序不认识的迁移（库被更新的版本改过）。
   new_migrations?: number
   unknown_migrations?: string[]
+  // antigravity 是官方客户端版本情况：内置 UA 落后于官方时 outdated 为真，提示发版更新 UA。
+  antigravity: AntigravityHubView
+}
+
+// AntigravityHubView 是官方 Antigravity 客户端的版本情况。
+export interface AntigravityHubView {
+  // shipped 是内置 UA 用的最高版本，始终有值；latest 是官方最新版本，查到了才有。
+  shipped: string
+  latest?: string
+  outdated: boolean
+  checked_at?: number
 }
 
 // fetchSession 读版本信息；传 password 时用它校验口令（登录页），口令不对抛 401，不触发跳转。

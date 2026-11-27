@@ -34,14 +34,15 @@ const (
 	onboardAPIClient = "gl-node/22.21.1"
 )
 
+// DefaultUserAgent 是最新核验构建（verifiedBuilds[0]）的 User-Agent，账号未知时用。
+// 真实 Antigravity 桌面端对 Cloud Code 声明的 User-Agent 形态：
+// antigravity/hub/<ver> (aidev_client; os_type=<os>; arch=<arch>; cl=<构建号>)。
+// 上游据此判定调用方是否为受支持的客户端，格式不对或缺失会被判为无授权，
+// 返回 SUBSCRIPTION_REQUIRED。version/cl 用核验过的官方构建组合，更新 verifiedBuilds 表顶即随之更新。
+var DefaultUserAgent = userAgentFor(verifiedBuilds[0])
+
 // 上游默认值，Options 对应字段留空时使用。
 const (
-	// DefaultUserAgent 是最新核验构建（verifiedBuilds[0]）的 User-Agent，账号未知时用。
-	// 真实 Antigravity 桌面端对 Cloud Code 声明的 User-Agent 形态：
-	// antigravity/hub/<ver> (aidev_client; os_type=<os>; arch=<arch>; cl=<构建号>)。
-	// 上游据此判定调用方是否为受支持的客户端，格式不对或缺失会被判为无授权，
-	// 返回 SUBSCRIPTION_REQUIRED。version/cl 用核验过的官方构建组合。
-	DefaultUserAgent   = "antigravity/hub/2.31.2 (aidev_client; os_type=linux; arch=amd64; cl=1019359392)"
 	DefaultTokenURL    = "https://oauth2.googleapis.com/token"
 	DefaultUserInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
 

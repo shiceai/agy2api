@@ -16,10 +16,12 @@ type systemView struct {
 	NewMigrations int `json:"new_migrations,omitempty"`
 	// UnknownMigrations 是库里有、当前程序不认识的迁移：库被更新的版本改过结构，当前程序可能不兼容。
 	UnknownMigrations []string `json:"unknown_migrations,omitempty"`
+	// Antigravity 是官方客户端版本情况：内置 UA 版本落后于官方时提示发版更新（见 hubversion.go）。
+	Antigravity antigravityHubView `json:"antigravity"`
 }
 
 func (s *Service) systemView(ctx context.Context) systemView {
-	v := systemView{View: s.upgrade.View(), UnknownMigrations: s.store.UnknownMigrations()}
+	v := systemView{View: s.upgrade.View(), UnknownMigrations: s.store.UnknownMigrations(), Antigravity: s.hubView()}
 	if v.InstalledAt > 0 {
 		n, err := s.store.MigrationsSince(ctx, v.InstalledAt)
 		if err != nil {

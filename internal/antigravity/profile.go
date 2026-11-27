@@ -14,11 +14,17 @@ type verifiedBuild struct {
 	weight      int
 }
 
-// verifiedBuilds 的权重贴近真实用户的版本分布：多数在最新，少量落后一档。
+// verifiedBuilds 的权重贴近真实用户的版本分布：多数在官方最新，少量落后一档。表顶是我们对外声明的最高版本，
+// 官方 Hub 更新后用它和官方最新比，落后了在管理端提示（见 hubversion.go）。
+// CL 来自参考项目对官方 language_server 的 --stamp 实读：2.34.0、2.32.2 与 gcl2api-plus、CLIProxyAPI 两家吻合。
 var verifiedBuilds = []verifiedBuild{
-	{"2.31.2", "1019359392", 65},
-	{"2.31.0", "1017595969", 35},
+	{"2.35.2", "1029311855", 60}, // 官方最新（CLIProxyAPI --stamp 实读）
+	{"2.34.0", "1026637980", 28}, // gcl2api-plus 与 CLIProxyAPI --stamp 双向吻合
+	{"2.33.1", "1026001617", 12}, // gcl2api-plus --stamp 实读
 }
+
+// LatestShippedHubVersion 返回我们对外声明的最高 Antigravity 客户端版本（verifiedBuilds 表顶）。
+func LatestShippedHubVersion() string { return verifiedBuilds[0].version }
 
 // 只用实抓过的平台；macOS、Windows 的 UA 写法没有实抓依据，不引入。
 const deviceOS, deviceArch = "linux", "amd64"

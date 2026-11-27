@@ -43,7 +43,12 @@ type Service struct {
 	clientSystemAsUser atomic.Bool
 	// oauth 是进行中的 Google 登录会话，零值可用。
 	oauth oauthSessions
-	// bgStop、bg 控制服务自己的后台任务：代理定时测试（egress.go）、用量记录清理（retention.go）。
+	// hubVersion 记官方 Antigravity 客户端的最新版本，后台定时查官方更新清单（见 hubversion.go），
+	// 落后于内置 UA 版本时在管理端提示；只在后台 goroutine 里写，systemView 读。
+	hubVersionMu sync.Mutex
+	hubVersion   string
+	hubVersionAt time.Time
+	// bgStop、bg 控制服务自己的后台任务：代理定时测试（egress.go）、用量记录清理（retention.go）、官方版本检查（hubversion.go）。
 	bgStop   chan struct{}
 	bg       sync.WaitGroup
 	stopOnce sync.Once
@@ -141,6 +146,7 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 	}
 	svc.startEgressChecks()
 	svc.startUsagePurge()
+	svc.startHubVersionCheck()
 	svc.upgrade.Start()
 	return svc, nil
 }

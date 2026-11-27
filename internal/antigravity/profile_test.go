@@ -30,9 +30,9 @@ func TestDeviceUserAgent(t *testing.T) {
 		}
 		counts[ua]++
 	}
-	// 按 65/35 分散，留足随机波动的余量。
-	if latest := counts[DefaultUserAgent]; latest < 1150 || latest > 1450 {
-		t.Fatalf("最新构建应占约 65%%，实际 %d/2000：%v", latest, counts)
+	// 表顶权重 60，留足随机波动的余量。
+	if latest := counts[DefaultUserAgent]; latest < 1050 || latest > 1350 {
+		t.Fatalf("最新构建应占约 60%%，实际 %d/2000：%v", latest, counts)
 	}
 }
 

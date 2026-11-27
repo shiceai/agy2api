@@ -226,6 +226,13 @@ function fmtDate(ms: number): string {
             <AlertDescription>{{ view.failed.reason }}，现在运行的是 {{ view.version }}。</AlertDescription>
             <AlertAction><Button size="xs" variant="outline" :disabled="acting || busy" @click="revert">清除</Button></AlertAction>
           </Alert>
+          <Alert v-if="view.antigravity?.outdated">
+            <Info class="text-amber-600 dark:text-amber-400" />
+            <AlertTitle>内置客户端版本偏旧</AlertTitle>
+            <AlertDescription>
+              官方 Antigravity 已更新到 {{ view.antigravity.latest }}，请求对上游声明的版本是 {{ view.antigravity.shipped }}。升级到跟进了新版本的程序可降低被风控的概率。
+            </AlertDescription>
+          </Alert>
 
           <!-- 两格摘要，每格固定三行（标签、版本、补充说明），高度一致 -->
           <div class="grid gap-2 sm:grid-cols-2">

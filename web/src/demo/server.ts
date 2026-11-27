@@ -544,6 +544,7 @@ const systemView = (): SystemView => ({
   update_available: false,
   checked_at: start,
   progress: {},
+  antigravity: { shipped: '2.35.2', latest: '2.35.2', outdated: false, checked_at: start - HOUR },
 })
 on('GET', '/system', systemView)
 
