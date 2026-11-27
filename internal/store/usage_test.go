@@ -127,7 +127,33 @@ func TestUsageDetailFields(t *testing.T) {
 	}
 }
 
-// 按小时聚合：同一 UTC 整点小时的记录合并，非 2xx 计入错误，since 之前的不算，空小时不返回。
+// 按小时聚合的分档从 since 起算：since 不在整点（如 +5:30 时区的本地零点）时，一档是 since 起的一小时。
+func TestUsageHourlyAlignsToSince(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	const h = int64(3600_000)
+	since := 100*h + h/2
+	if err := s.InsertUsage(ctx,
+		&UsageRecord{RequestModel: "m", StatusCode: 200, CreatedAt: since},
+		&UsageRecord{RequestModel: "m", StatusCode: 200, CreatedAt: since + h - 1},
+		&UsageRecord{RequestModel: "m", StatusCode: 200, CreatedAt: since + h},
+	); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.UsageHourly(ctx, since)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Start != since || got[0].Requests != 2 || got[1].Start != since+h || got[1].Requests != 1 {
+		t.Fatalf("应从 since 起每小时一档：%+v %+v", got[0], got[1:])
+	}
+}
+
+// 按小时聚合：同一小时的记录合并，非 2xx 计入错误，since 之前的不算，空小时不返回。
 func TestUsageHourly(t *testing.T) {
 	s, err := Open(t.TempDir())
 	if err != nil {

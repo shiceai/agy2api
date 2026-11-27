@@ -4,7 +4,8 @@ import { useElementSize } from '@vueuse/core'
 import type { HourlyUsage } from '@/api/client'
 import { fmtNum, fmtTokens } from '@/lib/utils'
 
-// 近 24 小时每小时请求数的柱状图。每根柱子由成功（下）和失败（上）两段叠成，中间留 2px 底色缝；
+// 当日每小时请求数的柱状图：横轴固定 0～23 点（概览传今天零点起的 24 个小时），还没到的小时留空，悬停显示"还没到"。
+// 每根柱子由成功（下）和失败（上）两段叠成，中间留 2px 底色缝；
 // 柱宽不超过 24px，顶端 4px 圆角、底端平直。悬停或聚焦后按左右方向键查看某个小时的明细。
 // 图形对读屏隐藏，数据另附一份读屏可见的表格。
 const props = defineProps<{ buckets: HourlyUsage[] }>()
@@ -66,13 +67,28 @@ const xLabels = computed(() =>
   }),
 )
 
+// 现在的时间：随数据刷新（每次刷新换一份 buckets）重新取，用来区分已过去、进行中和还没到的小时。
+const nowMs = computed(() => {
+  void props.buckets
+  return Date.now()
+})
+const isFuture = (i: number) => (props.buckets[i]?.start ?? 0) > nowMs.value
+// 进行中的小时：现在落在哪一档；都还没到或都已过去时取最后一个已过去的。
+const currentIdx = computed(() => {
+  let last = -1
+  props.buckets.forEach((b, i) => {
+    if (b.start <= nowMs.value) last = i
+  })
+  return last
+})
+
 function rangeLabel(i: number): string {
-  const d = new Date(props.buckets[i]!.start)
-  const h = d.getHours()
-  const day = d.toDateString() === new Date().toDateString() ? '今天' : '昨天'
-  const tail = i === props.buckets.length - 1 ? ' · 进行中' : ''
-  return `${day} ${pad2(h)}:00–${pad2(h + 1)}:00${tail}`
+  const h = new Date(props.buckets[i]!.start).getHours()
+  const tail = i === currentIdx.value ? ' · 进行中' : isFuture(i) ? ' · 还没到' : ''
+  return `${pad2(h)}:00–${pad2(h + 1)}:00${tail}`
 }
+// 读屏表格只列已经到了的小时，还没到的没有数据。
+const pastBuckets = computed(() => props.buckets.flatMap((b, i) => (isFuture(i) ? [] : [{ b, i }])))
 
 // 当前查看的小时：悬停或键盘选中。
 const active = ref<number | null>(null)
@@ -91,6 +107,7 @@ const tipStyle = computed(() => {
 const liveText = computed(() => {
   const b = current.value
   if (!b) return ''
+  if (isFuture(active.value!)) return rangeLabel(active.value!)
   return `${rangeLabel(active.value!)}，成功 ${b.requests - b.errors}，失败 ${b.errors}，Token ${b.total_tokens}`
 })
 
@@ -98,15 +115,16 @@ const liveText = computed(() => {
 function onLeave(e: PointerEvent) {
   if (e.pointerType === 'mouse') active.value = null
 }
+// 聚焦时从进行中的小时开始看。
 function onFocus() {
-  if (active.value == null && props.buckets.length) active.value = props.buckets.length - 1
+  if (active.value == null && props.buckets.length) active.value = Math.max(0, currentIdx.value)
 }
 function onKey(e: KeyboardEvent) {
   const n = props.buckets.length
   if (!n) return
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     e.preventDefault()
-    const cur = active.value ?? n - 1
+    const cur = active.value ?? Math.max(0, currentIdx.value)
     active.value = Math.min(n - 1, Math.max(0, cur + (e.key === 'ArrowLeft' ? -1 : 1)))
   } else if (e.key === 'Escape') {
     active.value = null
@@ -128,7 +146,7 @@ function onKey(e: KeyboardEvent) {
       :style="{ height: `${height}px` }"
       tabindex="0"
       role="group"
-      aria-label="近 24 小时每小时请求数，聚焦后用左右方向键逐小时查看"
+      aria-label="今日每小时请求数，聚焦后用左右方向键逐小时查看"
       @keydown="onKey"
       @focus="onFocus"
       @blur="active = null"
@@ -180,7 +198,7 @@ function onKey(e: KeyboardEvent) {
       </svg>
 
       <p v-if="empty" class="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-sm text-muted-foreground">
-        近 24 小时没有请求
+        今天还没有请求
       </p>
 
       <!-- 提示框：数值在前、名称在后，用短线标出对应的数据 -->
@@ -190,8 +208,9 @@ function onKey(e: KeyboardEvent) {
         :style="tipStyle"
         aria-hidden="true"
       >
-        <div class="mb-1.5 text-muted-foreground">{{ rangeLabel(active!) }}</div>
-        <div class="space-y-1 tabular-nums">
+        <div :class="['text-muted-foreground', !isFuture(active!) && 'mb-1.5']">{{ rangeLabel(active!) }}</div>
+        <!-- 还没到的小时只显示时段 -->
+        <div v-if="!isFuture(active!)" class="space-y-1 tabular-nums">
           <div class="flex items-center gap-2">
             <span class="h-0.5 w-3 rounded-full bg-chart-success" />
             <span class="font-semibold">{{ fmtNum(current.requests - current.errors) }}</span>
@@ -216,12 +235,12 @@ function onKey(e: KeyboardEvent) {
          藏不住，24 行会撑到几百像素高，又是绝对定位，会把页面底部撑出一大段空白。 -->
     <div class="sr-only">
       <table>
-        <caption>近 24 小时每小时请求</caption>
+        <caption>今日每小时请求</caption>
         <thead>
           <tr><th>时间</th><th>成功</th><th>失败</th><th>Token</th></tr>
         </thead>
         <tbody>
-          <tr v-for="(b, i) in buckets" :key="b.start">
+          <tr v-for="{ b, i } in pastBuckets" :key="b.start">
             <td>{{ rangeLabel(i) }}</td>
             <td>{{ b.requests - b.errors }}</td>
             <td>{{ b.errors }}</td>

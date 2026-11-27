@@ -461,6 +461,11 @@ func (s *Service) adminAccountStats(w http.ResponseWriter, r *http.Request) {
 // --- 概览 ---
 
 func (s *Service) adminOverview(w http.ResponseWriter, r *http.Request) {
+	since, err := overviewSince(r.URL.Query().Get("since"), time.Now())
+	if err != nil {
+		adminError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	accounts, err := s.store.ListAccounts(r.Context(), s.enc)
 	if err != nil {
 		adminError(w, http.StatusInternalServerError, err.Error())
@@ -471,8 +476,7 @@ func (s *Service) adminOverview(w http.ResponseWriter, r *http.Request) {
 		adminError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// "近 24 小时"按整点小时算：当前小时加前 23 个小时，按模型统计和按小时趋势用同一个起点，数字对得上。
-	since := time.Now().Truncate(time.Hour).Add(-23 * time.Hour).UnixMilli()
+	// 按模型统计和按小时趋势用同一个起点，数字对得上；趋势固定 24 个小时（今日时是当天 0～23 点，没到的小时为 0）。
 	stats, err := s.store.UsageByModel(r.Context(), since)
 	if err != nil {
 		adminError(w, http.StatusInternalServerError, err.Error())
@@ -508,11 +512,25 @@ func (s *Service) adminOverview(w http.ResponseWriter, r *http.Request) {
 		"accounts_ready":   enabled,
 		"api_keys_total":   len(keys),
 		"api_keys_enabled": keysEnabled,
-		"requests_24h":     reqs,
+		"requests":         reqs,
 		"in_flight":        inFlight,
 		"usage_by_model":   stats,
 		"hourly":           fillHours(since, 24, rows),
 	})
+}
+
+// overviewSince 解析概览的统计起点。管理端传浏览器本地的今天零点（概览按当日统计；时区以浏览器为准，服务器
+// 可能是 UTC）；必须是最近 48 小时内、不晚于现在的 Unix 毫秒（零点最多在 24 小时前，夏令时等留出余量）。
+// 不传时按近 24 小时：当前整点小时往前 23 个小时。
+func overviewSince(raw string, now time.Time) (int64, error) {
+	if raw == "" {
+		return now.Truncate(time.Hour).Add(-23 * time.Hour).UnixMilli(), nil
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v > now.UnixMilli() || v < now.Add(-48*time.Hour).UnixMilli() {
+		return 0, errors.New("since 应是最近 48 小时内的 Unix 毫秒")
+	}
+	return v, nil
 }
 
 // adminLive 返回实时并发：各账号当前进行中的生成请求数（账号 ID → 占用）和总数，供账号页和概览页轮询刷新；

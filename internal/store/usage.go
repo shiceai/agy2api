@@ -186,7 +186,7 @@ func (s *Store) UsageByModel(ctx context.Context, since int64) ([]*ModelUsageSta
 
 // HourlyUsage 是一个小时内的请求数和 token 用量。
 type HourlyUsage struct {
-	Start        int64 `json:"start"` // 这一小时的起点（UTC 整点），Unix 毫秒
+	Start        int64 `json:"start"` // 这一小时的起点（从统计起点 since 起每小时一档），Unix 毫秒
 	Requests     int64 `json:"requests"`
 	Errors       int64 `json:"errors"` // 非 2xx 的请求数
 	PromptTokens int64 `json:"prompt_tokens"`
@@ -196,14 +196,15 @@ type HourlyUsage struct {
 
 const hourMs = 3600_000
 
-// UsageHourly 返回 since（Unix 毫秒）以来按 UTC 整点小时聚合的用量，只含有记录的小时，按时间升序。
+// UsageHourly 返回 since（Unix 毫秒）以来按小时聚合的用量：从 since 起每小时一档（since 是浏览器本地零点时，
+// +5:30 这类不按整点偏移的时区也对得上），只含有记录的小时，按时间升序。
 func (s *Store) UsageHourly(ctx context.Context, since int64) ([]*HourlyUsage, error) {
 	rows, err := s.reader.QueryContext(ctx, `
-		SELECT (created_at / ?) * ? AS hour, COUNT(*),
+		SELECT ((created_at - ?) / ?) * ? + ? AS hour, COUNT(*),
 		       COALESCE(SUM(CASE WHEN status_code BETWEEN 200 AND 299 THEN 0 ELSE 1 END),0),
 		       COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(total_tokens),0)
 		FROM usage_records WHERE created_at >= ?
-		GROUP BY hour ORDER BY hour`, hourMs, hourMs, since)
+		GROUP BY hour ORDER BY hour`, since, hourMs, hourMs, since, since)
 	if err != nil {
 		return nil, err
 	}

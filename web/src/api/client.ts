@@ -478,12 +478,13 @@ export interface HourlyUsage {
   total_tokens: number
 }
 // Overview 的"近 24 小时"是当前小时加前 23 个小时；hourly 固定 24 项，按时间升序。
+// Overview 是概览：统计从请求里的 since（管理端传本地今天零点）起，hourly 是从起点起的 24 个小时。
 export interface Overview {
   accounts_total: number
   accounts_ready: number
   api_keys_total: number
   api_keys_enabled: number
-  requests_24h: number
+  requests: number // 统计区间内的请求数
   // 取概览时进行中的生成请求总数（实时并发），要实时刷新用 /api/admin/live（见 lib/live）。
   in_flight: number
   usage_by_model: ModelStat[]

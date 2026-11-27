@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -113,8 +114,8 @@ func TestOverviewHourly(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ov struct {
-		Requests24h int64                `json:"requests_24h"`
-		Hourly      []*store.HourlyUsage `json:"hourly"`
+		Requests int64                `json:"requests"`
+		Hourly   []*store.HourlyUsage `json:"hourly"`
 	}
 	decode(t, doReq(t, srv, http.MethodGet, "/api/admin/overview", nil, ""), &ov)
 	if len(ov.Hourly) != 24 {
@@ -141,8 +142,43 @@ func TestOverviewHourly(t *testing.T) {
 		}
 		sum += h.Requests
 	}
-	if sum != 2 || ov.Requests24h != 2 {
-		t.Fatalf("超出 24 小时的记录不应计入：趋势合计 %d，近 24 小时请求 %d", sum, ov.Requests24h)
+	if sum != 2 || ov.Requests != 2 {
+		t.Fatalf("超出 24 小时的记录不应计入：趋势合计 %d，近 24 小时请求 %d", sum, ov.Requests)
+	}
+}
+
+// 概览按传入的起点（管理端传本地今天零点）统计：起点之前的不算，趋势从起点起 24 个小时；起点不合法返回 400。
+func TestOverviewSince(t *testing.T) {
+	svc, st := newTestService(t)
+	srv := httptest.NewServer(svc.Router())
+	defer srv.Close()
+
+	now := time.Now()
+	// 起点故意不在整点（+5:30 时区的本地零点就是这样），也不能晚于现在。
+	since := now.Add(-90 * time.Minute).UnixMilli()
+	if err := st.InsertUsage(context.Background(),
+		&store.UsageRecord{RequestModel: "m", StatusCode: 200, TotalTokens: 5, CreatedAt: since},
+		&store.UsageRecord{RequestModel: "m", StatusCode: 200, TotalTokens: 5, CreatedAt: now.UnixMilli()},
+		&store.UsageRecord{RequestModel: "m", StatusCode: 200, TotalTokens: 5, CreatedAt: since - 1},
+	); err != nil {
+		t.Fatal(err)
+	}
+	var ov struct {
+		Requests int64                `json:"requests"`
+		Hourly   []*store.HourlyUsage `json:"hourly"`
+	}
+	decode(t, doReq(t, srv, http.MethodGet, "/api/admin/overview?since="+strconv.FormatInt(since, 10), nil, ""), &ov)
+	if ov.Requests != 2 {
+		t.Fatalf("起点之前的记录不应计入，实际 %d", ov.Requests)
+	}
+	if len(ov.Hourly) != 24 || ov.Hourly[0].Start != since || ov.Hourly[0].Requests != 1 {
+		t.Fatalf("趋势应从起点起 24 个小时：%d 个，第一个 %+v", len(ov.Hourly), ov.Hourly[0])
+	}
+
+	for _, bad := range []string{"abc", strconv.FormatInt(now.Add(time.Hour).UnixMilli(), 10), strconv.FormatInt(now.Add(-49*time.Hour).UnixMilli(), 10)} {
+		if resp := doReq(t, srv, http.MethodGet, "/api/admin/overview?since="+bad, nil, ""); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("since=%s 应返回 400，实际 %d", bad, resp.StatusCode)
+		}
 	}
 }
 

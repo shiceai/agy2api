@@ -452,9 +452,12 @@ function tickLive(): Live {
 }
 tickLive()
 
-function overview(): Overview {
+// 概览：同服务端，从 since（管理端传本地今天零点）起统计，不传时按近 24 小时（当前整点往前 23 小时）；
+// 趋势固定从起点起 24 个小时，按模型统计和趋势用同一个起点。
+function overview(since: number): Overview {
   const now = Date.now()
-  const day = usage.filter((r) => r.created_at >= now - DAY)
+  const first = since || Math.floor(now / HOUR) * HOUR - 23 * HOUR
+  const day = usage.filter((r) => r.created_at >= first)
   const byModel = new Map<string, ModelStat>()
   for (const r of day) {
     const s = byModel.get(r.request_model) ?? { model: r.request_model, requests: 0, prompt_tokens: 0, output_tokens: 0, total_tokens: 0, cost_nanos: null }
@@ -465,7 +468,6 @@ function overview(): Overview {
     if (r.cost_nanos !== null) s.cost_nanos = (s.cost_nanos ?? 0) + r.cost_nanos
     byModel.set(r.request_model, s)
   }
-  const first = Math.floor(now / HOUR) * HOUR - 23 * HOUR
   const hourly: HourlyUsage[] = Array.from({ length: 24 }, (_, i) => ({ start: first + i * HOUR, requests: 0, errors: 0, prompt_tokens: 0, output_tokens: 0, total_tokens: 0 }))
   for (const r of usage) {
     const i = Math.floor((r.created_at - first) / HOUR)
@@ -483,7 +485,7 @@ function overview(): Overview {
     accounts_ready: accounts.filter((a) => a.status === 'enabled' && proxyById(a.proxy_id)?.status !== 'disabled').length,
     api_keys_total: keys.length,
     api_keys_enabled: keys.filter((k) => k.status === 'enabled' && !(k.expires_at > 0 && k.expires_at <= now)).length,
-    requests_24h: day.length,
+    requests: day.length,
     in_flight: lv.total,
     usage_by_model: [...byModel.values()].sort((a, b) => b.requests - a.requests),
     hourly,
@@ -633,7 +635,7 @@ on('POST', '/system/check', async () => {
   return { ...systemView(), checked_at: Date.now() }
 })
 on('POST', '/system/(upgrade|revert)', () => fail(409, '演示站不能升级'))
-on('GET', '/overview', () => overview())
+on('GET', '/overview', (_m, q) => overview(Number(q.get('since')) || 0))
 on('GET', '/live', () => tickLive())
 
 on('GET', '/accounts', (): AccountList => ({
