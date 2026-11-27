@@ -555,7 +555,7 @@ export interface ClientFilterResponse {
   default_keywords: string[]
 }
 // SystemPrompt 是系统提示词伪装设置：mode 为 prepend（前置）、replace（替换）或 as_user（客户端转用户），
-// template 是注入的 system 提示词。
+// template 是自定义 system 提示词，为空时用内置官方基线。
 export interface SystemPrompt {
   enabled: boolean
   mode: 'prepend' | 'replace' | 'as_user'
@@ -563,6 +563,8 @@ export interface SystemPrompt {
 }
 export interface SystemPromptResponse {
   settings: SystemPrompt
+  // builtin 是内置官方基线原文，供"来源：内置"时预览，只读。
+  builtin: string
 }
 // RequestHandling 是请求处理开关：是否内联远程图片 URL、是否把思考内容返回给客户端。
 export interface RequestHandling {

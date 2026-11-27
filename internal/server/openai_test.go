@@ -16,6 +16,7 @@ func openaiHeaders(t *testing.T, srv *httptest.Server) map[string]string {
 
 func TestChatCompletionsNonStream(t *testing.T) {
 	svc, _ := newTestService(t)
+	svc.relay.SetSystemPrompt("", "") // 关掉默认开启的提示词注入，隔离转换逻辑
 	srv := httptest.NewServer(svc.Router())
 	defer srv.Close()
 	h := openaiHeaders(t, srv)

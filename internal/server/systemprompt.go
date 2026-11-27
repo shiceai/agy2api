@@ -15,42 +15,47 @@ type systemPromptView struct {
 	Enabled bool `json:"enabled"`
 	// Mode 是 prepend（前置）、replace（替换）或 as_user（客户端转用户）。
 	Mode string `json:"mode"`
-	// Template 是注入的 system 提示词，由使用者从官方客户端抓取后填入，项目不内置。
+	// Template 是自定义的 system 提示词；为空时用内置的官方基线提示词（见 antigravity.BuiltinSystemPrompt）。
 	Template string `json:"template"`
 }
 
-// systemPromptSetting 存在 settings 的 system_prompt 键。默认关闭，客户端转用户模式，模板为空。
+// systemPromptSetting 存在 settings 的 system_prompt 键。默认开启、客户端转用户模式、模板为空（用内置官方基线），
+// 让请求的 system 默认就像官方客户端发的。
 var systemPromptSetting = jsonSetting[systemPromptView]{
 	key:   "system_prompt",
 	name:  "系统提示词伪装设置",
 	limit: 1 << 20,
 	defaults: func() systemPromptView {
-		return systemPromptView{Enabled: false, Mode: string(antigravity.SystemPromptAsUser)}
+		return systemPromptView{Enabled: true, Mode: string(antigravity.SystemPromptAsUser)}
 	},
 	validate: systemPromptView.validate,
 }
 
-// validate 检查模式取值；开启 prepend、replace 时模板不能为空（空模板什么都不注入，开着没有意义）；
-// as_user 允许空模板（此时只把客户端 system 降为用户消息，用于规避上游对客户端 system 的识别）。
+// validate 只检查模式取值：模板可以为空，为空时用内置官方基线，三种模式都能用。
 func (v systemPromptView) validate() error {
 	switch antigravity.SystemPromptMode(v.Mode) {
 	case antigravity.SystemPromptPrepend, antigravity.SystemPromptReplace, antigravity.SystemPromptAsUser:
 	default:
 		return errors.New("mode must be prepend, replace or as_user")
 	}
-	if v.Enabled && strings.TrimSpace(v.Template) == "" && antigravity.SystemPromptMode(v.Mode) != antigravity.SystemPromptAsUser {
-		return errors.New("template is required when enabled unless mode is as_user")
-	}
 	return nil
 }
 
-// apply 把设置下发给 relay；关闭时传空模式清掉（as_user 空模板也会生效，不能只靠空模板表示关闭）。
+// template 返回实际注入的模板：填了自定义就用自定义，否则用内置官方基线。
+func (v systemPromptView) template() string {
+	if strings.TrimSpace(v.Template) != "" {
+		return v.Template
+	}
+	return antigravity.BuiltinSystemPrompt
+}
+
+// apply 把设置下发给 relay；关闭时传空模式清掉。
 func (v systemPromptView) apply(s *Service) {
 	if !v.Enabled {
 		s.relay.SetSystemPrompt("", "")
 		return
 	}
-	s.relay.SetSystemPrompt(antigravity.SystemPromptMode(v.Mode), v.Template)
+	s.relay.SetSystemPrompt(antigravity.SystemPromptMode(v.Mode), v.template())
 }
 
 // loadSystemPrompt 启动时从库加载系统提示词伪装设置并生效。
@@ -69,7 +74,8 @@ func (s *Service) adminGetSystemPrompt(w http.ResponseWriter, r *http.Request) {
 		adminError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"settings": v})
+	// builtin 是内置官方基线原文，供管理端在"来源：内置"时预览；它是只读常量，不随设置保存。
+	writeJSON(w, http.StatusOK, map[string]any{"settings": v, "builtin": antigravity.BuiltinSystemPrompt})
 }
 
 func (s *Service) adminUpdateSystemPrompt(w http.ResponseWriter, r *http.Request) {

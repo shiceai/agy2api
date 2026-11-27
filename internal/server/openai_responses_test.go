@@ -161,6 +161,7 @@ func TestResponsesErrors(t *testing.T) {
 // 关掉后回到 systemInstruction，mock 回显真正的用户消息。
 func TestResponsesSystemAsUser(t *testing.T) {
 	svc, _ := newTestService(t)
+	svc.relay.SetSystemPrompt("", "") // 关掉默认开启的提示词注入，只测"客户端兼容"的 system 降级
 	srv := httptest.NewServer(svc.Router())
 	defer srv.Close()
 	h := openaiHeaders(t, srv)

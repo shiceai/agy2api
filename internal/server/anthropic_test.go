@@ -17,6 +17,7 @@ func anthropicHeaders(t *testing.T, srv *httptest.Server) map[string]string {
 func TestMessagesNonStream(t *testing.T) {
 	svc, _ := newTestService(t)
 	svc.clientSystemAsUser.Store(false) // 只测转换，不动 system
+	svc.relay.SetSystemPrompt("", "")   // 关掉默认开启的提示词注入，隔离转换逻辑
 	srv := httptest.NewServer(svc.Router())
 	defer srv.Close()
 	h := anthropicHeaders(t, srv)
@@ -216,6 +217,7 @@ func TestMessagesModelAlias(t *testing.T) {
 // 关掉后 system 回到 systemInstruction，mock 回显真正的用户消息。
 func TestMessagesSystemAsUser(t *testing.T) {
 	svc, _ := newTestService(t)
+	svc.relay.SetSystemPrompt("", "") // 关掉默认开启的提示词注入，只测"客户端兼容"的 system 降级
 	srv := httptest.NewServer(svc.Router())
 	defer srv.Close()
 	h := anthropicHeaders(t, srv)

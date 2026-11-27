@@ -338,7 +338,13 @@ const schedulingDefaults: Scheduling = {
 }
 let scheduling: Scheduling = { ...schedulingDefaults }
 let clientFilter: ClientFilter = { enabled: false, mode: 'rewrite', use_default_keywords: true, rules: '' }
-let systemPrompt: SystemPrompt = { enabled: false, mode: 'as_user', template: '' }
+let systemPrompt: SystemPrompt = { enabled: true, mode: 'as_user', template: '' }
+// 内置官方基线（演示站只取开头做预览，完整内容见自建实例）。
+const BUILTIN_SYSTEM_PROMPT =
+  'You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.\n' +
+  'You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.\n' +
+  'The USER will send you requests, which you must always prioritize addressing. User requests are enclosed within <USER_REQUEST> tags.\n\n' +
+  '（演示站省略其余内容，完整基线在自建实例上查看）'
 let requestHandling: RequestHandling = { remote_images_enabled: false, return_thoughts: true }
 let retention: RetentionSettings = { enabled: true, days: 90 }
 let lastPurge: RetentionView['last'] = { at: start - 20 * HOUR, days: 90, deleted: 0, duration_ms: 12, manual: false }
@@ -831,12 +837,12 @@ on('PUT', '/settings/client-filter', (_m, _q, b): ClientFilterResponse => {
   clientFilter = { ...clientFilter, ...(b as Partial<ClientFilter>) }
   return { settings: clientFilter, default_keywords: catalog.default_keywords }
 })
-on('GET', '/settings/system-prompt', (): SystemPromptResponse => ({ settings: systemPrompt }))
+on('GET', '/settings/system-prompt', (): SystemPromptResponse => ({ settings: systemPrompt, builtin: BUILTIN_SYSTEM_PROMPT }))
 on('PUT', '/settings/system-prompt', (_m, _q, b): SystemPromptResponse => {
   const next = { ...systemPrompt, ...(b as Partial<SystemPrompt>) }
-  if (next.enabled && !next.template.trim()) fail(400, 'template is required when enabled')
+  if (!['prepend', 'replace', 'as_user'].includes(next.mode)) fail(400, 'mode must be prepend, replace or as_user')
   systemPrompt = next
-  return { settings: systemPrompt }
+  return { settings: systemPrompt, builtin: BUILTIN_SYSTEM_PROMPT }
 })
 on('GET', '/settings/request-handling', (): RequestHandlingResponse => ({ settings: requestHandling }))
 on('PUT', '/settings/request-handling', (_m, _q, b): RequestHandlingResponse => {
