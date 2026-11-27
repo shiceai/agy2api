@@ -47,7 +47,8 @@ APIs (Claude Code, Codex, the OpenAI SDK and others connect directly), and comes
   of revoked accounts, per-account testing; per-model quota display, with optional weekly quota
 - **Lower the ban risk**: by default, requests carry the official client's base system prompt and declare a client version from a
   verified official build, so the upstream sees something closer to the official client; when it blocks Claude Code or Codex by
-  their system prompt, the gateway moves the system into a user message automatically
+  their system prompt, the gateway moves the system into a user message automatically; optional new-account warmup (gradual
+  ramp-up) and request pacing (spacing out a single account's requests)
 - **Egress proxies**: bind each account to a fixed egress proxy (http, https, socks5)
 - **API keys**: expiry, token limits, allowed models
 - **Usage and cost**: per-call details, cost estimated from official API prices

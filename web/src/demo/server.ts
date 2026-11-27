@@ -44,6 +44,8 @@ import type {
   UsageAttempt,
   UsageLog,
   UsageRecord,
+  Warmup,
+  WarmupResponse,
 } from '@/api/client'
 
 export const DEMO_PASSWORD = 'demo'
@@ -848,6 +850,13 @@ on('GET', '/settings/request-handling', (): RequestHandlingResponse => ({ settin
 on('PUT', '/settings/request-handling', (_m, _q, b): RequestHandlingResponse => {
   requestHandling = { ...requestHandling, ...(b as Partial<RequestHandling>) }
   return { settings: requestHandling }
+})
+
+let warmup: Warmup = { enabled: false, initial_concurrency: 1, successes: 20, age_minutes: 120, initial_interval_ms: 1500, min_interval_ms: 0 }
+on('GET', '/settings/warmup', (): WarmupResponse => ({ settings: warmup }))
+on('PUT', '/settings/warmup', (_m, _q, b): WarmupResponse => {
+  warmup = { ...warmup, ...(b as Partial<Warmup>) }
+  return { settings: warmup }
 })
 
 on('GET', '/prices', () => prices)

@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import TierSettings from '@/components/settings/TierSettings.vue'
 import ModelAliasSettings from '@/components/settings/ModelAliasSettings.vue'
 import SchedulingSettings from '@/components/settings/SchedulingSettings.vue'
+import WarmupSettings from '@/components/settings/WarmupSettings.vue'
 import PriceSettings from '@/components/settings/PriceSettings.vue'
 import DataSettings from '@/components/settings/DataSettings.vue'
 import ClientFilterSettings from '@/components/settings/ClientFilterSettings.vue'
@@ -16,7 +17,7 @@ import { openVersionDialog, useVersion } from '@/lib/version'
 // 当前标签记在地址的 tab 参数里，刷新、分享链接都停在同一个标签。
 const route = useRoute()
 const router = useRouter()
-const tabs = ['tiers', 'aliases', 'scheduling', 'client-filter', 'system-prompt', 'request', 'prices', 'data']
+const tabs = ['tiers', 'aliases', 'scheduling', 'warmup', 'client-filter', 'system-prompt', 'request', 'prices', 'data']
 const tab = computed({
   get: () => (tabs.includes(String(route.query.tab)) ? String(route.query.tab) : 'tiers'),
   set: (v: string | number) => router.replace({ query: v === 'tiers' ? {} : { tab: String(v) } }),
@@ -44,6 +45,7 @@ const version = useVersion()
         <TabsTrigger value="tiers">思考档位</TabsTrigger>
         <TabsTrigger value="aliases">模型别名</TabsTrigger>
         <TabsTrigger value="scheduling">账号调度</TabsTrigger>
+        <TabsTrigger value="warmup">预热节奏</TabsTrigger>
         <TabsTrigger value="client-filter">客户端过滤</TabsTrigger>
         <TabsTrigger value="system-prompt">系统提示词</TabsTrigger>
         <TabsTrigger value="request">请求处理</TabsTrigger>
@@ -54,6 +56,7 @@ const version = useVersion()
     <TabsContent value="tiers"><TierSettings /></TabsContent>
     <TabsContent value="aliases"><ModelAliasSettings /></TabsContent>
     <TabsContent value="scheduling"><SchedulingSettings /></TabsContent>
+    <TabsContent value="warmup"><WarmupSettings /></TabsContent>
     <TabsContent value="client-filter"><ClientFilterSettings /></TabsContent>
     <TabsContent value="system-prompt"><SystemPromptSettings /></TabsContent>
     <TabsContent value="request"><RequestHandlingSettings /></TabsContent>

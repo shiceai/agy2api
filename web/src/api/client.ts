@@ -566,6 +566,18 @@ export interface SystemPromptResponse {
   // builtin 是内置官方基线原文，供"来源：内置"时预览，只读。
   builtin: string
 }
+// Warmup 是新号预热与请求节奏设置：间隔用毫秒、号龄用分钟。
+export interface Warmup {
+  enabled: boolean
+  initial_concurrency: number
+  successes: number
+  age_minutes: number
+  initial_interval_ms: number
+  min_interval_ms: number
+}
+export interface WarmupResponse {
+  settings: Warmup
+}
 // RequestHandling 是请求处理开关：是否内联远程图片 URL、是否把思考内容返回给客户端。
 export interface RequestHandling {
   remote_images_enabled: boolean

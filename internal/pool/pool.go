@@ -232,6 +232,12 @@ type Pool struct {
 	health map[int64]*health
 	// strategy 是选号方式（Strategy*），空串按轮询。
 	strategy atomic.Value
+	// warmup 是新号预热与请求节奏的设置（*WarmupConfig），nil 或未启用时整套不生效。
+	warmup atomic.Value
+	// success 是各账号累计成功数（预热进度用），nextFree 是各账号下一次可发起请求的最早时间（节奏用）。
+	// 都只在内存里，重启清零；预热进度另算号龄一份取较大者，所以清零不会把老账号重新限流。
+	success  map[int64]int
+	nextFree map[int64]time.Time
 }
 
 // New 构造一个空号池，使用前需调用 Reload（和 LoadCooldowns）。
@@ -245,6 +251,8 @@ func New(st *store.Store, enc store.Encryptor) *Pool {
 		strikes:   map[int64]strike{},
 		paused:    map[int64]time.Time{},
 		health:    map[int64]*health{},
+		success:   map[int64]int{},
+		nextFree:  map[int64]time.Time{},
 	}
 	p.defaultLimit.Store(DefaultConcurrency)
 	return p
@@ -483,7 +491,21 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 			note(c.account.ID, AffinityCooldown)
 			continue
 		}
-		if p.inflight[c.account.ID] >= p.Limit(c.account.Account) {
+		limit := p.Limit(c.account.Account)
+		if wc := p.warmupCfg(); wc != nil {
+			// 请求节奏：距上次发起不足最小间隔，暂不可用，等到 nextFree。
+			if nf, ok := p.nextFree[c.account.ID]; ok && now.Before(nf) {
+				if retryAt.IsZero() || nf.Before(retryAt) {
+					retryAt = nf
+				}
+				busy = true
+				note(c.account.ID, AffinityBusy)
+				continue
+			}
+			// 新号预热：按进度压低并发上限。
+			limit = warmLimit(wc, limit, p.warmProgressLocked(wc, c.account, now))
+		}
+		if p.inflight[c.account.ID] >= limit {
 			busy = true
 			note(c.account.ID, AffinityBusy)
 			if c.account.ID == prefer {
@@ -531,6 +553,12 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 		c = p.chooseLocked(candidates, now)
 	}
 	p.inflight[c.account.ID]++
+	// 请求节奏：按进度算下一次可发起的最早时间，隔开同一账号连续的请求。
+	if wc := p.warmupCfg(); wc != nil {
+		if iv := warmInterval(wc, p.warmProgressLocked(wc, c.account, now)); iv > 0 {
+			p.nextFree[c.account.ID] = now.Add(iv)
+		}
+	}
 	return &Lease{Account: c.account, Model: c.model, InUse: p.inflight[c.account.ID], Limit: p.Limit(c.account.Account),
 		Affinity: affinity, pool: p}, nil, nil
 }
@@ -801,4 +829,8 @@ func (p *Pool) NoteSuccess(accountID int64, firstByte time.Duration) {
 	defer p.mu.Unlock()
 	delete(p.strikes, accountID)
 	p.healthLocked(accountID).note(false, firstByte, time.Now())
+	// 预热进度：累计成功数到达阈值即可，不再往上加（控制取值范围）。
+	if wc := p.warmupCfg(); wc != nil && wc.Successes > 0 && p.success[accountID] < wc.Successes {
+		p.success[accountID]++
+	}
 }

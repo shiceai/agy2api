@@ -96,6 +96,8 @@ func (s *Service) Router() http.Handler {
 		r.Put("/settings/anthropic-compat", s.adminUpdateAnthropicCompat)
 		r.Get("/settings/request-handling", s.adminGetRequestHandling)
 		r.Put("/settings/request-handling", s.adminUpdateRequestHandling)
+		r.Get("/settings/warmup", s.adminGetWarmup)
+		r.Put("/settings/warmup", s.adminUpdateWarmup)
 		r.Get("/prices", s.adminGetPrices)
 		r.Post("/prices/sync", s.adminSyncPrices)
 		r.Put("/prices/{model}", s.adminSetPrice)

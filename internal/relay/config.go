@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/shiceai/agy2api/internal/antigravity"
+	"github.com/shiceai/agy2api/internal/pool"
 )
 
 // runtimeConfig 是执行层的运行时配置：管理端可调的调度与容错策略、档位、客户端名称过滤、系统提示词伪装和
@@ -106,6 +107,11 @@ func (r *Relay) SetSystemPrompt(mode antigravity.SystemPromptMode, template stri
 		sp = &systemPromptConfig{mode: mode, template: template}
 	}
 	r.updateConfig(func(c *runtimeConfig) { c.systemPrompt = sp })
+}
+
+// SetWarmup 设置新号预热与请求节奏，立即生效（透传到号池）。
+func (r *Relay) SetWarmup(c pool.WarmupConfig) {
+	r.pool.SetWarmup(c)
 }
 
 // SetRequestHandling 设置请求处理开关，立即生效：是否内联远程图片、是否把思考内容返回给客户端。
