@@ -11,11 +11,11 @@ import (
 )
 
 func TestDeviceUserAgent(t *testing.T) {
-	if DefaultUserAgent != userAgentFor(verifiedBuilds[0]) {
-		t.Fatalf("DefaultUserAgent 应是最新核验构建：%s", DefaultUserAgent)
+	if DefaultUserAgent() != userAgentFor(currentBuilds()[0]) {
+		t.Fatalf("DefaultUserAgent 应是最新核验构建：%s", DefaultUserAgent())
 	}
 	allowed := map[string]bool{}
-	for _, b := range verifiedBuilds {
+	for _, b := range currentBuilds() {
 		allowed[userAgentFor(b)] = true
 	}
 
@@ -31,7 +31,7 @@ func TestDeviceUserAgent(t *testing.T) {
 		counts[ua]++
 	}
 	// 表顶权重 60，留足随机波动的余量。
-	if latest := counts[DefaultUserAgent]; latest < 1050 || latest > 1350 {
+	if latest := counts[DefaultUserAgent()]; latest < 1050 || latest > 1350 {
 		t.Fatalf("最新构建应占约 60%%，实际 %d/2000：%v", latest, counts)
 	}
 }
@@ -41,7 +41,7 @@ func TestUserAgentFor(t *testing.T) {
 	const stored = "antigravity/hub/2.31.0 (aidev_client; os_type=linux; arch=amd64; cl=1017595969)"
 	c := NewClient(Options{})
 	cases := []struct{ stored, key, want string }{
-		{"", "", DefaultUserAgent},
+		{"", "", DefaultUserAgent()},
 		{"", "a@example.com", DeviceUserAgent("a@example.com")},
 		{stored, "a@example.com", stored},
 	}
@@ -87,7 +87,7 @@ func TestSyncUsesAccountUserAgent(t *testing.T) {
 	if res.Credential.UserAgent != want {
 		t.Fatalf("新账号同步后应得到派生画像，实际 %q", res.Credential.UserAgent)
 	}
-	if uas["/userinfo"] != DefaultUserAgent {
+	if uas["/userinfo"] != DefaultUserAgent() {
 		t.Fatalf("拿邮箱前用默认 UA，实际 %q", uas["/userinfo"])
 	}
 	for _, path := range []string{"/v1internal:loadCodeAssist", "/v1internal:fetchAvailableModels"} {

@@ -278,7 +278,9 @@ Docker 是 `docker compose up -d`，`run.sh` 重新运行。
 | `AGY2API_PRICE_SYNC` | 每天从官方价格页同步模型价格，用来估算用量的费用；`off` 关闭（只用已同步的价格和手动设的价格） | 开启 |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` | 全局出口代理：没绑代理的账号和价格同步走它；账号单独绑的代理在管理端"代理"页配置 | 不设 |
 | `AGY2API_UPSTREAM_BASES` | 上游基址（逗号分隔，按顺序回退），一般不用改 | 内置 |
-| `AGY2API_USER_AGENT` | 上游请求的 User-Agent，一般不用改；留空时按账号自动设置 | 按账号设置 |
+| `AGY2API_USER_AGENT` | 上游请求的 User-Agent，一般不用改；留空时按账号自动设置（并随下面的构建表更新） | 按账号设置 |
+| `AGY2API_UA_BUILDS` | 后台定时拉取仓库里的 ua-builds.json，让上游声明的客户端版本随官方发布自动跟进（与发版脱钩）；`off` 只用内置、不外联。设了 `AGY2API_USER_AGENT` 时不生效 | 开启 |
+| `AGY2API_UA_BUILDS_URL` | 覆盖 ua-builds.json 的地址，只用于测试或自建 | 内置仓库地址 |
 | `TZ` | 日志时区 | 系统时区（Docker 镜像里是 UTC） |
 | `AGY2API_ALLOW_NO_ADMIN_AUTH` | 跳过管理端鉴权，只用于本机开发 | `false` |
 | `AGY2API_UPDATE_API` | 查新版本用的 GitHub API 地址，只用于测试，只能是本机地址 | `https://api.github.com` |

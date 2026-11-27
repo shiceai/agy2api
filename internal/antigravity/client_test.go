@@ -75,7 +75,7 @@ func TestRequestHeaders(t *testing.T) {
 		if h == nil {
 			t.Fatalf("没有收到 %s", path)
 		}
-		if h.Get("User-Agent") != DefaultUserAgent || h.Get("Content-Type") != "application/json" || h.Get("Authorization") != "Bearer at" {
+		if h.Get("User-Agent") != DefaultUserAgent() || h.Get("Content-Type") != "application/json" || h.Get("Authorization") != "Bearer at" {
 			t.Fatalf("%s 请求头不对：%v", path, h)
 		}
 		if _, ok := h["Accept"]; ok {

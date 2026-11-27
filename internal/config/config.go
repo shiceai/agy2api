@@ -48,6 +48,12 @@ type Config struct {
 	// 留空时每个账号按核验过的官方构建稳定派生（见 antigravity.DeviceUserAgent）。
 	UserAgent string
 
+	// UABuildsRefresh 开启后台从仓库拉取 ua-builds.json，刷新 UA 的（版本, CL）表（版本/CL 与发版脱钩）。
+	// 环境变量默认开启；关掉只用内置 baseline，不外联。配置了统一 UserAgent 时刷新不生效。
+	UABuildsRefresh bool
+	// UABuildsURL 覆盖 ua-builds.json 的地址，只用于测试或自建；留空用 antigravity.DefaultUABuildsURL。
+	UABuildsURL string
+
 	// PriceSync 定时从厂商官方价格页（Google AI Studio、Anthropic）同步模型价格，用来估算用量的费用。
 	// 环境变量默认开启；直接构造 Config 时（测试）为关闭，不访问外网。
 	PriceSync bool
@@ -79,6 +85,8 @@ func Load() Config {
 		TokenURL:         env("AGY2API_TOKEN_URL", ""),
 		UserInfoURL:      env("AGY2API_USERINFO_URL", ""),
 		UserAgent:        env("AGY2API_USER_AGENT", ""),
+		UABuildsRefresh:  !offEnv("AGY2API_UA_BUILDS"),
+		UABuildsURL:      env("AGY2API_UA_BUILDS_URL", ""),
 		PriceSync:        !offEnv("AGY2API_PRICE_SYNC"),
 		Update:           !offEnv("AGY2API_UPDATE"),
 		UpdateAPI:        env("AGY2API_UPDATE_API", ""),

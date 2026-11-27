@@ -9,8 +9,9 @@ import (
 	"github.com/shiceai/agy2api/internal/antigravity"
 )
 
-// 官方 Antigravity 客户端版本监控：后台定时查官方更新清单的最新版本，和内置 UA 用的最高版本比。
-// 落后了在管理端提示去发版更新 UA（CL 要实读核验，不自动切到未核验的版本，见 antigravity/profile.go）。
+// 官方 Antigravity 客户端版本监控与 UA 构建表刷新：后台定时先从仓库拉 ua-builds.json 刷新对外声明的
+// (版本, CL) 表（版本/CL 与发版脱钩，见 antigravity/builds.go），再查官方更新清单的最新版本和刷新后的
+// 最高版本比，落后了在管理端提示（ua-builds.json 该补新对；CL 由流水线静态读官方构建戳维护）。
 
 const (
 	// hubVersionCheckDelay 是启动后第一次查的延迟，避开启动高峰；hubVersionCheckInterval 是之后的间隔。
@@ -42,11 +43,39 @@ func (s *Service) startHubVersionCheck() {
 			case <-s.bgStop:
 				return
 			case <-t.C:
+				s.refreshUABuilds()
 				s.checkHubVersion()
 				t.Reset(hubVersionCheckInterval)
 			}
 		}
 	}()
+}
+
+// refreshUABuilds 从仓库拉取 ua-builds.json 刷新 UA 的 (版本, CL) 表；失败或内容无效时保留当前表。
+// 关闭刷新或配置了统一 UserAgent 时不做（统一 UA 下活动表不参与派生）。
+func (s *Service) refreshUABuilds() {
+	if !s.cfg.UABuildsRefresh || s.cfg.UserAgent != "" {
+		return
+	}
+	url := s.cfg.UABuildsURL
+	if url == "" {
+		url = antigravity.DefaultUABuildsURL
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), hubVersionFetchTimeout)
+	defer cancel()
+	builds, err := antigravity.FetchRemoteBuilds(ctx, &http.Client{Timeout: hubVersionFetchTimeout}, url)
+	if err != nil {
+		slog.WarnContext(ctx, "拉取 ua-builds 失败", "err", err)
+		return
+	}
+	before := antigravity.LatestShippedHubVersion()
+	if err := antigravity.SetActiveBuilds(builds); err != nil {
+		slog.WarnContext(ctx, "ua-builds 内容无效，保留当前 UA 构建表", "err", err)
+		return
+	}
+	if after := antigravity.LatestShippedHubVersion(); after != before {
+		slog.InfoContext(ctx, "UA 声明版本更新", "from", before, "to", after)
+	}
 }
 
 // checkHubVersion 查一次官方最新版本并记下来；失败只记日志，保留上次的结果。
