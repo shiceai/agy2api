@@ -1,0 +1,39 @@
+# 定时维护 internal/antigravity/ua-builds.json：查官方 Antigravity Hub 最新版本，有新版就下载 language_server、
+# 静态提取构建戳里的 CL（不执行二进制，见 scripts/refresh-ua-builds.sh），把 (版本, CL) 加进表并提交到 main。
+# 运行中的实例定时拉取这个文件刷新对外声明的 UA，版本/CL 与发版脱钩。第三方 Action 按提交 SHA 固定，注释里是对应版本。
+
+name: UA builds
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ua-builds
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: 刷新 UA 构建表
+    if: github.repository == 'shiceai/agy2api'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 刷新 ua-builds.json
+        run: bash scripts/refresh-ua-builds.sh
+      - name: 有变更则提交
+        run: |
+          if git diff --quiet -- internal/antigravity/ua-builds.json; then
+            echo "无变更"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add internal/antigravity/ua-builds.json
+          git commit -m "chore(antigravity): refresh declared UA builds"
+          git push
