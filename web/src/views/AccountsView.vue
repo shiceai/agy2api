@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, FileText, Minus, Network, RefreshCw, Trash2, Plus, Power, PowerOff } from '@lucide/vue'
 import { toast, type ExternalToast } from 'vue-sonner'
-import { api, isUnauthorized, errorMessage, ApiError, type Account, type AccountList, type Proxy } from '@/api/client'
+import { api, isUnauthorized, errorMessage, ApiError, type Account, type AccountList, type Proxy, type WarmupState } from '@/api/client'
 import { fmtAgo } from '@/lib/utils'
 import { useLive } from '@/lib/live'
 import { useConfirm } from '@/lib/confirm'
@@ -16,6 +16,7 @@ import CooldownBadge from '@/components/CooldownBadge.vue'
 import LoadError from '@/components/LoadError.vue'
 import PageActions from '@/components/PageActions.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import WarmupBadge from '@/components/WarmupBadge.vue'
 import IconAction from '@/components/IconAction.vue'
 import PlanBadge from '@/components/PlanBadge.vue'
 import QuotaSummary from '@/components/QuotaSummary.vue'
@@ -41,6 +42,14 @@ function inFlightOf(a: Account): number {
 }
 // 全局默认并发上限（设置页 → 账号调度），账号没单独设置时用它。
 const defaultConcurrency = ref(0)
+// 账号此刻的新号预热情况：/live 取到后以它为准（不在表里就是没在预热），还没取到时用列表里带的快照。
+function warmupOf(a: Account): WarmupState | undefined {
+  return live.loaded.value ? live.warmup.value[String(a.id)] : a.warmup
+}
+// 账号此刻生效的并发上限：预热中是压低后的上限。
+function limitOf(a: Account): number {
+  return warmupOf(a)?.limit ?? (a.max_concurrency || defaultConcurrency.value)
+}
 // 避让阈值（百分比，设置页 → 账号调度 → 额度），额度弹窗里标出低于它的窗口。
 const lowQuota = ref(0)
 // 后台刷新额度的间隔（秒），用来提示额度可能已过期；每周额度的全局开关，账号跟随全局时显示。
@@ -256,13 +265,14 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
           <button type="button" :class="['block max-w-full truncate text-left text-sm', emailLink]" @click="detail = a">{{ a.email }}</button>
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <StatusBadge :enabled="a.status === 'enabled'" />
+            <WarmupBadge v-if="warmupOf(a)" :state="warmupOf(a)!" />
             <CooldownBadge v-if="a.cooldowns?.length" :cooldowns="a.cooldowns" />
             <span v-if="a.subscription" class="text-foreground"><PlanBadge :subscription="a.subscription" /></span>
             <span>{{ a.model_count }} 个模型</span>
             <span>
               并发
               <span :class="inFlightOf(a) ? 'text-foreground tabular-nums' : 'tabular-nums'">{{ inFlightOf(a) }}</span>
-              / {{ a.max_concurrency || `${defaultConcurrency}（默认）` }}
+              / {{ warmupOf(a) ? limitOf(a) : a.max_concurrency || `${defaultConcurrency}（默认）` }}
             </span>
             <span>{{ a.synced_at ? `同步于 ${fmtAgo(a.synced_at)}` : '未同步' }}</span>
             <span class="inline-flex items-center gap-1">代理 <AccountProxy :account="a" /></span>
@@ -337,23 +347,26 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
             <TableCell class="hidden text-muted-foreground min-[1440px]:table-cell">{{ a.project_id || '—' }}</TableCell>
             <TableCell class="hidden text-muted-foreground min-[1440px]:table-cell" :title="a.user_agent">hub {{ hubVersion(a.user_agent) }}</TableCell>
             <TableCell class="text-right tabular-nums">{{ a.model_count }}</TableCell>
-            <!-- 并发：当前进行中 / 上限；当前为 0 时灰色，上限始终灰色。悬停说明，上限跟随全局默认时提示可单独设置 -->
+            <!-- 并发：当前进行中 / 生效中的上限（新号预热中是压低后的上限）；当前为 0 时灰色，上限始终灰色。
+                 悬停说明，预热中写出正常上限，上限跟随全局默认时提示可单独设置 -->
             <TableCell class="text-right tabular-nums">
               <Tooltip>
                 <TooltipTrigger as-child>
                   <span class="cursor-default">
                     <span :class="inFlightOf(a) ? undefined : 'text-muted-foreground'">{{ inFlightOf(a) }}</span>
-                    <span class="text-muted-foreground"> / {{ a.max_concurrency || defaultConcurrency }}</span>
+                    <span class="text-muted-foreground"> / {{ limitOf(a) }}</span>
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  进行中 {{ inFlightOf(a) }} 个，并发上限 {{ a.max_concurrency || defaultConcurrency }}<template v-if="!a.max_concurrency">（跟随全局默认，可在详情里单独设置）</template>
+                  进行中 {{ inFlightOf(a) }} 个，并发上限 {{ limitOf(a) }}<template v-if="warmupOf(a)">（新号预热中，正常 {{ warmupOf(a)!.normal }}）</template><template v-else-if="!a.max_concurrency">（跟随全局默认，可在详情里单独设置）</template>
                 </TooltipContent>
               </Tooltip>
             </TableCell>
+            <!-- 状态：启用/停用，预热中、冷却中时附加徽章。多个徽章竖着叠放（额度列本来就是两行），不把表格撑宽 -->
             <TableCell>
-              <div class="flex items-center gap-1.5">
+              <div class="flex flex-col items-start gap-1">
                 <StatusBadge :enabled="a.status === 'enabled'" :reason="a.disabled_reason" />
+                <WarmupBadge v-if="warmupOf(a)" :state="warmupOf(a)!" />
                 <CooldownBadge v-if="a.cooldowns?.length" :cooldowns="a.cooldowns" />
               </div>
             </TableCell>

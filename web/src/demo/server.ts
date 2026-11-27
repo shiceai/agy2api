@@ -46,6 +46,7 @@ import type {
   UsageRecord,
   Warmup,
   WarmupResponse,
+  WarmupState,
 } from '@/api/client'
 
 export const DEMO_PASSWORD = 'demo'
@@ -192,7 +193,10 @@ let accounts: DemoAccount[] = [
     weekly_quota: 'on', quota_summary: weeklySummary(0.8, 0.62, 0.9, 0), quota_summary_at: start - 6 * MIN,
     cooldowns: [{ model: sonnet, until: start + 4 * MIN, reason: 'rate_limit' }],
   }),
-  newAccount(3, 'carol@example.com', 'Carol', 0, { models: withoutCarbon(accountModels(3, 'gemini-3.8-flash')) }),
+  // 刚导入的新号：打开"设置 → 预热节奏"后账号页显示预热进度
+  newAccount(3, 'carol@example.com', 'Carol', 0, {
+    models: withoutCarbon(accountModels(3, 'gemini-3.8-flash')), created_at: start - 40 * MIN, synced_at: start - 40 * MIN,
+  }),
   newAccount(4, 'dave@example.com', 'Dave', 3),
   newAccount(5, 'erin@example.com', 'Erin', 0, {
     status: 'disabled', disabled_reason: 'refresh token 已失效（invalid_grant）', subscription: null,
@@ -360,7 +364,7 @@ function accountView(a: DemoAccount): Account {
   const cooldowns: Cooldown[] = a.cooldowns.filter((c) => c.until > now)
   const { proxy_id: _, ...rest } = a
   return {
-    ...rest, cooldowns, model_count: a.models.length, in_flight: live.in_flight[String(a.id)] ?? 0,
+    ...rest, cooldowns, model_count: a.models.length, in_flight: live.in_flight[String(a.id)] ?? 0, warmup: demoWarmup(a, now),
     weekly_quota_on: a.weekly_quota === 'on' || (a.weekly_quota === '' && scheduling.weekly_quota),
     proxy: p ? { id: p.id, name: p.name, egress_ip: p.egress_ip, egress_country: p.egress_country, check_error: p.check_error, status: p.status } : null,
   }
@@ -405,19 +409,46 @@ function logView(r: UsageRecord): UsageLog {
   return { ...r, account_email: a?.email ?? '', api_key_name: k?.name ?? '', api_key_prefix: k?.prefix ?? '' }
 }
 
-// 实时并发：每次读取时在 0～2 之间轻微变化，看起来像有流量在跑。
-const live: Live = { in_flight: {}, total: 0, now: start }
+// 新号预热与请求节奏的设置（接口在下面"设置"一节）。放在这里是因为加载时 tickLive 就要用。
+let warmup: Warmup = { enabled: false, initial_concurrency: 1, successes: 20, age_minutes: 120, initial_interval_ms: 1500, min_interval_ms: 0 }
+
+// demoWarmup 按演示站的预热设置和账号导入时间模拟预热情况（成功数按导入后每 5 分钟一次估），
+// 算法同号池：进度取号龄和成功数的较大者，并发上限、请求间隔随进度线性变化。预热关闭或已预热完时没有。
+function demoWarmup(a: DemoAccount, now: number): WarmupState | undefined {
+  if (!warmup.enabled || a.status !== 'enabled' || (warmup.age_minutes <= 0 && warmup.successes <= 0)) return undefined
+  const ageMin = Math.max(0, (now - a.created_at) / MIN)
+  const successes = Math.min(warmup.successes, Math.floor(ageMin / 5))
+  let progress = warmup.age_minutes > 0 ? Math.min(ageMin / warmup.age_minutes, 1) : 0
+  if (warmup.successes > 0) progress = Math.max(progress, Math.min(successes / warmup.successes, 1))
+  if (progress >= 1) return undefined
+  const normal = a.max_concurrency || scheduling.concurrency
+  const initial = Math.max(warmup.initial_concurrency, 1)
+  const limit = initial >= normal ? normal : Math.min(normal, initial + Math.round((normal - initial) * progress))
+  const interval = Math.round(warmup.initial_interval_ms + (warmup.min_interval_ms - warmup.initial_interval_ms) * progress)
+  return {
+    progress, successes, success_target: warmup.successes, age_minutes: Math.floor(ageMin), age_target: warmup.age_minutes,
+    limit, normal, interval_ms: Math.max(0, interval),
+  }
+}
+
+// 实时并发：每次读取时在 0～2 之间轻微变化，看起来像有流量在跑；预热中的账号带上预热情况。
+const live: Live = { in_flight: {}, total: 0, warmup: {}, now: start }
 function tickLive(): Live {
   const now = Date.now()
   live.in_flight = {}
+  live.warmup = {}
   for (const a of accounts) {
-    if (a.status !== 'enabled' || proxyById(a.proxy_id)?.status === 'disabled') continue
+    if (a.status !== 'enabled') continue
+    // 预热情况和号池一样不看代理：代理停用只是暂停调度，预热进度照算
+    const w = demoWarmup(a, now)
+    if (w) live.warmup[String(a.id)] = w
+    if (proxyById(a.proxy_id)?.status === 'disabled') continue
     const n = Math.max(0, Math.round(Math.sin(now / 9000 + a.id * 1.7) * 1.4))
     if (n) live.in_flight[String(a.id)] = n
   }
   live.total = Object.values(live.in_flight).reduce((s, n) => s + n, 0)
   live.now = now
-  return { ...live, in_flight: { ...live.in_flight } }
+  return { ...live, in_flight: { ...live.in_flight }, warmup: { ...live.warmup } }
 }
 tickLive()
 
@@ -852,7 +883,6 @@ on('PUT', '/settings/request-handling', (_m, _q, b): RequestHandlingResponse => 
   return { settings: requestHandling }
 })
 
-let warmup: Warmup = { enabled: false, initial_concurrency: 1, successes: 20, age_minutes: 120, initial_interval_ms: 1500, min_interval_ms: 0 }
 on('GET', '/settings/warmup', (): WarmupResponse => ({ settings: warmup }))
 on('PUT', '/settings/warmup', (_m, _q, b): WarmupResponse => {
   warmup = { ...warmup, ...(b as Partial<Warmup>) }

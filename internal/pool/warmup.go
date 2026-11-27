@@ -39,6 +39,53 @@ func (p *Pool) warmupCfg() *WarmupConfig {
 	return c
 }
 
+// WarmupState 是一个账号此刻的预热情况，账号页据此显示预热进度和压低后的并发上限。
+type WarmupState struct {
+	Progress      float64       // 预热进度 0～1，号龄和成功数各算一份取较大者
+	Successes     int           // 已攒的成功数（内存计数，重启清零）
+	SuccessTarget int           // 成功数达标值，0 表示不按成功数
+	Age           time.Duration // 号龄
+	AgeTarget     time.Duration // 号龄达标值，0 表示不按号龄
+	Limit         int           // 预热后的并发上限
+	Normal        int           // 正常并发上限
+	Interval      time.Duration // 当前同一账号两次请求的最小间隔
+}
+
+// WarmupStatus 返回号池里还在预热的账号（账号 ID → 预热情况）；预热关闭时返回 nil，已预热完的账号不在表里。
+// 只读内存（账号快照和成功计数），不读库，供账号页轮询。
+func (p *Pool) WarmupStatus(now time.Time) map[int64]WarmupState {
+	wc := p.warmupCfg()
+	if wc == nil {
+		return nil
+	}
+	accounts := p.snapshot()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := map[int64]WarmupState{}
+	for _, a := range accounts {
+		prog := p.warmProgressLocked(wc, a, now)
+		if prog >= 1 {
+			continue
+		}
+		normal := p.Limit(a.Account)
+		var age time.Duration
+		if a.CreatedAt > 0 {
+			age = now.Sub(time.UnixMilli(a.CreatedAt))
+		}
+		out[a.ID] = WarmupState{
+			Progress:      prog,
+			Successes:     p.success[a.ID],
+			SuccessTarget: max(wc.Successes, 0),
+			Age:           age,
+			AgeTarget:     max(wc.Age, 0),
+			Limit:         warmLimit(wc, normal, prog),
+			Normal:        normal,
+			Interval:      warmInterval(wc, prog),
+		}
+	}
+	return out
+}
+
 // warmProgressLocked 返回账号的预热进度（0～1，1 表示预热完成）。两个维度都关时按完成算。需持 p.mu。
 func (p *Pool) warmProgressLocked(c *WarmupConfig, a *Account, now time.Time) float64 {
 	if c.Age <= 0 && c.Successes <= 0 {

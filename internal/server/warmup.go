@@ -68,6 +68,41 @@ func (v warmupView) apply(s *Service) {
 	s.relay.SetWarmup(v.config())
 }
 
+// warmupStateView 是还在预热的账号此刻的情况：账号页据此显示"预热 N%"和压低后的并发上限。
+// 随账号视图带一份快照，/live 接口实时刷新。
+type warmupStateView struct {
+	Progress      float64 `json:"progress"`       // 预热进度 0～1，号龄和成功数各算一份取较大者
+	Successes     int     `json:"successes"`      // 已攒的成功数（内存计数，重启清零）
+	SuccessTarget int     `json:"success_target"` // 成功数达标值，0 表示不按成功数
+	AgeMinutes    int     `json:"age_minutes"`    // 号龄（分钟）
+	AgeTarget     int     `json:"age_target"`     // 号龄达标值（分钟），0 表示不按号龄
+	Limit         int     `json:"limit"`          // 预热后的并发上限
+	Normal        int     `json:"normal"`         // 正常并发上限
+	IntervalMs    int64   `json:"interval_ms"`    // 当前同一账号两次请求的最小间隔
+}
+
+func toWarmupStateView(w pool.WarmupState) *warmupStateView {
+	return &warmupStateView{
+		Progress:      w.Progress,
+		Successes:     w.Successes,
+		SuccessTarget: w.SuccessTarget,
+		AgeMinutes:    int(w.Age / time.Minute),
+		AgeTarget:     int(w.AgeTarget / time.Minute),
+		Limit:         w.Limit,
+		Normal:        w.Normal,
+		IntervalMs:    w.Interval.Milliseconds(),
+	}
+}
+
+// warmupStateViews 把号池的预热情况转成接口形态（账号 ID → 情况），预热关闭时为空表。
+func warmupStateViews(states map[int64]pool.WarmupState) map[int64]*warmupStateView {
+	out := make(map[int64]*warmupStateView, len(states))
+	for id, w := range states {
+		out[id] = toWarmupStateView(w)
+	}
+	return out
+}
+
 // loadWarmup 启动时从库加载预热与节奏设置并生效。
 func (s *Service) loadWarmup(ctx context.Context) error {
 	v, err := warmupSetting.load(ctx, s.store)

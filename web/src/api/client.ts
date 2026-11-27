@@ -235,6 +235,8 @@ export interface Account {
   max_concurrency: number
   // 取视图时该账号进行中的生成请求数（实时并发占用）；要实时刷新用 /api/admin/live（见 lib/live）。
   in_flight: number
+  // 新号预热的情况，只在预热开启且还没预热完时有；要实时刷新用 /api/admin/live。
+  warmup?: WarmupState
   cooldowns: Cooldown[]
   model_count: number
   models: ModelInfo[]
@@ -488,11 +490,23 @@ export interface Overview {
   hourly: HourlyUsage[]
 }
 // Live 是 /api/admin/live 的实时并发：in_flight 是账号 ID（字符串键）→ 进行中请求数，total 是总数，
-// now 是服务器时间（Unix 毫秒）。
+// warmup 是还在新号预热的账号（账号 ID → 预热情况，预热关闭时为空），now 是服务器时间（Unix 毫秒）。
 export interface Live {
   in_flight: Record<string, number>
   total: number
+  warmup?: Record<string, WarmupState>
   now: number
+}
+// WarmupState 是还在新号预热的账号此刻的情况。进度按号龄和成功数各算一份取较大者，任一达标即预热完成。
+export interface WarmupState {
+  progress: number // 0～1
+  successes: number // 已攒的成功数（重启清零）
+  success_target: number // 0 表示不按成功数
+  age_minutes: number
+  age_target: number // 分钟，0 表示不按号龄
+  limit: number // 预热后的并发上限
+  normal: number // 正常并发上限
+  interval_ms: number // 同一账号两次请求的最小间隔
 }
 export interface Settings {
   default_tier: string

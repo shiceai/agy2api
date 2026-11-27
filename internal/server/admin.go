@@ -31,7 +31,9 @@ type accountView struct {
 	// MaxConcurrency 是单独设置的并发上限，0 表示跟随全局默认值（见列表接口的 default_concurrency）。
 	MaxConcurrency int `json:"max_concurrency"`
 	// InFlight 是该账号此刻进行中的生成请求数（实时并发占用），取视图时的快照；/live 接口可轮询刷新。
-	InFlight   int                     `json:"in_flight"`
+	InFlight int `json:"in_flight"`
+	// Warmup 是新号预热的情况（进度、压低后的并发上限、请求间隔），只在预热开启且还没预热完时有；/live 接口可轮询刷新。
+	Warmup     *warmupStateView        `json:"warmup,omitempty"`
 	Cooldowns  []cooldownView          `json:"cooldowns"`
 	ModelCount int                     `json:"model_count"`
 	Models     []antigravity.ModelInfo `json:"models"`
@@ -69,11 +71,13 @@ type accountSnapshot struct {
 	cooldowns map[int64][]pool.CooldownInfo
 	paused    map[int64]time.Time
 	inflight  map[int64]int
+	warmup    map[int64]pool.WarmupState
 	proxies   map[int64]*store.Proxy
 }
 
 func (s *Service) accountSnapshot(ctx context.Context) accountSnapshot {
-	snap := accountSnapshot{cooldowns: s.relay.Cooldowns(), paused: s.relay.Paused(), inflight: s.relay.InFlight(), proxies: map[int64]*store.Proxy{}}
+	snap := accountSnapshot{cooldowns: s.relay.Cooldowns(), paused: s.relay.Paused(), inflight: s.relay.InFlight(),
+		warmup: s.relay.WarmupStatus(), proxies: map[int64]*store.Proxy{}}
 	proxies, err := s.store.ListProxies(ctx, s.enc)
 	if err != nil {
 		slog.ErrorContext(ctx, "读取代理失败，账号视图里不显示代理", "err", err)
@@ -116,6 +120,10 @@ func (s *Service) toAccountViewWith(a *store.Account, snap accountSnapshot) acco
 	for _, c := range cooldowns[a.ID] {
 		cds = append(cds, cooldownView{Model: c.Model, Until: c.Until.UnixMilli(), Reason: c.Reason})
 	}
+	var warm *warmupStateView
+	if w, ok := snap.warmup[a.ID]; ok {
+		warm = toWarmupStateView(w)
+	}
 	return accountView{
 		ID:                a.ID,
 		Email:             a.Email,
@@ -127,6 +135,7 @@ func (s *Service) toAccountViewWith(a *store.Account, snap accountSnapshot) acco
 		DisabledReason:    a.DisabledReason,
 		MaxConcurrency:    a.MaxConcurrency,
 		InFlight:          snap.inflight[a.ID],
+		Warmup:            warm,
 		Cooldowns:         cds,
 		ModelCount:        len(models),
 		Models:            models,
@@ -506,8 +515,9 @@ func (s *Service) adminOverview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// adminLive 返回实时并发：各账号当前进行中的生成请求数（账号 ID → 占用）和总数，供账号页和概览页轮询刷新。
-// 只读号池内存计数，不读库；now 是服务器时间（Unix 毫秒），前端据此对齐"已更新"的时间。
+// adminLive 返回实时并发：各账号当前进行中的生成请求数（账号 ID → 占用）和总数，供账号页和概览页轮询刷新；
+// warmup 是还在新号预热的账号（账号 ID → 进度、压低后的并发上限、请求间隔），预热关闭时为空。
+// 只读号池内存，不读库；now 是服务器时间（Unix 毫秒），前端据此对齐"已更新"的时间。
 func (s *Service) adminLive(w http.ResponseWriter, _ *http.Request) {
 	inflight := s.relay.InFlight()
 	total := 0
@@ -517,6 +527,7 @@ func (s *Service) adminLive(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"in_flight": inflight,
 		"total":     total,
+		"warmup":    warmupStateViews(s.relay.WarmupStatus()),
 		"now":       time.Now().UnixMilli(),
 	})
 }

@@ -118,6 +118,11 @@ func (r *Relay) InFlight() map[int64]int {
 	return r.pool.InFlightAll()
 }
 
+// WarmupStatus 返回还在新号预热的账号（账号 ID → 预热情况）；预热关闭时为 nil。
+func (r *Relay) WarmupStatus() map[int64]pool.WarmupState {
+	return r.pool.WarmupStatus(time.Now())
+}
+
 // InvalidateToken 清除账号缓存的 access token，下次请求时重新刷新。
 func (r *Relay) InvalidateToken(accountID int64) {
 	r.tokens.Invalidate(accountID)

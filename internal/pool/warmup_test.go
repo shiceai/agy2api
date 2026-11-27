@@ -146,6 +146,45 @@ func TestLeaseLimitReflectsWarmup(t *testing.T) {
 	}
 }
 
+// 预热情况：预热中的账号给出进度、压低后的上限和间隔；预热完成后不再列出；关掉预热时为 nil。
+func TestWarmupStatus(t *testing.T) {
+	f := newFixture(t)
+	a := f.addAccount("a@example.com", "p-a", "enabled", "gemini-2.5-flash")
+	f.reload()
+	f.pool.SetDefaultConcurrency(5)
+	cfg := WarmupConfig{Enabled: true, InitialConcurrency: 1, Successes: 4, Age: time.Hour,
+		InitialInterval: 1500 * time.Millisecond}
+	f.pool.SetWarmup(cfg)
+
+	for range 2 {
+		f.pool.NoteSuccess(a, 0)
+	}
+	s, ok := f.pool.WarmupStatus(time.Now())[a]
+	if !ok {
+		t.Fatal("新号应在预热中")
+	}
+	// 成功 2/4 → 进度 0.5（号龄几乎为 0）：上限 1+round(4×0.5)=3，间隔 1500×(1-0.5)=750ms。
+	if s.Successes != 2 || s.SuccessTarget != 4 || s.AgeTarget != time.Hour || s.Normal != 5 {
+		t.Fatalf("预热情况不对：%+v", s)
+	}
+	if s.Progress < 0.5 || s.Progress > 0.51 || s.Limit != 3 || s.Interval < 740*time.Millisecond || s.Interval > 750*time.Millisecond {
+		t.Fatalf("进度、上限、间隔不对：%+v", s)
+	}
+
+	for range 2 {
+		f.pool.NoteSuccess(a, 0)
+	}
+	if _, ok := f.pool.WarmupStatus(time.Now())[a]; ok {
+		t.Fatal("攒够成功数后不应再列出")
+	}
+
+	cfg.Enabled = false
+	f.pool.SetWarmup(cfg)
+	if st := f.pool.WarmupStatus(time.Now()); st != nil {
+		t.Fatalf("关掉预热时应为 nil，实际 %v", st)
+	}
+}
+
 // 关掉预热后一切照旧：新号也能占满正常上限，没有间隔限制。
 func TestWarmupDisabled(t *testing.T) {
 	f := newFixture(t)
