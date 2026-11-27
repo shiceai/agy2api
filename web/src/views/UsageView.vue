@@ -30,10 +30,10 @@ import { PROBE_KEY_ID, PROBE_KEY_LABEL, rateOf, reasoningClass, reasoningText, u
 type RangeKey = '1h' | 'today' | '24h' | '7d' | '30d'
 type Dimension = 'model' | 'account' | 'apiKey'
 
-// 时间范围：今日和概览页一样从浏览器时区的今天零点算起，其他按时长往前推。
+// 时间范围：今日（默认，放最前）和概览页一样从浏览器时区的今天零点算起；其余按时长往前推，从短到长。
 const ranges: { value: RangeKey; label: string; ms?: number }[] = [
-  { value: '1h', label: '1 小时', ms: 3600_000 },
   { value: 'today', label: '今日' },
+  { value: '1h', label: '1 小时', ms: 3600_000 },
   { value: '24h', label: '24 小时', ms: 24 * 3600_000 },
   { value: '7d', label: '7 天', ms: 7 * 86400_000 },
   { value: '30d', label: '30 天', ms: 30 * 86400_000 },
@@ -74,6 +74,8 @@ const columnDefs: ColumnDef[] = [
   { key: 'client', label: '客户端', defaultVisible: false },
 ]
 const rightAligned = new Set(['token', 'cost', 'latency', 'rate'])
+// 状态、推理强度是窄徽章，表头比内容宽，居中。
+const centered = new Set(['status', 'reasoning'])
 // v3：调整默认列顺序、IP 和客户端默认隐藏，换键让已保存的设置按新默认重置一次。
 const prefsKey = 'agy2api_usage_columns_v3'
 const columnPrefs = useColumnPrefs(prefsKey, columnDefs)
@@ -295,15 +297,27 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
 
 <template>
   <div class="space-y-6">
-    <!-- 显示列和其它列表页一样放顶栏右侧。只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
+    <!-- 顶栏：显示列（只对表格有用，和表格同一个容器查询，卡片布局时不显示）、更新时间（窄屏收起）和刷新。
+         不自动刷新：分页按查询起点固定，自动刷新会让正在看的记录跳位 -->
     <PageActions>
       <div class="hidden @4xl/main:block"><ColumnSettings v-model="columnPrefs" :defs="columnDefs" /></div>
+      <span v-if="updatedAt" class="hidden text-xs text-muted-foreground tabular-nums @md/main:inline" aria-live="polite">
+        更新于 {{ fmtShortTime(updatedAt) }}
+      </span>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button variant="outline" size="icon-sm" aria-label="刷新" :aria-busy="spinning" @click="refresh">
+            <RefreshCw :class="spinning && 'animate-spin'" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>刷新</TooltipContent>
+      </Tooltip>
     </PageActions>
 
     <LoadError v-if="error" :message="error" />
 
     <div class="space-y-3">
-      <!-- 工具栏：所有筛选在一行，放不下时换行；右侧是更新时间和刷新（显示列在顶栏） -->
+      <!-- 工具栏：所有筛选在一行，放不下时换行（显示列、刷新在顶栏） -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         <SegmentedControl :model-value="range" :options="ranges" label="时间范围" hide-label @update:model-value="setRange" />
         <SegmentedControl :model-value="status" :options="statusOptions" label="状态" @update:model-value="setStatus" />
@@ -313,14 +327,6 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
           <Search class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input v-model="requestIdInput" placeholder="按请求 ID 查找，回车确认" class="h-8 pl-8" aria-label="请求 ID" />
         </form>
-        <div class="ml-auto flex items-center gap-2">
-          <span v-if="updatedAt" class="hidden text-xs text-muted-foreground tabular-nums sm:inline" aria-live="polite">
-            更新于 {{ fmtShortTime(updatedAt) }}
-          </span>
-          <Button variant="outline" size="icon-sm" aria-label="刷新" :aria-busy="spinning" @click="refresh">
-            <RefreshCw :class="spinning && 'animate-spin'" />
-          </Button>
-        </div>
       </div>
       <div v-if="hasFilter" class="flex flex-wrap items-center gap-2 text-xs">
         <!-- 每个字段一个条件标签，各自可取消 -->
@@ -390,7 +396,7 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
               <TableHead
                 v-for="key in columnPrefs.visible"
                 :key="key"
-                :class="cn('first:pl-4 last:pr-4', rightAligned.has(key) && 'text-right', key === 'model' && 'w-full')"
+                :class="cn('first:pl-4 last:pr-4', rightAligned.has(key) && 'text-right', centered.has(key) && 'text-center', key === 'model' && 'w-full')"
               >
                 <Tooltip v-if="key === 'latency'">
                   <TooltipTrigger as-child>
@@ -415,14 +421,13 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
               <TableCell
                 v-for="key in columnPrefs.visible"
                 :key="key"
-                :class="cn('first:pl-4 last:pr-4', rightAligned.has(key) && 'text-right tabular-nums')"
+                :class="cn('first:pl-4 last:pr-4', rightAligned.has(key) && 'text-right tabular-nums', centered.has(key) && 'text-center')"
               >
                 <span v-if="key === 'time'" class="text-muted-foreground tabular-nums" :title="fmtTime(r.created_at)">{{ fmtShortTime(r.created_at) }}</span>
 
                 <UsageStatus v-else-if="key === 'status'" :record="r" />
 
-                <!-- 模型名和"流"之间留出 16px，放得下悬停时浮出的筛选图标 -->
-                <span v-else-if="key === 'model'" class="inline-flex max-w-72 items-center gap-4">
+                <span v-else-if="key === 'model'" class="inline-flex max-w-72 items-center gap-2">
                   <FilterButton :label="r.request_model" dimension="模型" class="min-w-0" @click="filterBy('model', 0, r.request_model, r.request_model)">
                     <template #tip>
                       <div>实际发出：{{ r.resolved_model || '—' }}</div>
@@ -441,8 +446,7 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
 
                 <!-- 没拿到上游响应的失败可能没有账号，不能按它筛选 -->
                 <span v-else-if="key === 'account' && !r.account_id" class="text-muted-foreground">—</span>
-                <!-- 账号和会话粘性标记之间留出 16px，放得下悬停时浮出的筛选图标 -->
-                <span v-else-if="key === 'account'" class="inline-flex max-w-64 items-center gap-4">
+                <span v-else-if="key === 'account'" class="inline-flex max-w-64 items-center gap-2">
                   <FilterButton
                     :label="accountLabel(r)"
                     dimension="账号"
