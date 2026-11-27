@@ -1,5 +1,6 @@
 # 检查：推送到 main 和收到 PR 时跑 scripts/check.sh（gofmt、go.mod 整洁、vet、staticcheck、带 -race 的测试、
-# 前端类型检查），再构建一次前端。发版流程（release.yml）也调用它。第三方 Action 按提交 SHA 固定，注释里是对应版本。
+# 前端类型检查），再构建一次前端；另外构建一次镜像（只构建不推送），Dockerfile 出问题在合并时就发现，不拖到发版。
+# 发版流程（release.yml）也调用它。第三方 Action 按提交 SHA 固定，注释里是对应版本。
 
 name: CI
 
@@ -44,3 +45,28 @@ jobs:
       - name: 前端构建
         working-directory: web
         run: pnpm build
+
+  image:
+    name: 镜像构建
+    # 发版时 release.yml 在标签上调用本工作流，它自己的镜像任务会完整构建并推送，这里不重复。
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # 只构建 amd64：Dockerfile 缺文件、编译失败这类问题单架构就能发现，不用装 QEMU 模拟 arm64。
+      - name: 构建镜像（只构建，不推送）
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: VERSION=ci
+          tags: agy2api:ci
+          load: true
+          push: false
+      - name: 冒烟：镜像能运行，版本号是构建时传入的
+        run: |
+          got=$(docker run --rm agy2api:ci -version)
+          echo "镜像版本：$got"
+          [ "$got" = ci ]

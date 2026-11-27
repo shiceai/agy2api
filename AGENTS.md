@@ -40,7 +40,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 | `docs` | 部署说明（`deploy.md`：安装、反代、备份升级、卸载、环境变量）、接口说明（`api.md`：各入站接口的转换和限制、会话粘性） |
 | `deploy` | 部署示例：systemd 服务、环境变量模板（Dockerfile、compose.yaml 在仓库根目录） |
 | `scripts` | 构建、提交前检查、一键安装（`install.sh`，随 Release 发布）、从 CHANGELOG 取发布说明、更新演示站的目录快照 |
-| `.github/workflows` | `ci.yml`：推送到 main 和 PR 时跑 `check.sh` 和前端构建；`release.yml`：推送 `v*` 标签时检查（调用 `ci.yml`）、推送镜像、构建二进制包、创建 Release；`demo.yml`：部署演示站 |
+| `.github/workflows` | `ci.yml`：推送到 main 和 PR 时跑 `check.sh`、前端构建和镜像构建（只构建 amd64、不推送）；`release.yml`：推送 `v*` 标签时检查（调用 `ci.yml`）、推送镜像、构建二进制包、创建 Release；`demo.yml`：部署演示站 |
 | `.github` | `dependabot.yml`：每周检查 Go、前端、Actions、镜像依赖的更新；`ISSUE_TEMPLATE`：问题反馈和功能建议表单（醒目提醒不要贴凭据）；安全策略在根目录 `SECURITY.md` |
 
 ## 开发流程
