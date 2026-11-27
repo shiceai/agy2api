@@ -14,7 +14,8 @@ const Inlines: FunctionalComponent<{ inlines: Inline[] }> = ({ inlines }) =>
       case 'code':
         return h('code', { class: 'rounded bg-muted px-1 py-0.5 font-sans text-[0.9em]' }, i.text)
       case 'link':
-        return h('a', { href: i.href, target: '_blank', rel: 'noopener noreferrer', class: 'underline underline-offset-4' }, i.text)
+        // 长网址在窄屏上折行，不撑出横向滚动
+        return h('a', { href: i.href, target: '_blank', rel: 'noopener noreferrer', class: 'underline underline-offset-4 wrap-anywhere' }, i.text)
       default:
         return i.text
     }
