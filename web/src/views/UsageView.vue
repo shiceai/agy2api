@@ -182,7 +182,8 @@ function reload() {
   since.value = ms ? Date.now() - ms : todayStart()
   return loadLogs()
 }
-// 从别的页面跳过来时带的筛选（如 Key 详情的"在用量页查看"）：range、api_key_id 和显示用的 key_label。
+// 从别的页面跳过来时带的筛选（如 Key 详情的"在用量页查看"、被拒上下文的"查看首次被拒的用量"）：range、
+// api_key_id 和显示用的 key_label、request_id。
 function applyQuery() {
   const q = route.query
   if (typeof q.range === 'string' && ranges.some((r) => r.value === q.range)) range.value = q.range as RangeKey
@@ -190,6 +191,9 @@ function applyQuery() {
     const id = Number(q.api_key_id)
     const label = typeof q.key_label === 'string' && q.key_label ? q.key_label : '#' + id
     dimFilters.value = { ...dimFilters.value, apiKey: { id, value: '', label } }
+  }
+  if (typeof q.request_id === 'string' && q.request_id.trim()) {
+    requestId.value = requestIdInput.value = q.request_id.trim()
   }
 }
 onMounted(() => {

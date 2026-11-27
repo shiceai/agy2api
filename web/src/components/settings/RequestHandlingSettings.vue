@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import SettingGrid from './SettingGrid.vue'
 import SettingCard from './SettingCard.vue'
 import SettingRow from './SettingRow.vue'
+import RejectedContextsCard from './RejectedContextsCard.vue'
 
 const router = useRouter()
 const form = ref<RequestHandling | null>(null)
@@ -82,5 +83,8 @@ async function save() {
       <span v-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
       <span v-else class="text-sm text-muted-foreground">保存后立即生效，不用重启。</span>
     </div>
+
+    <!-- 被拒上下文拦截有自己的开关（切换即保存）和列表，放在上面的保存按钮之后，占满整行 -->
+    <RejectedContextsCard />
   </div>
 </template>

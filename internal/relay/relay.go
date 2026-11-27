@@ -50,7 +50,9 @@ type Relay struct {
 	usage  *usageWriter
 	// capture 是失败请求正文的后台保存（默认关，见 capture.go）。
 	capture *capturer
-	quota   *quotaRefresher // 后台额度刷新，StartQuotaRefresh 后非空
+	// rejected 是被上游拒绝的上下文指纹（默认开，见 rejected_contexts.go）。
+	rejected *rejectedContexts
+	quota    *quotaRefresher // 后台额度刷新，StartQuotaRefresh 后非空
 	// onUsage 在每条用量记录排队落库前调用（API Key 的 Token 上限计数用），SetUsageHook 在开始服务前设置。
 	onUsage func(*store.UsageRecord)
 	// prices 按模型价格算用量的费用，SetPricing 在开始服务前设置；为 nil 时不算。
@@ -81,7 +83,7 @@ func (r *Relay) SetPricing(p *pricing.Service) {
 // 用完调用 Close。
 func New(client *antigravity.Client, st *store.Store, enc store.Encryptor) *Relay {
 	r := &Relay{client: client, pool: pool.New(st, enc), store: st, enc: enc, usage: newUsageWriter(st),
-		capture: newCapturer(st), affinity: newAffinityStore(affinityLimit)}
+		capture: newCapturer(st), rejected: newRejectedContexts(st), affinity: newAffinityStore(affinityLimit)}
 	// refresh token 轮换时回写数据库并刷新号池。
 	r.tokens = antigravity.NewTokenManager(client, r.persistRotatedToken)
 	r.cfg.Store(&runtimeConfig{})
@@ -110,6 +112,9 @@ func (r *Relay) Close(ctx context.Context) error {
 	err := r.usage.Close(ctx)
 	if cerr := r.capture.close(ctx); err == nil {
 		err = cerr
+	}
+	if werr := r.rejected.close(ctx); err == nil {
+		err = werr
 	}
 	return err
 }
@@ -417,6 +422,10 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 	if err := r.inlineRemoteImages(ctx, cfg, req, start); err != nil {
 		return nil, err
 	}
+	// 包含被上游拒绝过的上下文：本地拒绝，不发上游。放在改写 system 和内联图片之后，和记指纹时看到的内容一致。
+	if err := r.blockRejectedContext(ctx, req, start); err != nil {
+		return nil, err
+	}
 	p := cfg.policy
 	tier := cfg.tier(req.Model, req.Body)
 	refreshed := false
@@ -601,6 +610,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 				rej := ue
 				rej.Kind = KindRequestRejected
 				r.recordFailure(ctx, req, tr, c, rej)
+				r.rememberRejected(ctx, req)
 				return nil, errRequestRejected(n, rejectedCooldown, upstreamCause(ue))
 			}
 		}

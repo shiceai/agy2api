@@ -735,6 +735,29 @@ export interface PurgeResult {
   manual: boolean
   error?: string
 }
+// RejectedContext 是一段被上游拒绝的上下文：fingerprint 指纹，turns 被拒时的消息条数，api_key_id、model、client_ip、
+// request_id 是首次被拒的请求（api_key_name 是密钥名，已删时没有），hits 之后被拦下的次数，created_at 首次被拒、
+// last_hit_at 最近一次被拦（没拦过时同首次被拒）的时间。
+export interface RejectedContext {
+  fingerprint: string
+  turns: number
+  api_key_id: number
+  api_key_name?: string
+  model: string
+  client_ip: string
+  request_id: string
+  hits: number
+  created_at: number
+  last_hit_at: number
+}
+// RejectedContextsView 是"请求处理"的被拒上下文拦截：开关、最近的被拒上下文（最多 100 条）和总条数、保留规则。
+export interface RejectedContextsView {
+  settings: { enabled: boolean }
+  contexts: RejectedContext[]
+  total: number
+  ttl_days: number
+  max: number
+}
 // RequestCaptureView 是"保存失败请求的正文"：开关、已存的条数和占用（压缩后），以及条数、占用、每分钟的上限。
 export interface RequestCaptureView {
   settings: { enabled: boolean }

@@ -31,6 +31,7 @@ import type {
   RequestHandling,
   RequestHandlingResponse,
   RetentionSettings,
+  RejectedContext,
   RetentionView,
   UsageRequestSummary,
   Scheduling,
@@ -868,6 +869,32 @@ on('GET', '/usage/logs', (_m, q) => {
   return { records: list.slice(offset, offset + limit).map(logView), total: list.length }
 })
 on('GET', '/usage/logs/(\\d+)', (m) => ({ record: logView(usage.find((r) => r.id === Number(m[1])) ?? fail(404, 'record not found')) }))
+// 被拒上下文拦截：开关和两条示例记录，只在内存里。
+let contextBlock = true
+let rejectedContexts: RejectedContext[] = [
+  { fingerprint: 'a3f09c1e5b7d42e8a1c6f0b9d2e4c7a1', turns: 83, api_key_id: 1, api_key_name: 'Claude Code', model: 'gemini-3.8-flash',
+    client_ip: '203.0.113.88', request_id: hex(16), hits: 4, created_at: start - 5 * HOUR, last_hit_at: start - 40 * MIN },
+  { fingerprint: '5d2c8b0f71e94a6cb3d0e2f19a8c4b57', turns: 12, api_key_id: 2, api_key_name: 'Cherry Studio', model: 'gemini-4-argon',
+    client_ip: '198.51.100.23', request_id: hex(16), hits: 0, created_at: start - 2 * DAY, last_hit_at: start - 2 * DAY },
+]
+function rejectedView() {
+  return { settings: { enabled: contextBlock }, contexts: rejectedContexts, total: rejectedContexts.length, ttl_days: 7, max: 10000 }
+}
+on('GET', '/rejected-contexts', () => rejectedView())
+on('PUT', '/rejected-contexts', (_m, _q, b) => {
+  contextBlock = !!b.enabled
+  return rejectedView()
+})
+on('DELETE', '/rejected-contexts', () => {
+  rejectedContexts = []
+  return rejectedView()
+})
+on('DELETE', '/rejected-contexts/([0-9a-f]+)', (m) => {
+  if (!rejectedContexts.some((c) => c.fingerprint === m[1])) fail(404, 'rejected context not found')
+  rejectedContexts = rejectedContexts.filter((c) => c.fingerprint !== m[1])
+  return rejectedView()
+})
+
 // 失败请求的正文：开关只在内存里；"已保存"的是演示数据里标了 saved 的失败记录，下载给一份示例请求体。
 let captureEnabled = false
 function captureView() {
