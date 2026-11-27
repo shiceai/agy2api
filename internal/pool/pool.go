@@ -178,7 +178,7 @@ type CooldownInfo struct {
 type Lease struct {
 	Account *Account
 	Model   string // 在该账号目录里解析出的模型 ID
-	// InUse、Limit 是选中时该账号的并发占用（含本次）和上限。
+	// InUse、Limit 是选中时该账号的并发占用（含本次）和生效中的上限（新号预热中是压低后的上限）。
 	InUse int
 	Limit int
 	// Affinity 是会话粘性的结果：没有优先账号时为空；选中优先账号为 AffinityHit；否则是没选它的原因
@@ -381,8 +381,11 @@ func (p *Pool) Select(requested, tier string, exclude map[int64]bool, prefer int
 	return lease, err
 }
 
-// Acquire 同 Select，但支持该模型的账号有因为并发已满而不可用的，就等名额释放，最多 wait。
-// waitPrefer 为 true 时（严格粘性）优先账号只是并发已满，就先等它的名额，不借别的账号；等到 wait 用完还没空位，
+// minRetryWake 是按最早可用时刻唤醒时的最短等待：时刻刚好到了也等这么一下，不会原地打转。
+const minRetryWake = 10 * time.Millisecond
+
+// Acquire 同 Select，但支持该模型的账号有因为并发已满或预热节奏未到而不可用的，就等名额释放或节奏放行，最多 wait。
+// waitPrefer 为 true 时（严格粘性）优先账号只是并发已满或节奏未到，就先等它，不借别的账号；等到 wait 用完还没空位，
 // 再按 Select 借别的账号。等不到时返回最后一次的 *UnavailableError；ctx 取消时返回 ctx.Err()。
 func (p *Pool) Acquire(ctx context.Context, requested, tier string, exclude map[int64]bool, prefer int64, waitPrefer bool, wait time.Duration) (*Lease, error) {
 	deadline := time.Now().Add(wait)
@@ -400,8 +403,15 @@ func (p *Pool) Acquire(ctx context.Context, requested, tier string, exclude map[
 			}
 			return nil, err
 		}
-		// 有名额释放或等到时限都再选一次：到时限后的这一次不再等（见上），严格粘性在这时改为借别的账号。
-		timer := time.NewTimer(remaining)
+		// 有名额释放、到了最早可用的时刻（节奏放行、冷却结束）或等到时限都再选一次：节奏挡住的账号到点就能用，
+		// 不会有名额释放来唤醒，只等释放会白等到时限。到时限后的这一次不再等（见上），严格粘性在这时改为借别的账号。
+		d := remaining
+		if !ue.RetryAt.IsZero() {
+			if until := time.Until(ue.RetryAt); until < d {
+				d = max(until, minRetryWake)
+			}
+		}
+		timer := time.NewTimer(d)
 		select {
 		case <-freed:
 			timer.Stop()
@@ -500,6 +510,10 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 				}
 				busy = true
 				note(c.account.ID, AffinityBusy)
+				// 严格粘性下和并发已满一样先等它：间隔最多几秒，等一下就能保住缓存命中，不必借号。
+				if c.account.ID == prefer {
+					preferBusy = &c
+				}
 				continue
 			}
 			// 新号预热：按进度压低并发上限。
@@ -553,13 +567,16 @@ func (p *Pool) pick(requested, tier string, exclude map[int64]bool, prefer int64
 		c = p.chooseLocked(candidates, now)
 	}
 	p.inflight[c.account.ID]++
-	// 请求节奏：按进度算下一次可发起的最早时间，隔开同一账号连续的请求。
+	limit := p.Limit(c.account.Account)
 	if wc := p.warmupCfg(); wc != nil {
-		if iv := warmInterval(wc, p.warmProgressLocked(wc, c.account, now)); iv > 0 {
+		prog := p.warmProgressLocked(wc, c.account, now)
+		limit = warmLimit(wc, limit, prog)
+		// 请求节奏：按进度算下一次可发起的最早时间，隔开同一账号连续的请求。
+		if iv := warmInterval(wc, prog); iv > 0 {
 			p.nextFree[c.account.ID] = now.Add(iv)
 		}
 	}
-	return &Lease{Account: c.account, Model: c.model, InUse: p.inflight[c.account.ID], Limit: p.Limit(c.account.Account),
+	return &Lease{Account: c.account, Model: c.model, InUse: p.inflight[c.account.ID], Limit: limit,
 		Affinity: affinity, pool: p}, nil, nil
 }
 
