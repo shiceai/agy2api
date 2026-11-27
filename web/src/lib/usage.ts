@@ -57,13 +57,10 @@ export function isOK(code: number): boolean {
   return code >= 200 && code < 300
 }
 
-// 生成耗时：流式按总耗时减首字延迟，非流式没有首字延迟，按总耗时。
-export function genMs(r: UsageRecord): number {
-  return r.first_token_ms != null ? r.latency_ms - r.first_token_ms : r.latency_ms
-}
-
-// 速率 = (输出 + 推理) ÷ 生成耗时，按快慢上色：≥ 30 tok/s 绿，10～30 橙，< 10 红。
-// 输出加推理不足 20 个 token 时不评价（输出太短，速率主要被固定开销拉低），显示灰色。出错或没有输出时不算。
+// 速率 = (输出 + 推理) ÷ 总耗时，即整个请求的实际吞吐（含排队和首字前的时间）。不用"总耗时 − 首字"：上游常把
+// 流式回复憋到最后一次发完（首字几乎等于总耗时），分母只剩几毫秒，会算出几千甚至上百万 tok/s。
+// 按快慢上色：≥ 30 tok/s 绿，10～30 橙，< 10 红。输出加推理不足 20 个 token 时不评价（输出太短，速率主要被
+// 固定开销拉低），显示灰色。出错或没有输出时不算。
 const rateFast = 30
 const rateSlow = 10
 const rateMinTokens = 20
@@ -74,7 +71,7 @@ export interface Rate {
 }
 export function rateOf(r: UsageRecord): Rate {
   const tokens = r.output_tokens + (r.thoughts_tokens ?? 0)
-  const ms = genMs(r)
+  const ms = r.latency_ms
   if (!isOK(r.status_code) || tokens <= 0 || ms <= 0) return { text: '—', tone: 'text-muted-foreground', note: '' }
   const v = (tokens / ms) * 1000
   const text = `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`

@@ -25,7 +25,7 @@ import CostBreakdown from '@/components/usage/CostBreakdown.vue'
 import AffinityIcon from '@/components/usage/AffinityIcon.vue'
 import UsageDetailDialog from '@/components/usage/UsageDetailDialog.vue'
 import UsageStatus from '@/components/usage/UsageStatus.vue'
-import { genMs, PROBE_KEY_ID, PROBE_KEY_LABEL, rateOf, reasoningClass, reasoningText, uaShort } from '@/lib/usage'
+import { PROBE_KEY_ID, PROBE_KEY_LABEL, rateOf, reasoningClass, reasoningText, uaShort } from '@/lib/usage'
 
 type RangeKey = '1h' | '6h' | '24h' | '7d' | '30d'
 type Dimension = 'model' | 'account' | 'apiKey'
@@ -396,6 +396,12 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
                   </TooltipTrigger>
                   <TooltipContent>流式：首字 / 总耗时；非流式：总耗时</TooltipContent>
                 </Tooltip>
+                <Tooltip v-else-if="key === 'rate'">
+                  <TooltipTrigger as-child>
+                    <span class="cursor-help border-b border-dashed border-muted-foreground/40">{{ labelOf[key] }}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>(输出 + 推理) ÷ 总耗时，含首字前的时间</TooltipContent>
+                </Tooltip>
                 <template v-else>{{ labelOf[key] }}</template>
               </TableHead>
               <!-- 操作列固定在最右：列多时表格横向滚动，详情按钮始终看得到 -->
@@ -519,7 +525,7 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
                     <span :class="cn('cursor-default', rateOf(r).tone)">{{ rateOf(r).text }}</span>
                   </TooltipTrigger>
                   <TooltipContent class="block">
-                    <div>(输出 + 推理) ÷ {{ r.first_token_ms != null ? '生成耗时' : '耗时' }} {{ fmtDuration(genMs(r)) }}</div>
+                    <div>(输出 + 推理) ÷ 总耗时 {{ fmtDuration(r.latency_ms) }}</div>
                     <div v-if="rateOf(r).note">{{ rateOf(r).note }}</div>
                   </TooltipContent>
                 </Tooltip>
