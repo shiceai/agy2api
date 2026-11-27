@@ -4,9 +4,9 @@ import { toast } from 'vue-sonner'
 import { api, type Proxy } from '@/api/client'
 import { choiceOf, freeProxies } from '@/lib/proxy'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import ProxyChoiceSelect from '@/components/proxies/ProxyChoiceSelect.vue'
+import BaseDialog from '@/components/BaseDialog.vue'
 
 // 批量给选中的账号分配代理：自动（只给没绑代理的账号各分配一个空闲代理）、直连、或全部绑到一个代理。
 const open = defineModel<boolean>('open', { required: true })
@@ -50,22 +50,16 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog v-model:open="open">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>给 {{ ids.length }} 个账号分配代理</DialogTitle>
-        <DialogDescription>改了之后，账号的所有请求都经新的代理出网。</DialogDescription>
-      </DialogHeader>
-      <div class="grid min-w-0 gap-2">
-        <Label for="assign-proxy">代理</Label>
-        <ProxyChoiceSelect id="assign-proxy" v-model="choice" :proxies="proxies" allow-auto />
-        <p class="text-xs text-muted-foreground">{{ hint }}</p>
-        <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="open = false">取消</Button>
-        <Button :disabled="busy" @click="submit">确定</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <BaseDialog v-model:open="open" :title="`给 ${ids.length} 个账号分配代理`" description="改了之后，账号的所有请求都经新的代理出网。">
+    <div class="grid min-w-0 gap-2">
+      <Label for="assign-proxy">代理</Label>
+      <ProxyChoiceSelect id="assign-proxy" v-model="choice" :proxies="proxies" allow-auto />
+      <p class="text-xs text-muted-foreground">{{ hint }}</p>
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+    </div>
+    <template #footer>
+      <Button variant="outline" @click="open = false">取消</Button>
+      <Button :disabled="busy" @click="submit">确定</Button>
+    </template>
+  </BaseDialog>
 </template>

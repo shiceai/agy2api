@@ -3,9 +3,9 @@ import { ref, watch } from 'vue'
 import { api, type PriceRow, type PricesView } from '@/api/client'
 import { fmtRate } from '@/lib/cost'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import BaseDialog from '@/components/BaseDialog.vue'
 
 // 手动设置一个模型家族的价格（美元每百万 token），优先于官方价。打开时填入当前生效的标准价。
 const open = defineModel<boolean>('open', { required: true })
@@ -68,43 +68,39 @@ async function save() {
 </script>
 
 <template>
-  <Dialog v-model:open="open">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle class="wrap-anywhere">设置 {{ row?.model }} 的价格</DialogTitle>
-        <DialogDescription>
-          单价为美元每百万 token，优先于官方价，各档位同价。保存后，还没算费用的调用记录按这个价格补算，已算过的不变。
-        </DialogDescription>
-      </DialogHeader>
-      <form class="grid gap-4" @submit.prevent="save">
-        <div class="grid grid-cols-3 gap-3">
-          <div class="grid gap-2">
-            <Label for="price-input">输入</Label>
-            <Input id="price-input" v-model="input" inputmode="decimal" autocomplete="off" placeholder="$" />
-          </div>
-          <div class="grid gap-2">
-            <Label for="price-cache">缓存读取</Label>
-            <Input id="price-cache" v-model="cache" inputmode="decimal" autocomplete="off" placeholder="同输入" />
-          </div>
-          <div class="grid gap-2">
-            <Label for="price-output">输出</Label>
-            <Input id="price-output" v-model="output" inputmode="decimal" autocomplete="off" placeholder="$" />
-          </div>
+  <BaseDialog
+    v-model:open="open"
+    :title="`设置 ${row?.model ?? ''} 的价格`"
+    description="单价为美元每百万 token，优先于官方价，各档位同价。保存后，还没算费用的调用记录按这个价格补算，已算过的不变。"
+  >
+    <form class="grid gap-4" @submit.prevent="save">
+      <div class="grid grid-cols-3 gap-3">
+        <div class="grid gap-2">
+          <Label for="price-input">输入</Label>
+          <Input id="price-input" v-model="input" inputmode="decimal" autocomplete="off" placeholder="$" />
         </div>
-        <p class="text-xs text-muted-foreground">
-          缓存读取留空时按输入价算；推理 Token 按输出价算。
-          <template v-if="row?.official">
-            官方价：输入 {{ fmtRate(row.official.price.input) }}，缓存读取 {{ fmtRate(row.official.price.cache_read ?? row.official.price.input) }}，输出
-            {{ fmtRate(row.official.price.output) }}。
-          </template>
-        </p>
-        <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        <button type="submit" class="hidden" />
-      </form>
-      <DialogFooter>
-        <Button variant="outline" @click="open = false">取消</Button>
-        <Button :disabled="busy" @click="save">保存</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+        <div class="grid gap-2">
+          <Label for="price-cache">缓存读取</Label>
+          <Input id="price-cache" v-model="cache" inputmode="decimal" autocomplete="off" placeholder="同输入" />
+        </div>
+        <div class="grid gap-2">
+          <Label for="price-output">输出</Label>
+          <Input id="price-output" v-model="output" inputmode="decimal" autocomplete="off" placeholder="$" />
+        </div>
+      </div>
+      <p class="text-xs text-muted-foreground">
+        缓存读取留空时按输入价算；推理 Token 按输出价算。
+        <template v-if="row?.official">
+          官方价：输入 {{ fmtRate(row.official.price.input) }}，缓存读取 {{ fmtRate(row.official.price.cache_read ?? row.official.price.input) }}，输出
+          {{ fmtRate(row.official.price.output) }}。
+        </template>
+      </p>
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+      <button type="submit" class="hidden" />
+    </form>
+    <template #footer>
+      <Button variant="outline" @click="open = false">取消</Button>
+      <Button :disabled="busy" @click="save">保存</Button>
+    </template>
+  </BaseDialog>
 </template>

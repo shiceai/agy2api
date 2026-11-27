@@ -7,9 +7,9 @@ import { fmtDuration, fmtSpan } from '@/lib/utils'
 import { resultLabel } from '@/lib/usage'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import BaseDialog from '@/components/BaseDialog.vue'
 import HttpStatus from '@/components/HttpStatus.vue'
 
 // 账号检测：用这个账号发一条 "Hi"（非流式），和正常请求一样经过上游、消耗少量真实额度；失败时和正常请求
@@ -75,60 +75,55 @@ async function enable() {
 </script>
 
 <template>
-  <Dialog v-model:open="open">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>检测账号</DialogTitle>
-        <DialogDescription>
-          用 {{ account.email }} 发一条 "Hi"，和正常请求一样经过上游、记进用量，会消耗少量额度；失败时同样会冷却或停用。
-        </DialogDescription>
-      </DialogHeader>
+  <BaseDialog v-model:open="open" title="检测账号">
+    <template #description>
+      用 {{ account.email }} 发一条 "Hi"，和正常请求一样经过上游、记进用量，会消耗少量额度；失败时同样会冷却或停用。
+    </template>
 
-      <div class="grid min-w-0 gap-2">
-        <Label for="probe-model">模型</Label>
-        <Select v-model="model" :disabled="busy">
-          <SelectTrigger id="probe-model" class="w-full"><SelectValue placeholder="选择模型" /></SelectTrigger>
-          <SelectContent class="max-h-72">
-            <SelectItem v-for="id in models" :key="id" :value="id">{{ id }}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div class="grid min-w-0 gap-2">
+      <Label for="probe-model">模型</Label>
+      <Select v-model="model" :disabled="busy">
+        <SelectTrigger id="probe-model" class="w-full"><SelectValue placeholder="选择模型" /></SelectTrigger>
+        <SelectContent class="max-h-72">
+          <SelectItem v-for="id in models" :key="id" :value="id">{{ id }}</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
 
-      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-      <Alert v-else-if="result?.ok">
-        <!-- Alert 会把图标设成 text-current，用 ! 保留绿色 -->
-        <CircleCheck class="text-emerald-600! dark:text-emerald-400!" />
-        <AlertTitle class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          检测通过 <HttpStatus v-if="result.status" :code="result.status" />
-          <span class="text-xs font-normal text-muted-foreground tabular-nums">{{ fmtDuration(result.latency_ms) }}</span>
-        </AlertTitle>
-        <AlertDescription class="space-y-2">
-          <p class="wrap-anywhere">回复：{{ result.reply || '（没有正文）' }}</p>
-          <div v-if="account.status !== 'enabled'" class="flex flex-wrap items-center gap-2">
-            <span>账号目前是停用状态，可以重新启用。</span>
-            <Button size="xs" variant="outline" :disabled="enabling" @click="enable">启用账号</Button>
-          </div>
-        </AlertDescription>
-      </Alert>
-      <Alert v-else-if="result" variant="destructive">
-        <CircleAlert />
-        <AlertTitle class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {{ resultLabel(result.kind ?? 'error') }} <HttpStatus v-if="result.status" :code="result.status" />
-          <span class="text-xs font-normal tabular-nums opacity-80">{{ fmtDuration(result.latency_ms) }}</span>
-        </AlertTitle>
-        <AlertDescription class="space-y-1">
-          <p v-if="result.message" class="wrap-anywhere">{{ result.message }}</p>
-          <p v-if="result.disabled">已停用账号：{{ result.disabled }}</p>
-          <p v-else-if="result.cooldown_ms">已进入冷却，{{ fmtSpan(result.cooldown_ms) }}后恢复</p>
-        </AlertDescription>
-      </Alert>
+    <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+    <Alert v-else-if="result?.ok">
+      <!-- Alert 会把图标设成 text-current，用 ! 保留绿色 -->
+      <CircleCheck class="text-emerald-600! dark:text-emerald-400!" />
+      <AlertTitle class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        检测通过 <HttpStatus v-if="result.status" :code="result.status" />
+        <span class="text-xs font-normal text-muted-foreground tabular-nums">{{ fmtDuration(result.latency_ms) }}</span>
+      </AlertTitle>
+      <AlertDescription class="space-y-2">
+        <p class="wrap-anywhere">回复：{{ result.reply || '（没有正文）' }}</p>
+        <div v-if="account.status !== 'enabled'" class="flex flex-wrap items-center gap-2">
+          <span>账号目前是停用状态，可以重新启用。</span>
+          <Button size="xs" variant="outline" :disabled="enabling" @click="enable">启用账号</Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+    <Alert v-else-if="result" variant="destructive">
+      <CircleAlert />
+      <AlertTitle class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {{ resultLabel(result.kind ?? 'error') }} <HttpStatus v-if="result.status" :code="result.status" />
+        <span class="text-xs font-normal tabular-nums opacity-80">{{ fmtDuration(result.latency_ms) }}</span>
+      </AlertTitle>
+      <AlertDescription class="space-y-1">
+        <p v-if="result.message" class="wrap-anywhere">{{ result.message }}</p>
+        <p v-if="result.disabled">已停用账号：{{ result.disabled }}</p>
+        <p v-else-if="result.cooldown_ms">已进入冷却，{{ fmtSpan(result.cooldown_ms) }}后恢复</p>
+      </AlertDescription>
+    </Alert>
 
-      <DialogFooter>
-        <Button variant="outline" @click="open = false">关闭</Button>
-        <Button :disabled="busy || !model" @click="run">
-          <LoaderCircle v-if="busy" class="animate-spin" />{{ busy ? '检测中…' : result ? '再检测一次' : '开始检测' }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+    <template #footer>
+      <Button variant="outline" @click="open = false">关闭</Button>
+      <Button :disabled="busy || !model" @click="run">
+        <LoaderCircle v-if="busy" class="animate-spin" />{{ busy ? '检测中…' : result ? '再检测一次' : '开始检测' }}
+      </Button>
+    </template>
+  </BaseDialog>
 </template>

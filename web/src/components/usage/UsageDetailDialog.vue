@@ -8,13 +8,12 @@ import { affinityText, PROBE_KEY_ID, PROBE_KEY_LABEL, rateOf, reasoningClass, re
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import HttpStatus from '@/components/HttpStatus.vue'
 import LatencyBreakdown from './LatencyBreakdown.vue'
 import TokenBar from './TokenBar.vue'
 import CostBreakdown from './CostBreakdown.vue'
 import { fmtCost } from '@/lib/cost'
+import BaseDialog from '@/components/BaseDialog.vue'
 
 // 用量记录详情弹窗：打开时按 ID 取完整记录。顶部是摘要（状态、模型、类型、推理强度）和四个关键数字，
 // 失败时紧接着给出失败原因；下面按模型、来源、耗时与 Token、尝试记录、上游标识分块，统一"左标签右值"。
@@ -129,146 +128,136 @@ function download() {
 </script>
 
 <template>
-  <Dialog :open="id != null" @update:open="(v) => !v && (id = null)">
-    <!-- 三行网格，中间一行 minmax(0,1fr)：内容超过 max-h 时在 ScrollArea 里滚动。
-         不用 flex 列：只有 max-h 时子项高度不确定，ScrollArea 收不住。grid-cols-1 限制列宽，尝试记录表格只在自己的容器里横向滚动。 -->
-    <DialogContent class="max-h-[90dvh] grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-0 p-0 sm:max-w-2xl">
-      <DialogHeader class="border-b px-6 py-4">
-        <DialogTitle>调用详情</DialogTitle>
-        <DialogDescription class="flex min-h-6 flex-wrap items-center gap-x-2">
-          <template v-if="record">
-            <span class="tabular-nums">{{ fmtTime(record.created_at) }}</span>
-            <template v-if="record.request_id">
-              <span aria-hidden="true">·</span>
-              <span>请求 ID</span>
-              <span class="font-mono text-xs">{{ record.request_id }}</span>
-              <Button variant="ghost" size="icon-xs" aria-label="复制请求 ID" @click="copy('request', record.request_id)">
-                <Check v-if="copied === 'request'" /><Copy v-else />
-              </Button>
-            </template>
+  <BaseDialog :open="id != null" title="调用详情" size="2xl" @update:open="(v) => !v && (id = null)">
+    <template #description>
+      <span class="flex min-h-6 flex-wrap items-center gap-x-2">
+        <template v-if="record">
+          <span class="tabular-nums">{{ fmtTime(record.created_at) }}</span>
+          <template v-if="record.request_id">
+            <span aria-hidden="true">·</span>
+            <span>请求 ID</span>
+            <span class="font-mono text-xs">{{ record.request_id }}</span>
+            <Button variant="ghost" size="icon-xs" aria-label="复制请求 ID" @click="copy('request', record.request_id)">
+              <Check v-if="copied === 'request'" /><Copy v-else />
+            </Button>
           </template>
-          <template v-else>{{ error ? '加载失败' : '加载中…' }}</template>
-        </DialogDescription>
-      </DialogHeader>
+        </template>
+        <template v-else>{{ error ? '加载失败' : '加载中…' }}</template>
+      </span>
+    </template>
 
-      <!-- 内容区用 ScrollArea：细滚动条，和弹窗边缘留出间距 -->
-      <ScrollArea
-        class="min-h-0 [&>[data-slot=scroll-area-scrollbar]]:w-3.5 [&>[data-slot=scroll-area-scrollbar]]:py-1.5 [&>[data-slot=scroll-area-scrollbar]]:pr-1.5"
-      >
-        <div class="px-6 py-5">
-          <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-          <div v-else-if="!record" class="h-40" />
-          <template v-else>
-            <!-- 摘要 -->
-            <div class="flex flex-wrap items-center gap-2">
-              <HttpStatus :code="record.status_code" />
-              <span class="text-base font-semibold wrap-anywhere">{{ record.request_model }}</span>
-              <Badge variant="outline" class="text-muted-foreground">{{ record.detail?.fake_stream ? '假流式' : record.stream ? '流式' : '非流式' }}</Badge>
-              <Badge v-if="record.reasoning" variant="outline" :class="reasoningClass(record.reasoning)">
-                {{ reasoningText(record.reasoning) }}
-              </Badge>
-            </div>
-            <dl class="mt-3 grid grid-cols-3 gap-4 rounded-lg bg-muted/50 px-4 py-3 sm:grid-cols-5">
-              <div v-for="s in stats" :key="s.label" :title="s.note || undefined">
-                <dt class="text-xs text-muted-foreground">{{ s.label }}</dt>
-                <dd :class="['mt-0.5 text-base font-semibold tabular-nums', s.tone]">{{ s.value }}</dd>
+    <div>
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+      <div v-else-if="!record" class="h-40" />
+      <template v-else>
+        <!-- 摘要 -->
+        <div class="flex flex-wrap items-center gap-2">
+          <HttpStatus :code="record.status_code" />
+          <span class="text-base font-semibold wrap-anywhere">{{ record.request_model }}</span>
+          <Badge variant="outline" class="text-muted-foreground">{{ record.detail?.fake_stream ? '假流式' : record.stream ? '流式' : '非流式' }}</Badge>
+          <Badge v-if="record.reasoning" variant="outline" :class="reasoningClass(record.reasoning)">
+            {{ reasoningText(record.reasoning) }}
+          </Badge>
+        </div>
+        <dl class="mt-3 grid grid-cols-3 gap-4 rounded-lg bg-muted/50 px-4 py-3 sm:grid-cols-5">
+          <div v-for="s in stats" :key="s.label" :title="s.note || undefined">
+            <dt class="text-xs text-muted-foreground">{{ s.label }}</dt>
+            <dd :class="['mt-0.5 text-base font-semibold tabular-nums', s.tone]">{{ s.value }}</dd>
+          </div>
+        </dl>
+
+        <Alert v-if="record.detail?.error" variant="destructive" class="mt-4">
+          <CircleAlert />
+          <AlertTitle class="flex flex-wrap items-baseline gap-x-2">
+            {{ resultLabel(record.detail.error.kind) }}
+            <span v-if="record.detail.error.reason" class="font-mono text-xs font-normal">{{ record.detail.error.reason }}</span>
+          </AlertTitle>
+          <AlertDescription class="wrap-anywhere">{{ record.detail.error.message || '上游没有给出说明' }}</AlertDescription>
+        </Alert>
+
+        <div class="mt-5 divide-y border-t">
+          <section v-for="sec in sections" :key="sec.title" class="py-4 last:pb-0">
+            <h3 class="mb-2.5 text-sm font-semibold">{{ sec.title }}</h3>
+            <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <div v-for="f in sec.fields" :key="f.label" :class="['flex min-w-0 gap-3', f.wide && 'sm:col-span-2']">
+                <dt class="w-20 shrink-0 text-muted-foreground">{{ f.label }}</dt>
+                <dd class="min-w-0 wrap-anywhere">
+                  {{ f.value }}<span v-if="f.muted" :class="['text-muted-foreground', f.value && 'ml-1.5']">{{ f.muted }}</span>
+                </dd>
               </div>
             </dl>
+          </section>
 
-            <Alert v-if="record.detail?.error" variant="destructive" class="mt-4">
-              <CircleAlert />
-              <AlertTitle class="flex flex-wrap items-baseline gap-x-2">
-                {{ resultLabel(record.detail.error.kind) }}
-                <span v-if="record.detail.error.reason" class="font-mono text-xs font-normal">{{ record.detail.error.reason }}</span>
-              </AlertTitle>
-              <AlertDescription class="wrap-anywhere">{{ record.detail.error.message || '上游没有给出说明' }}</AlertDescription>
-            </Alert>
-
-            <div class="mt-5 divide-y border-t">
-              <section v-for="sec in sections" :key="sec.title" class="py-4 last:pb-0">
-                <h3 class="mb-2.5 text-sm font-semibold">{{ sec.title }}</h3>
-                <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                  <div v-for="f in sec.fields" :key="f.label" :class="['flex min-w-0 gap-3', f.wide && 'sm:col-span-2']">
-                    <dt class="w-20 shrink-0 text-muted-foreground">{{ f.label }}</dt>
-                    <dd class="min-w-0 wrap-anywhere">
-                      {{ f.value }}<span v-if="f.muted" :class="['text-muted-foreground', f.value && 'ml-1.5']">{{ f.muted }}</span>
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section class="grid gap-x-8 gap-y-5 py-4 last:pb-0 sm:grid-cols-2">
-                <div>
-                  <h3 class="mb-2.5 text-sm font-semibold">耗时</h3>
-                  <LatencyBreakdown :record="record" />
-                </div>
-                <div>
-                  <h3 class="mb-2.5 text-sm font-semibold">Token</h3>
-                  <TokenBar :record="record" />
-                </div>
-              </section>
-
-              <section class="py-4 last:pb-0">
-                <h3 class="mb-2.5 text-sm font-semibold">费用 <span class="font-normal text-muted-foreground">按官方价估算，不扣费</span></h3>
-                <CostBreakdown :record="record" class="sm:max-w-80" />
-              </section>
-
-              <section v-if="record.detail?.attempts?.length" class="py-4 last:pb-0">
-                <h3 class="mb-2 text-sm font-semibold">尝试记录</h3>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-xs whitespace-nowrap tabular-nums">
-                    <thead class="text-muted-foreground">
-                      <tr class="border-b">
-                        <th class="py-1.5 pr-3 text-left font-normal">#</th>
-                        <th class="py-1.5 pr-3 text-left font-normal">账号</th>
-                        <th class="py-1.5 pr-3 text-left font-normal">模型</th>
-                        <th class="py-1.5 pr-3 text-left font-normal">结果</th>
-                        <th class="py-1.5 pr-3 text-left font-normal">状态码</th>
-                        <th class="py-1.5 pr-3 text-right font-normal">冷却</th>
-                        <th class="py-1.5 text-right font-normal">耗时</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="a in record.detail.attempts" :key="a.try" class="border-b last:border-0" :title="a.error || ''">
-                        <td class="py-1.5 pr-3">{{ a.try }}</td>
-                        <td class="max-w-48 truncate py-1.5 pr-3">{{ a.account || `#${a.account_id}` }}</td>
-                        <td class="py-1.5 pr-3">{{ a.model }}</td>
-                        <td
-                          class="py-1.5 pr-3"
-                          :class="a.result === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'"
-                        >
-                          {{ resultLabel(a.result) }}
-                        </td>
-                        <td class="py-1.5 pr-3">{{ a.status || '—' }}</td>
-                        <td class="py-1.5 pr-3 text-right">{{ a.cooldown_ms ? fmtSpan(a.cooldown_ms) : '—' }}</td>
-                        <td class="py-1.5 text-right">{{ fmtDuration(a.duration_ms) }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-              <section v-if="identifiers.length" class="py-4 last:pb-0">
-                <h3 class="mb-2 text-sm font-semibold">上游标识</h3>
-                <dl class="space-y-1 text-sm">
-                  <div v-for="it in identifiers" :key="it.label" class="flex min-w-0 items-center gap-3">
-                    <dt class="w-20 shrink-0 text-muted-foreground">{{ it.label }}</dt>
-                    <dd class="min-w-0 flex-1 truncate font-mono text-xs">{{ it.value }}</dd>
-                    <Button variant="ghost" size="icon-xs" class="text-muted-foreground" :aria-label="`复制${it.label}`" @click="copy(it.label, it.value)">
-                      <Check v-if="copied === it.label" /><Copy v-else />
-                    </Button>
-                  </div>
-                </dl>
-              </section>
+          <section class="grid gap-x-8 gap-y-5 py-4 last:pb-0 sm:grid-cols-2">
+            <div>
+              <h3 class="mb-2.5 text-sm font-semibold">耗时</h3>
+              <LatencyBreakdown :record="record" />
             </div>
-          </template>
-        </div>
-      </ScrollArea>
+            <div>
+              <h3 class="mb-2.5 text-sm font-semibold">Token</h3>
+              <TokenBar :record="record" />
+            </div>
+          </section>
 
-      <DialogFooter class="border-t px-6 py-3">
-        <Button variant="outline" :disabled="!record" @click="download"><Download />下载 JSON</Button>
-        <Button @click="id = null">关闭</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+          <section class="py-4 last:pb-0">
+            <h3 class="mb-2.5 text-sm font-semibold">费用 <span class="font-normal text-muted-foreground">按官方价估算，不扣费</span></h3>
+            <CostBreakdown :record="record" class="sm:max-w-80" />
+          </section>
+
+          <section v-if="record.detail?.attempts?.length" class="py-4 last:pb-0">
+            <h3 class="mb-2 text-sm font-semibold">尝试记录</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs whitespace-nowrap tabular-nums">
+                <thead class="text-muted-foreground">
+                  <tr class="border-b">
+                    <th class="py-1.5 pr-3 text-left font-normal">#</th>
+                    <th class="py-1.5 pr-3 text-left font-normal">账号</th>
+                    <th class="py-1.5 pr-3 text-left font-normal">模型</th>
+                    <th class="py-1.5 pr-3 text-left font-normal">结果</th>
+                    <th class="py-1.5 pr-3 text-left font-normal">状态码</th>
+                    <th class="py-1.5 pr-3 text-right font-normal">冷却</th>
+                    <th class="py-1.5 text-right font-normal">耗时</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="a in record.detail.attempts" :key="a.try" class="border-b last:border-0" :title="a.error || ''">
+                    <td class="py-1.5 pr-3">{{ a.try }}</td>
+                    <td class="max-w-48 truncate py-1.5 pr-3">{{ a.account || `#${a.account_id}` }}</td>
+                    <td class="py-1.5 pr-3">{{ a.model }}</td>
+                    <td
+                      class="py-1.5 pr-3"
+                      :class="a.result === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'"
+                    >
+                      {{ resultLabel(a.result) }}
+                    </td>
+                    <td class="py-1.5 pr-3">{{ a.status || '—' }}</td>
+                    <td class="py-1.5 pr-3 text-right">{{ a.cooldown_ms ? fmtSpan(a.cooldown_ms) : '—' }}</td>
+                    <td class="py-1.5 text-right">{{ fmtDuration(a.duration_ms) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section v-if="identifiers.length" class="py-4 last:pb-0">
+            <h3 class="mb-2 text-sm font-semibold">上游标识</h3>
+            <dl class="space-y-1 text-sm">
+              <div v-for="it in identifiers" :key="it.label" class="flex min-w-0 items-center gap-3">
+                <dt class="w-20 shrink-0 text-muted-foreground">{{ it.label }}</dt>
+                <dd class="min-w-0 flex-1 truncate font-mono text-xs">{{ it.value }}</dd>
+                <Button variant="ghost" size="icon-xs" class="text-muted-foreground" :aria-label="`复制${it.label}`" @click="copy(it.label, it.value)">
+                  <Check v-if="copied === it.label" /><Copy v-else />
+                </Button>
+              </div>
+            </dl>
+          </section>
+        </div>
+      </template>
+    </div>
+
+    <template #footer>
+      <Button variant="outline" :disabled="!record" @click="download"><Download />下载 JSON</Button>
+      <Button @click="id = null">关闭</Button>
+    </template>
+  </BaseDialog>
 </template>

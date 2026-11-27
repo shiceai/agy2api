@@ -3,10 +3,10 @@ import { ref, watch } from 'vue'
 import { api, type Proxy, type ProxyScheme } from '@/api/client'
 import { proxyAddress } from '@/lib/proxy'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import BaseDialog from '@/components/BaseDialog.vue'
 
 // 编辑代理：改名称；填了新地址就换地址（密码不回显，要换就整条重填），换地址后测试结果清空、绑定的账号走新地址。
 const open = defineModel<boolean>('open', { required: true })
@@ -48,43 +48,37 @@ async function save() {
 </script>
 
 <template>
-  <Dialog v-model:open="open">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>编辑代理</DialogTitle>
-        <DialogDescription>换地址后会重新测试，绑定它的账号之后走新地址。</DialogDescription>
-      </DialogHeader>
-      <form class="grid gap-4" @submit.prevent="save">
-        <div class="grid gap-2">
-          <Label for="proxy-name">名称</Label>
-          <Input id="proxy-name" v-model="name" maxlength="64" :placeholder="proxy?.host" />
-        </div>
-        <div class="grid gap-2">
-          <Label for="proxy-address">地址</Label>
-          <Input id="proxy-address" v-model="address" class="font-mono text-xs" autocomplete="off" spellcheck="false" placeholder="不改就留空" />
-          <p class="text-xs text-muted-foreground">
-            现在是 <span class="font-mono">{{ proxy ? proxyAddress(proxy) : '' }}</span>，密码不显示。要换就整条重填，不带协议的写法（如 user:pass@host:port）按下面的协议。
-          </p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <Label for="proxy-edit-scheme" class="font-normal text-muted-foreground">不带协议时按</Label>
-          <Select v-model="scheme">
-            <SelectTrigger id="proxy-edit-scheme" class="w-28"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="http">http</SelectItem>
-              <SelectItem value="https">https</SelectItem>
-              <SelectItem value="socks5">socks5</SelectItem>
-              <SelectItem value="socks5h">socks5h</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        <button type="submit" class="hidden" />
-      </form>
-      <DialogFooter>
-        <Button variant="outline" @click="open = false">取消</Button>
-        <Button :disabled="busy" @click="save">保存</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <BaseDialog v-model:open="open" title="编辑代理" description="换地址后会重新测试，绑定它的账号之后走新地址。">
+    <form class="grid gap-4" @submit.prevent="save">
+      <div class="grid gap-2">
+        <Label for="proxy-name">名称</Label>
+        <Input id="proxy-name" v-model="name" maxlength="64" :placeholder="proxy?.host" />
+      </div>
+      <div class="grid gap-2">
+        <Label for="proxy-address">地址</Label>
+        <Input id="proxy-address" v-model="address" class="font-mono text-xs" autocomplete="off" spellcheck="false" placeholder="不改就留空" />
+        <p class="text-xs text-muted-foreground">
+          现在是 <span class="font-mono">{{ proxy ? proxyAddress(proxy) : '' }}</span>，密码不显示。要换就整条重填，不带协议的写法（如 user:pass@host:port）按下面的协议。
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <Label for="proxy-edit-scheme" class="font-normal text-muted-foreground">不带协议时按</Label>
+        <Select v-model="scheme">
+          <SelectTrigger id="proxy-edit-scheme" class="w-28"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="http">http</SelectItem>
+            <SelectItem value="https">https</SelectItem>
+            <SelectItem value="socks5">socks5</SelectItem>
+            <SelectItem value="socks5h">socks5h</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+      <button type="submit" class="hidden" />
+    </form>
+    <template #footer>
+      <Button variant="outline" @click="open = false">取消</Button>
+      <Button :disabled="busy" @click="save">保存</Button>
+    </template>
+  </BaseDialog>
 </template>

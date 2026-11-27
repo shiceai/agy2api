@@ -6,10 +6,10 @@ import { copyText } from '@/lib/clipboard'
 import { fmtCompact, parseTokens, periodLabels } from '@/lib/keys'
 import { fmtTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import BaseDialog from '@/components/BaseDialog.vue'
 import ModelTagsInput from './ModelTagsInput.vue'
 
 // 新建、编辑 API Key：名称、到期、Token 上限和周期、允许的模型。新建成功后在同一个弹窗里显示明文（只这一次）。
@@ -135,78 +135,71 @@ async function copy() {
 </script>
 
 <template>
-  <Dialog v-model:open="open">
-    <DialogContent class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
-      <template v-if="!secret">
-        <DialogHeader>
-          <DialogTitle>{{ editing ? '编辑密钥' : '新建密钥' }}</DialogTitle>
-          <DialogDescription>限制都可以留空：不过期、不限 Token、不限模型。修改后立即生效。</DialogDescription>
-        </DialogHeader>
-        <form class="grid min-w-0 gap-5" @submit.prevent="save">
-          <div class="grid gap-2">
-            <Label for="key-name">名称</Label>
-            <Input id="key-name" v-model="name" placeholder="例如：claude-code" maxlength="64" />
-          </div>
+  <BaseDialog
+    v-model:open="open"
+    :title="secret ? '密钥已创建' : editing ? '编辑密钥' : '新建密钥'"
+    :description="
+      secret ? '请立即复制，密钥只显示这一次。在客户端里填到 API Key 处（请求头 x-goog-api-key）。' : '限制都可以留空：不过期、不限 Token、不限模型。修改后立即生效。'
+    "
+    size="lg"
+  >
+    <form v-if="!secret" class="grid min-w-0 gap-5" @submit.prevent="save">
+      <div class="grid gap-2">
+        <Label for="key-name">名称</Label>
+        <Input id="key-name" v-model="name" placeholder="例如：claude-code" maxlength="64" />
+      </div>
 
-          <div class="grid gap-2">
-            <Label for="key-expiry">到期</Label>
-            <div class="flex flex-wrap items-center gap-2">
-              <Select v-model="expiryMode">
-                <SelectTrigger id="key-expiry" class="w-32"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="o in expiryOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input v-if="expiryMode === 'date'" v-model="expiryDate" type="date" aria-label="到期日期" class="w-40" />
-            </div>
-            <p v-if="expiryPreview" class="text-xs text-muted-foreground">{{ expiryPreview }}</p>
-          </div>
-
-          <div class="grid gap-2">
-            <Label for="key-limit">Token 上限</Label>
-            <div class="flex items-center gap-2">
-              <Input id="key-limit" v-model="limitInput" placeholder="不限" class="w-40" inputmode="decimal" autocomplete="off" />
-              <Select v-model="period" :disabled="!limit">
-                <SelectTrigger class="w-24" aria-label="上限周期"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="(label, p) in periodLabels" :key="p" :value="p">{{ label }}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p class="text-xs text-muted-foreground">
-              按输入 + 输出 + 推理的 Token 计，可以写 500K、5M；每天、每月按服务器时区划分。用完后从下一个请求开始拒绝。
-            </p>
-          </div>
-
-          <div class="grid gap-2">
-            <Label for="key-models">允许的模型</Label>
-            <ModelTagsInput id="key-models" v-model="models" :suggestions="suggestions" placeholder="不限制" />
-            <p class="text-xs text-muted-foreground">按客户端请求的模型名匹配，* 匹配任意字符，如 gemini-*。</p>
-          </div>
-
-          <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        </form>
-        <DialogFooter>
-          <Button variant="outline" @click="open = false">取消</Button>
-          <Button :disabled="busy" @click="save">{{ editing ? '保存' : '创建' }}</Button>
-        </DialogFooter>
-      </template>
-      <template v-else>
-        <DialogHeader>
-          <DialogTitle>密钥已创建</DialogTitle>
-          <DialogDescription>请立即复制，密钥只显示这一次。在客户端里填到 API Key 处（请求头 x-goog-api-key）。</DialogDescription>
-        </DialogHeader>
-        <div class="flex items-center gap-2 rounded-md border bg-muted py-1 pr-1 pl-3">
-          <code class="flex-1 font-mono text-xs break-all">{{ secret }}</code>
-          <Button variant="ghost" size="icon-sm" aria-label="复制" @click="copy">
-            <Check v-if="copied" class="text-emerald-600" />
-            <Copy v-else />
-          </Button>
+      <div class="grid gap-2">
+        <Label for="key-expiry">到期</Label>
+        <div class="flex flex-wrap items-center gap-2">
+          <Select v-model="expiryMode">
+            <SelectTrigger id="key-expiry" class="w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="o in expiryOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input v-if="expiryMode === 'date'" v-model="expiryDate" type="date" aria-label="到期日期" class="w-40" />
         </div>
-        <DialogFooter>
-          <Button @click="open = false">完成</Button>
-        </DialogFooter>
+        <p v-if="expiryPreview" class="text-xs text-muted-foreground">{{ expiryPreview }}</p>
+      </div>
+
+      <div class="grid gap-2">
+        <Label for="key-limit">Token 上限</Label>
+        <div class="flex items-center gap-2">
+          <Input id="key-limit" v-model="limitInput" placeholder="不限" class="w-40" inputmode="decimal" autocomplete="off" />
+          <Select v-model="period" :disabled="!limit">
+            <SelectTrigger class="w-24" aria-label="上限周期"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="(label, p) in periodLabels" :key="p" :value="p">{{ label }}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          按输入 + 输出 + 推理的 Token 计，可以写 500K、5M；每天、每月按服务器时区划分。用完后从下一个请求开始拒绝。
+        </p>
+      </div>
+
+      <div class="grid gap-2">
+        <Label for="key-models">允许的模型</Label>
+        <ModelTagsInput id="key-models" v-model="models" :suggestions="suggestions" placeholder="不限制" />
+        <p class="text-xs text-muted-foreground">按客户端请求的模型名匹配，* 匹配任意字符，如 gemini-*。</p>
+      </div>
+
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+    </form>
+    <div v-else class="flex items-center gap-2 rounded-md border bg-muted py-1 pr-1 pl-3">
+      <code class="flex-1 font-mono text-xs break-all">{{ secret }}</code>
+      <Button variant="ghost" size="icon-sm" aria-label="复制" @click="copy">
+        <Check v-if="copied" class="text-emerald-600" />
+        <Copy v-else />
+      </Button>
+    </div>
+    <template #footer>
+      <template v-if="!secret">
+        <Button variant="outline" @click="open = false">取消</Button>
+        <Button :disabled="busy" @click="save">{{ editing ? '保存' : '创建' }}</Button>
       </template>
-    </DialogContent>
-  </Dialog>
+      <Button v-else @click="open = false">完成</Button>
+    </template>
+  </BaseDialog>
 </template>
