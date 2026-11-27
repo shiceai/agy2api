@@ -30,6 +30,12 @@ watch(open, (o) => {
 const lineCount = computed(() => text.value.split('\n').filter((l) => l.trim()).length)
 const statusText = { added: '已添加', duplicate: '已有同样的代理', invalid: '格式不对' } as const
 
+// 每行结果的说明：有说明用说明，否则按状态给文案。写成函数而不在模板里直接按键取 statusText：
+// vue-tsc 3.3 在 TypeScript 5.9 下会把模板里按键取值的普通常量误当成 ref（补 .value）而报类型错误。
+function resultText(r: ProxyAddResult) {
+  return r.message || statusText[r.status]
+}
+
 async function add() {
   busy.value = true
   error.value = ''
@@ -94,7 +100,7 @@ async function add() {
           <CircleX v-else class="mt-0.5 size-4 shrink-0 text-destructive" />
           <div class="min-w-0">
             <div class="font-mono text-xs break-all">{{ r.line }}</div>
-            <div class="text-xs text-muted-foreground">{{ r.message || statusText[r.status] }}</div>
+            <div class="text-xs text-muted-foreground">{{ resultText(r) }}</div>
           </div>
         </li>
       </ul>
