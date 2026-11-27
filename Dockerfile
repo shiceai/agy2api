@@ -10,7 +10,7 @@
 FROM --platform=$BUILDPLATFORM node:24-alpine AS web
 RUN npm install -g pnpm@12.21.0
 WORKDIR /src/web
-COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
 # 产物输出到 ../internal/server/webdist（见 vite.config.ts），下一阶段嵌进二进制。
