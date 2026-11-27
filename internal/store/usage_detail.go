@@ -24,6 +24,47 @@ type UsageDetail struct {
 	Cost *UsageCost `json:"cost,omitempty"`
 	// Affinity 是会话粘性的结果，没开粘性或请求里没有用户消息时为空。
 	Affinity *UsageAffinity `json:"affinity,omitempty"`
+	// Request 是发给上游的请求的结构摘要（不含正文），只给上游返回了错误的请求记，排查请求为什么被拒。
+	Request *UsageRequestSummary `json:"request,omitempty"`
+	// RequestBody 是这次失败请求的完整请求体有没有存下（开了"保存失败请求的正文"时）：saved 已交给后台保存，
+	// skipped 因限速或排队满没存；没开时为空。正文在 request_bodies 表里，按请求 ID 取。
+	RequestBody string `json:"request_body,omitempty"`
+}
+
+// 失败请求正文的保存结果（UsageDetail.RequestBody）。
+const (
+	RequestBodySaved   = "saved"
+	RequestBodySkipped = "skipped"
+)
+
+// UsageRequestSummary 是发给上游的 Gemini 请求的结构摘要：只有计数和大小，不含文字内容。
+type UsageRequestSummary struct {
+	Bytes int `json:"bytes"` // 发给上游的请求体（含信封）字节数
+	// Turns 是 contents 的条数，Roles 是按角色（user、model）的条数。
+	Turns int            `json:"turns"`
+	Roles map[string]int `json:"roles,omitempty"`
+	// TextChars 是 contents 里文本 part 的总字符数（含思考），SystemChars 是 systemInstruction 的。
+	TextChars   int `json:"text_chars"`
+	SystemChars int `json:"system_chars"`
+	// Media 是内联数据和文件引用，按 MIME 类型汇总。
+	Media             []UsageMedia `json:"media,omitempty"`
+	FunctionCalls     int          `json:"function_calls,omitempty"`
+	FunctionResponses int          `json:"function_responses,omitempty"`
+	// Tools 是函数声明个数，OtherTools 是其它工具条目（如 googleSearch）的名字。
+	Tools      int      `json:"tools,omitempty"`
+	OtherTools []string `json:"other_tools,omitempty"`
+	// Generation 是 generationConfig 里的关键参数（输出上限、思考设置、温度等），结构化输出只记有没有。
+	Generation map[string]any `json:"generation,omitempty"`
+	// Safety 是 safetySettings，写成"类别=阈值"。
+	Safety []string `json:"safety,omitempty"`
+}
+
+// UsageMedia 是一种 MIME 类型的内联数据（Bytes 为解码后的字节数）或文件引用（Files 个数）。
+type UsageMedia struct {
+	MimeType string `json:"mime_type"`
+	Count    int    `json:"count"`
+	Bytes    int    `json:"bytes,omitempty"`
+	Files    int    `json:"files,omitempty"`
 }
 
 // UsageAffinity 是会话粘性的结果：Result 为 hit（沿用上次的账号）、switched（换了账号）、new（新对话）。
@@ -102,6 +143,8 @@ type UsageError struct {
 	Kind    string `json:"kind"`              // 上游错误分类，或 transport
 	Reason  string `json:"reason,omitempty"`  // 上游 ErrorInfo.reason
 	Message string `json:"message,omitempty"` // 上游 error.message 或内部原因
+	// Raw 是上游错误响应的原文（截到 4 KB），排查上游为什么拒绝时看。
+	Raw string `json:"raw,omitempty"`
 }
 
 // UsageLogByID 按 ID 读一条带账号邮箱和 API Key 名称的用量记录。

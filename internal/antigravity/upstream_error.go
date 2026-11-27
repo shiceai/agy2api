@@ -39,6 +39,8 @@ type UpstreamError struct {
 	// ResetAt 是上游给出的恢复时间：正文（quotaResetTimeStamp、quotaResetDelay、retryDelay）和
 	// Retry-After 头取较晚者；零值表示上游没给，或给的时间已过。
 	ResetAt time.Time
+	// Raw 是上游错误响应的原文，截到 rawLimit 字节，记进失败请求的用量详情供排查，不发给客户端。
+	Raw string
 }
 
 // StreamError 是上游在流式响应中途推来的错误帧：HTTP 状态已经是 200，错误以 {"error":{...}} 一帧给出。
@@ -68,6 +70,8 @@ func inBandError(raw []byte, header http.Header, now time.Time) (UpstreamError, 
 
 const (
 	messageLimit = 1000
+	// rawLimit 是 UpstreamError.Raw 保留的字节数：上游错误体一般一两 KB，留够看全 details。
+	rawLimit = 4 << 10
 	// RATE_LIMIT_EXCEEDED 的重置时间超过这个长度时，实际是额度窗口耗尽而不是瞬时限流。
 	quotaExhaustedThreshold = 5 * time.Minute
 )
@@ -102,6 +106,7 @@ func ClassifyError(status int, header http.Header, body []byte, now time.Time) U
 		Status:  status,
 		Code:    strings.ToUpper(strings.TrimSpace(gjson.GetBytes(body, "error.status").String())),
 		Message: truncateRunes(strings.TrimSpace(gjson.GetBytes(body, "error.message").String()), messageLimit),
+		Raw:     truncateBytes(body, rawLimit),
 	}
 	bodyReset, hasDelay := parseErrorDetails(body, now, &e)
 	e.ResetAt = laterFuture(now, bodyReset, parseRetryAfter(header, now))
@@ -258,6 +263,14 @@ func containsAny(text string, markers []string) bool {
 		}
 	}
 	return false
+}
+
+// truncateBytes 把 b 截到最多 n 字节转成字符串，截断处不留半个 UTF-8 字符，截过时末尾加省略号。
+func truncateBytes(b []byte, n int) string {
+	if len(b) <= n {
+		return strings.ToValidUTF8(string(b), "")
+	}
+	return strings.ToValidUTF8(string(b[:n]), "") + "…"
 }
 
 func truncateRunes(s string, n int) string {

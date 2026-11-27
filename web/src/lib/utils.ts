@@ -47,6 +47,13 @@ export function todayStart(): number {
   return d.getTime()
 }
 
+// fmtBytes 把字节数写成 KB、MB、GB（至少 1 KB）。
+export function fmtBytes(n: number): string {
+  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`
+  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(n / 1024))} KB`
+}
+
 // 紧凑的本地时间：今天只显示时分秒，否则带月日。
 export function fmtShortTime(ms: number): string {
   if (!ms) return '—'

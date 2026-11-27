@@ -48,7 +48,9 @@ type Relay struct {
 	store  *store.Store
 	enc    store.Encryptor
 	usage  *usageWriter
-	quota  *quotaRefresher // 后台额度刷新，StartQuotaRefresh 后非空
+	// capture 是失败请求正文的后台保存（默认关，见 capture.go）。
+	capture *capturer
+	quota   *quotaRefresher // 后台额度刷新，StartQuotaRefresh 后非空
 	// onUsage 在每条用量记录排队落库前调用（API Key 的 Token 上限计数用），SetUsageHook 在开始服务前设置。
 	onUsage func(*store.UsageRecord)
 	// prices 按模型价格算用量的费用，SetPricing 在开始服务前设置；为 nil 时不算。
@@ -79,7 +81,7 @@ func (r *Relay) SetPricing(p *pricing.Service) {
 // 用完调用 Close。
 func New(client *antigravity.Client, st *store.Store, enc store.Encryptor) *Relay {
 	r := &Relay{client: client, pool: pool.New(st, enc), store: st, enc: enc, usage: newUsageWriter(st),
-		affinity: newAffinityStore(affinityLimit)}
+		capture: newCapturer(st), affinity: newAffinityStore(affinityLimit)}
 	// refresh token 轮换时回写数据库并刷新号池。
 	r.tokens = antigravity.NewTokenManager(client, r.persistRotatedToken)
 	r.cfg.Store(&runtimeConfig{})
@@ -102,10 +104,14 @@ func (r *Relay) Cooldowns() map[int64][]pool.CooldownInfo {
 	return r.pool.Cooldowns()
 }
 
-// Close 停止后台额度刷新和接收用量记录，等排队的记录写完；ctx 到期则不再等待。应在 HTTP 服务停止后调用。
+// Close 停止后台额度刷新、接收用量记录和失败请求正文，等排队的写完；ctx 到期则不再等待。应在 HTTP 服务停止后调用。
 func (r *Relay) Close(ctx context.Context) error {
 	r.stopQuotaRefresh(ctx)
-	return r.usage.Close(ctx)
+	err := r.usage.Close(ctx)
+	if cerr := r.capture.close(ctx); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // Paused 返回因代理连不上暂停调度的账号和截止时间。
@@ -486,14 +492,14 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 		log := slog.With("account_id", lease.Account.ID, "model", req.Model, "resolved_model", lease.Model, "stream", req.Stream, "try", try)
 		log.DebugContext(ctx, "选号", "affinity", lease.Affinity)
 
-		up, tokenDur, err := r.callAccount(ctx, cfg, lease, req)
+		up, payload, tokenDur, err := r.callAccount(ctx, cfg, lease, req)
 		if err == nil && up.Status == http.StatusUnauthorized {
 			// 刷新令牌后在同账号重试一次。
 			up.Body.Close()
 			log.InfoContext(ctx, "上游返回 401，刷新令牌后重试")
 			r.tokens.Invalidate(lease.Account.ID)
 			var retryToken time.Duration
-			up, retryToken, err = r.callAccount(ctx, cfg, lease, req)
+			up, payload, retryToken, err = r.callAccount(ctx, cfg, lease, req)
 			tokenDur += retryToken
 		}
 		if err != nil {
@@ -520,7 +526,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 			last = &failure{err: err}
 			continue
 		}
-		c := &call{try: try, started: attemptStart, lease: lease, up: up, acquireDur: acquireDur, tokenDur: tokenDur}
+		c := &call{try: try, started: attemptStart, lease: lease, up: up, acquireDur: acquireDur, tokenDur: tokenDur, payload: payload}
 		var ue antigravity.UpstreamError
 		if up.Status >= 200 && up.Status < 300 {
 			body, err := firstFrame(up, req.Stream)
@@ -766,18 +772,19 @@ func (r *Relay) transportFailure(ctx context.Context, accountID int64, err error
 	return KindProxy
 }
 
-// callAccount 对选中的账号构造信封并调用上游一次，同时返回取令牌的用时。
-func (r *Relay) callAccount(ctx context.Context, cfg *runtimeConfig, lease *pool.Lease, req Request) (*antigravity.Response, time.Duration, error) {
+// callAccount 对选中的账号构造信封并调用上游一次，返回上游响应、发出的请求体（含信封，失败时做摘要、保存正文用）
+// 和取令牌的用时。
+func (r *Relay) callAccount(ctx context.Context, cfg *runtimeConfig, lease *pool.Lease, req Request) (*antigravity.Response, []byte, time.Duration, error) {
 	account := lease.Account
 	tokenStart := time.Now()
 	token, err := r.accessToken(ctx, account)
 	tokenDur := time.Since(tokenStart)
 	if err != nil {
-		return nil, tokenDur, err
+		return nil, nil, tokenDur, err
 	}
 	payload, err := antigravity.BuildEnvelope(buildParams(cfg, account, lease.Model, req.Body, caller(req)))
 	if err != nil {
-		return nil, tokenDur, err
+		return nil, nil, tokenDur, err
 	}
 	// 时间限制见 stream.go。流式响应需要在读取期间保持 ctx，故不能在此 defer cancel；交由 body 关闭时回收。
 	callCtx, cancel, headerArrived, headerTimedOut := startCall(ctx, req.Stream)
@@ -788,14 +795,14 @@ func (r *Relay) callAccount(ctx context.Context, cfg *runtimeConfig, lease *pool
 		if headerTimedOut() {
 			err = errHeaderTimeout
 		}
-		return nil, tokenDur, err
+		return nil, payload, tokenDur, err
 	}
 	if req.Stream && resp.Status >= 200 && resp.Status < 300 {
 		resp.Body = watchIdle(resp, cfg.policy.StreamIdleTimeout, cancel)
 	} else {
 		resp.Body = withCancel(resp.Body, cancel)
 	}
-	return resp, tokenDur, nil
+	return resp, payload, tokenDur, nil
 }
 
 // CountTokens 选一个账号调用上游 countTokens，返回标准 Gemini JSON。不等并发名额。
@@ -951,9 +958,13 @@ func (r *Relay) midStreamError(resp *Response, ue antigravity.UpstreamError) tim
 // recordFailure 为最终失败的请求记一条用量：c 是决定了结果的那次尝试（没有 token），状态码记分类时用的上游状态码
 // （2xx 里带错误的按错误的状态码），详情里带上全部尝试和失败原因。换号重试中途的失败只进尝试列表，不单独记。
 func (r *Relay) recordFailure(ctx context.Context, req Request, tr *trace, c *call, ue antigravity.UpstreamError) {
-	rec := usageRecord(logx.RequestID(ctx), req, tr, c)
+	requestID := logx.RequestID(ctx)
+	rec := usageRecord(requestID, req, tr, c)
 	rec.StatusCode = ue.Status
-	rec.Detail = tr.detail(c, &store.UsageError{Kind: string(ue.Kind), Reason: ue.Reason, Message: ue.Message}, nil)
+	// 上游拒绝的请求：记结构摘要（默认）和上游错误原文，开了"保存失败请求的正文"时把发出的请求体交给后台保存。
+	tr.request = summarizeRequest(req.Body, len(c.payload))
+	tr.requestBody = r.capture.offer(requestID, c.payload, time.Now())
+	rec.Detail = tr.detail(c, &store.UsageError{Kind: string(ue.Kind), Reason: ue.Reason, Message: ue.Message, Raw: ue.Raw}, nil)
 	r.enqueueUsage(rec)
 }
 

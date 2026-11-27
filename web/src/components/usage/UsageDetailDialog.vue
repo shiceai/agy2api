@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Check, CircleAlert, Copy, Download } from '@lucide/vue'
-import { api, type UsageLog } from '@/api/client'
+import { api, ApiError, type UsageLog, type UsageRequestSummary } from '@/api/client'
 import { copyText } from '@/lib/clipboard'
-import { fmtDuration, fmtNum, fmtSpan, fmtTime } from '@/lib/utils'
+import { toastError } from '@/lib/toast'
+import { fmtBytes, fmtDuration, fmtNum, fmtSpan, fmtTime } from '@/lib/utils'
 import { affinityText, PROBE_KEY_ID, PROBE_KEY_LABEL, rateOf, reasoningClass, reasoningText, resultLabel } from '@/lib/usage'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -16,8 +17,8 @@ import { fmtCost } from '@/lib/cost'
 import BaseDialog from '@/components/BaseDialog.vue'
 
 // 用量记录详情弹窗：打开时按 ID 取完整记录。顶部是摘要（状态、模型、类型、推理强度）和四个关键数字，
-// 失败时紧接着给出失败原因；下面按模型、来源、耗时与 Token、尝试记录、上游标识分块，统一"左标签右值"。
-// 可下载这条记录的 JSON。
+// 失败时紧接着给出失败原因；下面按模型、来源、耗时与 Token、尝试记录、请求摘要和上游原始错误（上游返回了错误时）、
+// 上游标识分块，统一"左标签右值"。可下载这条记录的 JSON，存了失败请求的正文时也可下载正文。
 const id = defineModel<number | null>({ required: true })
 const record = ref<UsageLog | null>(null)
 const error = ref('')
@@ -100,6 +101,51 @@ const sections = computed(() => {
   ]
 })
 
+// requestFields 是失败请求的结构摘要（不含文字内容）。
+const requestFields = computed<Field[]>(() => {
+  const q: UsageRequestSummary | undefined = record.value?.detail?.request
+  if (!q) return []
+  const roleNames: Record<string, string> = { user: '用户', model: '模型' }
+  const roles = Object.entries(q.roles ?? {})
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${roleNames[k] ?? k} ${n}`)
+    .join(' · ')
+  const media = (q.media ?? [])
+    .flatMap((m) => [
+      ...(m.count ? [`${m.mime_type} ×${m.count}（${fmtBytes(m.bytes ?? 0)}）`] : []),
+      ...(m.files ? [`${m.mime_type} 文件 ×${m.files}`] : []),
+    ])
+    .join('、')
+  const calls = [q.function_calls ? `调用 ${q.function_calls}` : '', q.function_responses ? `结果 ${q.function_responses}` : '']
+    .filter(Boolean)
+    .join(' · ')
+  const tools = [q.tools ? `${q.tools} 个函数` : '', ...(q.other_tools ?? [])].filter(Boolean).join('、')
+  const generation = Object.entries(q.generation ?? {})
+    .map(([k, v]) => (v === true ? k : `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`))
+    .join(' · ')
+  return [
+    { label: '大小', value: fmtBytes(q.bytes) },
+    { label: '对话', value: `${q.turns} 条`, muted: roles },
+    { label: '文字', value: `${fmtNum(q.text_chars)} 字` },
+    { label: '系统提示', value: q.system_chars ? `${fmtNum(q.system_chars)} 字` : '无' },
+    { label: '图片文件', value: media || '无', wide: true },
+    { label: '工具', value: tools || '无', muted: calls },
+    ...(generation ? [{ label: '生成参数', value: generation, wide: true }] : []),
+    ...(q.safety?.length ? [{ label: '安全设置', value: q.safety.join('、'), wide: true }] : []),
+  ]
+})
+
+// rawError 是上游错误原文，是 JSON 时排版一下（截断过的解析不了，原样显示）。
+const rawError = computed(() => {
+  const raw = record.value?.detail?.error?.raw
+  if (!raw) return ''
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+})
+
 const identifiers = computed(() => {
   const d = record.value?.detail
   return [
@@ -115,15 +161,33 @@ async function copy(label: string, value: string) {
   setTimeout(() => copied.value === label && (copied.value = ''), 1500)
 }
 
-function download() {
-  const r = record.value
-  if (!r) return
-  const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' })
+function saveJSON(data: unknown, name: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `usage-${r.request_id || r.id}.json`
+  a.download = name
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+function download() {
+  const r = record.value
+  if (r) saveJSON(r, `usage-${r.request_id || r.id}.json`)
+}
+
+// downloadBody 下载存下的失败请求正文（实际发给上游的请求）。正文可能已被清理（条数、占用上限或清空）。
+const downloading = ref(false)
+async function downloadBody() {
+  const r = record.value
+  if (!r) return
+  downloading.value = true
+  try {
+    saveJSON(await api.get<unknown>(`/api/admin/usage/logs/${r.id}/request-body`), `request-${r.request_id || r.id}.json`)
+  } catch (e) {
+    toastError('下载请求正文失败', e instanceof ApiError && e.status === 404 ? new Error('正文已被清理，或没有保存成功') : e)
+  } finally {
+    downloading.value = false
+  }
 }
 </script>
 
@@ -237,6 +301,35 @@ function download() {
                 </tbody>
               </table>
             </div>
+          </section>
+
+          <section v-if="requestFields.length" class="py-4 last:pb-0">
+            <h3 class="mb-2.5 text-sm font-semibold">请求摘要 <span class="font-normal text-muted-foreground">不含文字内容</span></h3>
+            <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <div v-for="f in requestFields" :key="f.label" :class="['flex min-w-0 gap-3', f.wide && 'sm:col-span-2']">
+                <dt class="w-20 shrink-0 text-muted-foreground">{{ f.label }}</dt>
+                <dd class="min-w-0 wrap-anywhere">
+                  {{ f.value }}<span v-if="f.muted" :class="['text-muted-foreground', f.value && 'ml-1.5']">{{ f.muted }}</span>
+                </dd>
+              </div>
+              <div class="flex min-w-0 items-center gap-3 sm:col-span-2">
+                <dt class="w-20 shrink-0 text-muted-foreground">正文</dt>
+                <dd class="min-w-0">
+                  <Button v-if="record.detail?.request_body === 'saved'" variant="outline" size="xs" :disabled="downloading" @click="downloadBody">
+                    <Download />下载
+                  </Button>
+                  <span v-else-if="record.detail?.request_body === 'skipped'" class="text-muted-foreground">没保存：超过每分钟上限</span>
+                  <span v-else class="text-muted-foreground">没开保存（设置 → 数据）</span>
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section v-if="rawError" class="py-4 last:pb-0">
+            <h3 class="mb-2.5 text-sm font-semibold">上游原始错误</h3>
+            <pre class="rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap wrap-anywhere">{{
+              rawError
+            }}</pre>
           </section>
 
           <section v-if="identifiers.length" class="py-4 last:pb-0">

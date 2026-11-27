@@ -152,6 +152,14 @@ func (s *Service) purgeUsage(ctx context.Context, days int, manual bool) (purgeR
 		}
 		break
 	}
+	// 失败请求的正文随用量记录一起按保留期删。
+	if err == nil {
+		if n, derr := s.store.DeleteRequestBodiesBefore(ctx, cutoff); derr != nil {
+			slog.ErrorContext(ctx, "清理失败请求的正文失败", "err", derr)
+		} else if n > 0 {
+			slog.InfoContext(ctx, "已清理超过保留期的失败请求正文", "deleted", n)
+		}
+	}
 	res.DurationMs = time.Since(start).Milliseconds()
 	if err != nil {
 		res.Error = err.Error()

@@ -105,6 +105,10 @@ func (s *Service) Router() http.Handler {
 
 		r.Get("/usage/logs", s.adminUsageLogs)
 		r.Get("/usage/logs/{id}", s.adminUsageLog)
+		r.Get("/usage/logs/{id}/request-body", s.adminUsageRequestBody)
+		r.Get("/usage/request-bodies", s.adminGetRequestCapture)
+		r.Put("/usage/request-bodies", s.adminUpdateRequestCapture)
+		r.Delete("/usage/request-bodies", s.adminClearRequestBodies)
 		r.Get("/usage/retention", s.adminGetRetention)
 		r.Put("/usage/retention", s.adminUpdateRetention)
 		r.Post("/usage/retention/run", s.adminRunPurge)

@@ -18,6 +18,9 @@ type trace struct {
 	affinity   *store.UsageAffinity
 	// cooldownWait 是这次请求等冷却的累计时长（见 waitCooldown）。
 	cooldownWait time.Duration
+	// request、requestBody 是失败请求的结构摘要和正文保存结果（见 recordFailure），成功时为空。
+	request     *store.UsageRequestSummary
+	requestBody string
 }
 
 // cooldownWaitMs 返回等冷却的累计毫秒数，没等过时为 nil。
@@ -51,6 +54,8 @@ type call struct {
 	up         *antigravity.Response
 	acquireDur time.Duration
 	tokenDur   time.Duration
+	// payload 是这次发给上游的请求体（含信封），失败时做请求摘要、保存正文用。
+	payload []byte
 }
 
 // detail 生成详情 JSON。uerr 是最终失败原因，成功时为 nil；cost 是费用，没算时为 nil。流式要在读完后调用，时间点才完整。
@@ -61,11 +66,13 @@ func (t *trace) detail(c *call, uerr *store.UsageError, cost *store.UsageCost) j
 			AcquireMs:      ms(c.acquireDur),
 			TokenMs:        ms(c.tokenDur),
 		},
-		Attempts:   t.attempts,
-		Error:      uerr,
-		FakeStream: t.fakeStream,
-		Cost:       cost,
-		Affinity:   t.affinity,
+		Attempts:    t.attempts,
+		Error:       uerr,
+		FakeStream:  t.fakeStream,
+		Cost:        cost,
+		Affinity:    t.affinity,
+		Request:     t.request,
+		RequestBody: t.requestBody,
 	}
 	// 账号检测的租约不占并发名额（Limit 为 0），不记并发占用。
 	if c.lease.Limit > 0 {

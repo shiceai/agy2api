@@ -2,8 +2,10 @@ package antigravity
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestClassifyError(t *testing.T) {
@@ -105,5 +107,18 @@ func TestIsInvalidGrant(t *testing.T) {
 		if got := IsInvalidGrant(tc.err); got != tc.want {
 			t.Fatalf("%v：应为 %v，实际 %v", tc.err, tc.want, got)
 		}
+	}
+}
+
+// 上游错误原文：短的原样保留；超过 rawLimit 的截断，截断处不留半个 UTF-8 字符，末尾加省略号。
+func TestClassifyErrorKeepsRaw(t *testing.T) {
+	body := []byte(`{"error":{"code":429,"message":"Resource has been exhausted (e.g. check quota).","status":"RESOURCE_EXHAUSTED"}}`)
+	if e := ClassifyError(429, nil, body, time.Now()); e.Raw != string(body) {
+		t.Fatalf("短的应原样保留：%q", e.Raw)
+	}
+	long := []byte(`{"error":{"code":400,"message":"` + strings.Repeat("超", rawLimit) + `"}}`)
+	e := ClassifyError(400, nil, long, time.Now())
+	if !strings.HasSuffix(e.Raw, "…") || len(e.Raw) > rawLimit+len("…") || !utf8.ValidString(e.Raw) {
+		t.Fatalf("长的应截到 %d 字节内、不留半个字符：len=%d valid=%v", rawLimit, len(e.Raw), utf8.ValidString(e.Raw))
 	}
 }

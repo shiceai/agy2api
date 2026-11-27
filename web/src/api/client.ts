@@ -430,13 +430,35 @@ export interface UsageDetail {
   timings?: UsageTimings
   slot?: { in_use: number; limit: number }
   attempts?: UsageAttempt[]
-  error?: { kind: string; reason?: string; message?: string }
+  // raw 是上游错误响应的原文（截到 4 KB）。
+  error?: { kind: string; reason?: string; message?: string; raw?: string }
   response_id?: string
   trace_id?: string
   // fake_stream 表示客户端请求的是假流式：上游用非流式请求（stream 为 false），结果按流式返回。
   fake_stream?: boolean
   cost?: UsageCost
   affinity?: UsageAffinity
+  // request 是上游返回了错误的请求的结构摘要（不含文字）；request_body 是开了"保存失败请求的正文"时有没有存下：
+  // saved 已保存（可在详情里下载，可能已被清理），skipped 因限速没存。
+  request?: UsageRequestSummary
+  request_body?: 'saved' | 'skipped'
+}
+// UsageRequestSummary 是发给上游的请求的结构摘要：bytes 请求体（含信封）字节数，turns 对话条数、roles 按角色，
+// text_chars、system_chars 文字字符数，media 按 MIME 类型的内联数据（count、bytes）和文件引用（files），
+// tools 函数声明个数、other_tools 其它工具，generation 生成参数的关键字段，safety 安全设置（类别=阈值）。
+export interface UsageRequestSummary {
+  bytes: number
+  turns: number
+  roles?: Record<string, number>
+  text_chars: number
+  system_chars: number
+  media?: { mime_type: string; count: number; bytes?: number; files?: number }[]
+  function_calls?: number
+  function_responses?: number
+  tools?: number
+  other_tools?: string[]
+  generation?: Record<string, unknown>
+  safety?: string[]
 }
 // UsageAffinity 是会话粘性的结果：hit 沿用绑定的账号，diverted 原账号暂时接不了、临时借了别的账号（绑定不变），
 // switched 原账号恢复不了、换号并改绑（reason 是原账号这次不能接的原因，from_account 是原账号），new 新对话。source 是按什么认的对话（Claude Code 会话头、X-Session-Id、prompt_cache_key、
@@ -712,6 +734,15 @@ export interface PurgeResult {
   duration_ms: number
   manual: boolean
   error?: string
+}
+// RequestCaptureView 是"保存失败请求的正文"：开关、已存的条数和占用（压缩后），以及条数、占用、每分钟的上限。
+export interface RequestCaptureView {
+  settings: { enabled: boolean }
+  count: number
+  bytes: number
+  max_count: number
+  max_bytes: number
+  per_minute: number
 }
 export interface RetentionView {
   settings: RetentionSettings

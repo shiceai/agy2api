@@ -137,6 +137,9 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 	if err := svc.loadWarmup(ctx); err != nil {
 		return nil, err
 	}
+	if err := svc.loadRequestCapture(ctx); err != nil {
+		return nil, err
+	}
 	if err := svc.loadModelAliases(ctx); err != nil {
 		return nil, err
 	}

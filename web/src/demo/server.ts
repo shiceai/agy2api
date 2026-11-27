@@ -32,6 +32,7 @@ import type {
   RequestHandlingResponse,
   RetentionSettings,
   RetentionView,
+  UsageRequestSummary,
   Scheduling,
   SchedulingResponse,
   Settings,
@@ -275,7 +276,9 @@ function fakeRecord(at: number): UsageRecord {
     try: attempts.length + 1, account_id: a.id, account: a.email, model: resolved, status, result, duration_ms: between(300, 1800), ...extra,
   })
   let status = 200
-  let error: { kind: string; message?: string } | undefined
+  let error: { kind: string; message?: string; raw?: string } | undefined
+  let request: UsageRequestSummary | undefined
+  let requestBody: 'saved' | undefined
   if (outcome === 'ok') attempts.push(att(first, 200, 'success', { duration_ms: total }))
   else if (outcome === 'retry') {
     const second = ready.find((a) => a.id !== first.id) ?? first
@@ -287,11 +290,16 @@ function fakeRecord(at: number): UsageRecord {
   } else if (outcome === 'client_error') {
     status = 400
     attempts.push(att(first, 400, 'client_error', { error: 'Request contains an invalid argument.' }))
-    error = { kind: 'client_error', message: 'Request contains an invalid argument.' }
+    error = { kind: 'client_error', message: 'Request contains an invalid argument.',
+      raw: '{"error":{"code":400,"message":"Request contains an invalid argument.","status":"INVALID_ARGUMENT"}}' }
+    request = demoRequestSummary()
+    requestBody = 'saved' // 演示：这些失败请求的正文"已保存"，详情里可以下载示例
   } else {
     status = 503
     for (const a of ready.slice(0, 3)) attempts.push(att(a, 503, 'server_error', { error: 'The service is currently unavailable.', cooldown_ms: 30_000 }))
-    error = { kind: 'server_error', message: 'upstream is temporarily unavailable, retry later' }
+    error = { kind: 'server_error', message: 'upstream is temporarily unavailable, retry later',
+      raw: '{"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}' }
+    request = demoRequestSummary()
   }
   const ok = status === 200
   const prompt = ok || status === 503 ? between(600, 24000) : 0
@@ -324,12 +332,26 @@ function fakeRecord(at: number): UsageRecord {
       slot: ok ? { in_use: between(1, 3), limit: 15 } : undefined,
       attempts: attempts.length ? attempts : undefined,
       error,
+      request,
+      request_body: requestBody,
       affinity: ok ? { result: weighted<'hit' | 'new' | 'diverted' | 'switched'>([['hit', 70], ['new', 22], ['diverted', 5], ['switched', 3]]), source: affinitySource } : undefined,
       cost: price && nanos !== null ? { nanos, model: price.model, source: price.source, input: price.price.input, cache_read: price.price.cache_read ?? price.price.input, output: price.price.output } : undefined,
     },
     cost_nanos: nanos,
   }
 }
+// demoRequestSummary 是演示用的失败请求结构摘要（不含文字）。
+function demoRequestSummary(): UsageRequestSummary {
+  const turns = between(1, 9) * 2 - 1
+  return {
+    bytes: between(8, 400) * 1024, turns, roles: { user: (turns + 1) / 2, model: (turns - 1) / 2 },
+    text_chars: between(400, 60000), system_chars: rand() < 0.7 ? between(800, 6000) : 0,
+    media: rand() < 0.3 ? [{ mime_type: 'image/png', count: between(1, 3), bytes: between(80, 900) * 1024 }] : undefined,
+    tools: rand() < 0.4 ? between(2, 12) : undefined,
+    generation: { maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'low' } },
+  }
+}
+
 genUsage()
 for (const k of keys) k.last_used_at = Math.max(0, ...usage.filter((r) => r.api_key_id === k.id).map((r) => r.created_at))
 
@@ -846,6 +868,30 @@ on('GET', '/usage/logs', (_m, q) => {
   return { records: list.slice(offset, offset + limit).map(logView), total: list.length }
 })
 on('GET', '/usage/logs/(\\d+)', (m) => ({ record: logView(usage.find((r) => r.id === Number(m[1])) ?? fail(404, 'record not found')) }))
+// 失败请求的正文：开关只在内存里；"已保存"的是演示数据里标了 saved 的失败记录，下载给一份示例请求体。
+let captureEnabled = false
+function captureView() {
+  const saved = usage.filter((r) => r.detail?.request_body === 'saved')
+  return { settings: { enabled: captureEnabled }, count: saved.length, bytes: saved.length * 37 * 1024,
+    max_count: 200, max_bytes: 500 << 20, per_minute: 10 }
+}
+on('GET', '/usage/request-bodies', () => captureView())
+on('PUT', '/usage/request-bodies', (_m, _q, b) => {
+  captureEnabled = !!b.enabled
+  return captureView()
+})
+on('DELETE', '/usage/request-bodies', () => {
+  for (const r of usage) if (r.detail?.request_body === 'saved') r.detail.request_body = undefined
+  return captureView()
+})
+on('GET', '/usage/logs/(\\d+)/request-body', (m) => {
+  const r = usage.find((x) => x.id === Number(m[1]))
+  if (!r || r.detail?.request_body !== 'saved') fail(404, 'request body not saved or already removed')
+  return {
+    project: 'demo-project-000000', requestId: `agent/${r!.request_id}`, model: r!.resolved_model, userAgent: 'antigravity', requestType: 'agent',
+    request: { contents: [{ role: 'user', parts: [{ text: '（演示站的示例请求，没有真实内容）' }] }], generationConfig: { maxOutputTokens: 8192 } },
+  }
+})
 on('GET', '/usage/retention', () => retentionView())
 on('PUT', '/usage/retention', (_m, _q, b) => {
   const days = Number(b.days)

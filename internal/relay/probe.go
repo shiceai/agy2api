@@ -77,12 +77,12 @@ func (r *Relay) probe(ctx context.Context, lease *pool.Lease, req Request, tr *t
 	var res ProbeResult
 	started := time.Now()
 	cfg := r.config()
-	up, tokenDur, err := r.callAccount(ctx, cfg, lease, req)
+	up, payload, tokenDur, err := r.callAccount(ctx, cfg, lease, req)
 	if err == nil && up.Status == http.StatusUnauthorized {
 		up.Body.Close()
 		r.tokens.Invalidate(lease.Account.ID)
 		var retryToken time.Duration
-		up, retryToken, err = r.callAccount(ctx, cfg, lease, req)
+		up, payload, retryToken, err = r.callAccount(ctx, cfg, lease, req)
 		tokenDur += retryToken
 	}
 	if err != nil {
@@ -93,7 +93,7 @@ func (r *Relay) probe(ctx context.Context, lease *pool.Lease, req Request, tr *t
 		}
 		return res
 	}
-	c := &call{try: 1, started: started, lease: lease, up: up, tokenDur: tokenDur}
+	c := &call{try: 1, started: started, lease: lease, up: up, tokenDur: tokenDur, payload: payload}
 	res.Status = up.Status
 	if up.Status >= 200 && up.Status < 300 {
 		r.pool.NoteSuccess(lease.Account.ID, 0)
