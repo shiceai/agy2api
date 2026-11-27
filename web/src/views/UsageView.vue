@@ -19,6 +19,7 @@ import FilterButton from '@/components/FilterButton.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import IconAction from '@/components/IconAction.vue'
 import LoadError from '@/components/LoadError.vue'
+import PageActions from '@/components/PageActions.vue'
 import LatencyBreakdown from '@/components/usage/LatencyBreakdown.vue'
 import CostBreakdown from '@/components/usage/CostBreakdown.vue'
 import AffinityIcon from '@/components/usage/AffinityIcon.vue'
@@ -292,10 +293,15 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
 
 <template>
   <div class="space-y-6">
+    <!-- 显示列和其它列表页一样放顶栏右侧。只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
+    <PageActions>
+      <div class="hidden @4xl/main:block"><ColumnSettings v-model="columnPrefs" :defs="columnDefs" /></div>
+    </PageActions>
+
     <LoadError v-if="error" :message="error" />
 
     <div class="space-y-3">
-      <!-- 工具栏：所有筛选在一行，放不下时换行；右侧是条数、显示列和刷新 -->
+      <!-- 工具栏：所有筛选在一行，放不下时换行；右侧是更新时间和刷新（显示列在顶栏） -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         <SegmentedControl :model-value="range" :options="ranges" label="时间范围" hide-label @update:model-value="setRange" />
         <SegmentedControl :model-value="status" :options="statusOptions" label="状态" @update:model-value="setStatus" />
@@ -306,10 +312,6 @@ const protocolLabel = (p: string) => protocolLabels[p] ?? 'Gemini'
           <Input v-model="requestIdInput" placeholder="按请求 ID 查找，回车确认" class="h-8 pl-8" aria-label="请求 ID" />
         </form>
         <div class="ml-auto flex items-center gap-2">
-          <!-- 显示列只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
-          <div class="hidden @4xl/main:block">
-            <ColumnSettings v-model="columnPrefs" :defs="columnDefs" />
-          </div>
           <span v-if="updatedAt" class="hidden text-xs text-muted-foreground tabular-nums sm:inline" aria-live="polite">
             更新于 {{ fmtShortTime(updatedAt) }}
           </span>
