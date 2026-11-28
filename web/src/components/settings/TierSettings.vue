@@ -44,7 +44,8 @@ function serialize(s: Settings): string {
   const sorted = Object.fromEntries(Object.entries(s.model_tiers).sort(([a], [b]) => a.localeCompare(b)))
   return JSON.stringify({ default_tier: s.default_tier, model_tiers: sorted })
 }
-const dirty = computed(() => serialize(current()) !== saved.value)
+// 设置加载完（saved 不为空）才比较：加载前表单是空的，不算改动。
+const dirty = computed(() => saved.value !== '' && serialize(current()) !== saved.value)
 
 // setForm 把表单设成 s。
 function setForm(s: Settings) {
