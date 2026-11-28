@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import TierSettings from '@/components/settings/TierSettings.vue'
 import ModelAliasSettings from '@/components/settings/ModelAliasSettings.vue'
@@ -12,6 +12,7 @@ import ClientFilterSettings from '@/components/settings/ClientFilterSettings.vue
 import SystemPromptSettings from '@/components/settings/SystemPromptSettings.vue'
 import RequestHandlingSettings from '@/components/settings/RequestHandlingSettings.vue'
 import { appName } from '@/lib/brand'
+import { useLeaveConfirm } from '@/lib/unsaved'
 import { openVersionDialog, useVersion } from '@/lib/version'
 
 // 当前标签记在地址的 tab 参数里，刷新、分享链接都停在同一个标签。
@@ -22,6 +23,12 @@ const tab = computed({
   get: () => (tabs.includes(String(route.query.tab)) ? String(route.query.tab) : 'tiers'),
   set: (v: string | number) => router.replace({ query: v === 'tiers' ? {} : { tab: String(v) } }),
 })
+
+// 当前标签有未保存的修改时（各标签页的修改栏登记，见 lib/unsaved.ts）：切换标签（含浏览器前进后退，都是改地址里的
+// tab）和离开设置页前先确认，选"留下继续编辑"就不跳。
+const leaveConfirm = useLeaveConfirm()
+onBeforeRouteUpdate((to, from) => (to.query.tab === from.query.tab ? true : leaveConfirm()))
+onBeforeRouteLeave(() => leaveConfirm())
 
 // 手机上标签栏横向滑动：打开或切到某个标签时把它滚进可见范围（链接直接打开靠后的标签时，它可能在屏幕外）。
 const tabBar = useTemplateRef<HTMLElement>('tabBar')

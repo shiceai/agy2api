@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Check } from '@lucide/vue'
 import { api, errorMessage, type SystemPrompt, type SystemPromptResponse } from '@/api/client'
-import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import SettingCard from './SettingCard.vue'
 import SettingRow from './SettingRow.vue'
+import UnsavedBar from './UnsavedBar.vue'
+import { toastError } from '@/lib/toast'
 
 const enabled = ref(false)
 const mode = ref<SystemPrompt['mode']>('as_user')
@@ -18,7 +18,6 @@ const builtin = ref('')
 const saved = ref('')
 const error = ref('')
 const saving = ref(false)
-const justSaved = ref(false)
 const ready = ref(false)
 
 const modeOptions = [
@@ -44,19 +43,28 @@ const payload = computed<SystemPrompt>(() => ({
 }))
 const dirty = computed(() => ready.value && JSON.stringify(payload.value) !== saved.value)
 
-function apply(res: SystemPromptResponse) {
-  enabled.value = res.settings.enabled
-  mode.value = res.settings.mode
-  builtin.value = res.builtin
-  if (res.settings.template.trim()) {
+// setForm 把表单设成 s：模板为空表示用内置。
+function setForm(s: SystemPrompt) {
+  enabled.value = s.enabled
+  mode.value = s.mode
+  if (s.template.trim()) {
     source.value = 'custom'
-    custom.value = res.settings.template
+    custom.value = s.template
   } else {
     source.value = 'builtin'
     custom.value = ''
   }
-  saved.value = JSON.stringify({ enabled: enabled.value, mode: mode.value, template: res.settings.template })
+}
+
+function apply(res: SystemPromptResponse) {
+  setForm(res.settings)
+  builtin.value = res.builtin
+  saved.value = JSON.stringify({ enabled: res.settings.enabled, mode: res.settings.mode, template: res.settings.template })
   ready.value = true
+}
+
+function discard() {
+  setForm(JSON.parse(saved.value))
 }
 
 onMounted(async () => {
@@ -69,13 +77,10 @@ onMounted(async () => {
 
 async function save() {
   saving.value = true
-  error.value = ''
   try {
     apply(await api.put<SystemPromptResponse>('/api/admin/settings/system-prompt', payload.value))
-    justSaved.value = true
-    setTimeout(() => (justSaved.value = false), 1500)
   } catch (e) {
-    error.value = errorMessage(e)
+    toastError('保存系统提示词失败', e)
   } finally {
     saving.value = false
   }
@@ -129,10 +134,6 @@ async function save() {
       />
     </SettingCard>
 
-    <div class="flex flex-wrap items-center gap-3">
-      <Button :disabled="!dirty || saving" @click="save">保存</Button>
-      <span v-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
-      <span v-else class="text-sm text-muted-foreground">保存后立即生效，不用重启。</span>
-    </div>
+    <UnsavedBar :dirty="dirty" :saving="saving" @save="save" @discard="discard" />
   </div>
 </template>

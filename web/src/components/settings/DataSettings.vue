@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check, Trash2 } from '@lucide/vue'
+import { Trash2 } from '@lucide/vue'
 import { api, errorMessage, type RetentionView } from '@/api/client'
 import { useConfirm } from '@/lib/confirm'
 import { toastError } from '@/lib/toast'
@@ -15,6 +15,7 @@ import SettingRow from './SettingRow.vue'
 import UnitInput from './UnitInput.vue'
 import SettingGrid from './SettingGrid.vue'
 import RequestCaptureCard from './RequestCaptureCard.vue'
+import UnsavedBar from './UnsavedBar.vue'
 
 // 设置页"数据"标签：用量记录的保留期和清理。超过保留期的记录（含详情）每天自动删一次，也可以立即清理；
 // 删之前把 Token 归档到 Key，总量上限不受影响。旁边是失败请求的正文（见 RequestCaptureCard）。
@@ -25,7 +26,6 @@ const loadError = ref('')
 const enabled = ref(true)
 const days = ref(90)
 const saving = ref(false)
-const justSaved = ref(false)
 const purging = ref(false)
 
 function apply(v: RetentionView) {
@@ -49,13 +49,15 @@ async function save() {
   saving.value = true
   try {
     apply(await api.put<RetentionView>('/api/admin/usage/retention', { enabled: enabled.value, days: days.value }))
-    justSaved.value = true
-    setTimeout(() => (justSaved.value = false), 1500)
   } catch (e) {
-    toastError('保存失败', e)
+    toastError('保存用量保留设置失败', e)
   } finally {
     saving.value = false
   }
+}
+
+function discard() {
+  if (view.value) apply(view.value)
 }
 
 // 立即清理按已保存的天数删，不能恢复，先确认。
@@ -121,12 +123,9 @@ async function purge() {
         </dl>
       </div>
       <template #footer>
-        <CardFooter class="flex flex-wrap items-center gap-3 border-t">
-          <Button :disabled="!dirty || saving || !!problem" @click="save">保存</Button>
-          <span v-if="problem" class="text-sm text-destructive">{{ problem }}</span>
-          <span v-else-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
-          <span v-else-if="dirty" class="text-sm text-muted-foreground">保存后再清理</span>
-          <Button variant="outline" class="ml-auto" :disabled="dirty || purging || view.running || !view.expired" @click="purge">
+        <CardFooter class="flex flex-wrap items-center justify-end gap-3 border-t">
+          <span v-if="dirty" class="text-sm text-muted-foreground">保存后再清理</span>
+          <Button variant="outline" :disabled="dirty || purging || view.running || !view.expired" @click="purge">
             <Trash2 />{{ purging || view.running ? '清理中…' : '立即清理' }}
           </Button>
         </CardFooter>
@@ -134,4 +133,5 @@ async function purge() {
     </SettingCard>
     <RequestCaptureCard />
   </SettingGrid>
+  <UnsavedBar v-if="view" class="mt-6" :dirty="dirty" :saving="saving" :problem="problem" @save="save" @discard="discard" />
 </template>

@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check } from '@lucide/vue'
 import { api, errorMessage, type ClientFilter, type ClientFilterResponse } from '@/api/client'
-import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,6 +10,9 @@ import SegmentedControl from '@/components/SegmentedControl.vue'
 import SettingGrid from './SettingGrid.vue'
 import SettingCard from './SettingCard.vue'
 import SettingRow from './SettingRow.vue'
+import UnsavedBar from './UnsavedBar.vue'
+import { toastError } from '@/lib/toast'
+import { Button } from '@/components/ui/button'
 
 const router = useRouter()
 const form = ref<ClientFilter | null>(null)
@@ -19,7 +20,6 @@ const keywords = ref<string[]>([])
 const saved = ref('') // 库里当前生效的设置（序列化后），判断是否有改动
 const error = ref('')
 const saving = ref(false)
-const justSaved = ref(false)
 
 const modeOptions = [
   { value: 'rewrite', label: '替换' },
@@ -49,16 +49,17 @@ onMounted(async () => {
 async function save() {
   if (!form.value) return
   saving.value = true
-  error.value = ''
   try {
     apply(await api.put<ClientFilterResponse>('/api/admin/settings/client-filter', form.value))
-    justSaved.value = true
-    setTimeout(() => (justSaved.value = false), 1500)
   } catch (e) {
-    handle(e)
+    toastError('保存客户端过滤失败', e)
   } finally {
     saving.value = false
   }
+}
+
+function discard() {
+  form.value = JSON.parse(saved.value)
 }
 </script>
 
@@ -119,10 +120,6 @@ async function save() {
       </SettingCard>
     </SettingGrid>
 
-    <div class="flex flex-wrap items-center gap-3">
-      <Button :disabled="!dirty || saving" @click="save">保存</Button>
-      <span v-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
-      <span v-else class="text-sm text-muted-foreground">保存后立即生效，不用重启。</span>
-    </div>
+    <UnsavedBar :dirty="dirty" :saving="saving" @save="save" @discard="discard" />
   </div>
 </template>

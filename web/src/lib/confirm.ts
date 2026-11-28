@@ -7,6 +7,8 @@ export interface ConfirmOptions {
   title: string
   description?: string
   confirmText?: string
+  // cancelText 是取消按钮的文字，默认"取消"。
+  cancelText?: string
   // destructive 为 true 时确认按钮用危险样式（删除等不可恢复操作）。
   destructive?: boolean
 }

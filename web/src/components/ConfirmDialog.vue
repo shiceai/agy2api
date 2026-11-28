@@ -29,7 +29,7 @@ function onOpenChange(open: boolean) {
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>取消</AlertDialogCancel>
+        <AlertDialogCancel>{{ confirmState.options.cancelText ?? '取消' }}</AlertDialogCancel>
         <Button :variant="confirmState.options.destructive ? 'destructive' : 'default'" @click="settleConfirm(true)">
           {{ confirmState.options.confirmText ?? '确认' }}
         </Button>

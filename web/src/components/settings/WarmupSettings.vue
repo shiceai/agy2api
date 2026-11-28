@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Check } from '@lucide/vue'
 import { api, errorMessage, type Warmup, type WarmupResponse } from '@/api/client'
-import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import SettingGrid from './SettingGrid.vue'
 import SettingCard from './SettingCard.vue'
 import SettingRow from './SettingRow.vue'
 import UnitInput from './UnitInput.vue'
+import UnsavedBar from './UnsavedBar.vue'
+import { toastError } from '@/lib/toast'
 
 const form = ref<Warmup | null>(null)
 const saved = ref('')
 const error = ref('')
 const saving = ref(false)
-const justSaved = ref(false)
 
 const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== saved.value)
 
@@ -53,13 +52,15 @@ async function save() {
   error.value = ''
   try {
     apply(await api.put<WarmupResponse>('/api/admin/settings/warmup', form.value))
-    justSaved.value = true
-    setTimeout(() => (justSaved.value = false), 1500)
   } catch (e) {
-    error.value = errorMessage(e)
+    toastError('保存预热节奏失败', e)
   } finally {
     saving.value = false
   }
+}
+
+function discard() {
+  form.value = JSON.parse(saved.value)
 }
 </script>
 
@@ -67,7 +68,6 @@ async function save() {
 <template>
   <div v-if="form" class="space-y-6">
     <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-    <p v-else-if="problem" class="text-sm text-destructive">{{ problem }}</p>
 
     <SettingGrid>
       <SettingCard title="新号预热" description="新号起步的并发，攒够成功数或够老就放开">
@@ -98,10 +98,6 @@ async function save() {
       </SettingCard>
     </SettingGrid>
 
-    <div class="flex flex-wrap items-center gap-3">
-      <Button :disabled="!dirty || !!problem || saving" @click="save">保存</Button>
-      <span v-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
-      <span v-else class="text-sm text-muted-foreground">保存后立即生效，不用重启。</span>
-    </div>
+    <UnsavedBar :dirty="dirty" :saving="saving" :problem="problem" @save="save" @discard="discard" />
   </div>
 </template>

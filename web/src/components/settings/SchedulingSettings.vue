@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check } from '@lucide/vue'
 import { api, errorMessage, type Scheduling, type SchedulingResponse, type StickyMode, type Strategy } from '@/api/client'
-import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import SettingGrid from './SettingGrid.vue'
 import SettingCard from './SettingCard.vue'
 import SettingRow from './SettingRow.vue'
 import UnitInput from './UnitInput.vue'
+import UnsavedBar from './UnsavedBar.vue'
+import { toastError } from '@/lib/toast'
+import { Button } from '@/components/ui/button'
 
 // 表单按界面上的单位存：提前量、两种 403 冷却和额度刷新间隔以分钟显示，其余以秒；接口统一用秒。
 // 额度刷新间隔 0 表示关闭，表单拆成开关和分钟数，关闭时分钟数保留默认的 15。
@@ -122,7 +123,6 @@ const defaults = ref<Scheduling | null>(null)
 const saved = ref('') // 库里当前生效的设置（序列化后），用来判断是否有改动
 const error = ref('')
 const saving = ref(false)
-const justSaved = ref(false)
 
 const dirty = computed(() => !!form.value && JSON.stringify(toApi(form.value)) !== saved.value)
 const isDefault = computed(() => !!form.value && !!defaults.value && JSON.stringify(toApi(form.value)) === JSON.stringify(defaults.value))
@@ -175,16 +175,17 @@ onMounted(async () => {
 async function save() {
   if (!form.value || problem.value) return
   saving.value = true
-  error.value = ''
   try {
     apply(await api.put<SchedulingResponse>('/api/admin/settings/scheduling', toApi(form.value)))
-    justSaved.value = true
-    setTimeout(() => (justSaved.value = false), 1500)
   } catch (e) {
-    handle(e)
+    toastError('保存账号调度失败', e)
   } finally {
     saving.value = false
   }
+}
+
+function discard() {
+  form.value = toForm(JSON.parse(saved.value))
 }
 
 function restoreDefaults() {
@@ -324,12 +325,11 @@ function restoreDefaults() {
       </SettingCard>
     </SettingGrid>
 
-    <div class="flex flex-wrap items-center gap-3">
-      <Button :disabled="!dirty || saving || !!problem" @click="save">保存</Button>
+    <!-- 恢复默认值只改表单，和其他修改一样要保存才生效 -->
+    <div>
       <Button variant="outline" :disabled="isDefault" @click="restoreDefaults">恢复默认值</Button>
-      <span v-if="problem" class="text-sm text-destructive">{{ problem }}</span>
-      <span v-else-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
-      <span v-else class="text-sm text-muted-foreground">保存后立即生效，不用重启。</span>
     </div>
+
+    <UnsavedBar :dirty="dirty" :saving="saving" :problem="problem" @save="save" @discard="discard" />
   </div>
 </template>

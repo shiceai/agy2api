@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Check } from '@lucide/vue'
 import { api, errorMessage, type AliasTestResult, type AnthropicCompatResponse, type ModelAliasResponse, type ModelAliasSettings } from '@/api/client'
 import { toastError } from '@/lib/toast'
-import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -13,6 +11,8 @@ import LoadError from '@/components/LoadError.vue'
 import SettingCard from './SettingCard.vue'
 import SettingGrid from './SettingGrid.vue'
 import SettingRow from './SettingRow.vue'
+import UnsavedBar from './UnsavedBar.vue'
+import { Button } from '@/components/ui/button'
 
 // 设置页"模型别名"标签：客户端用的模型名（Claude Code 的官方名等）不在号池里时，按规则换成号池里的模型。
 // 所有接口都生效。右边的"试一下"按已保存的规则解析。
@@ -21,7 +21,6 @@ const presets = ref<ModelAliasResponse['presets']>([])
 const saved = ref('')
 const loadError = ref('')
 const saving = ref(false)
-const justSaved = ref(false)
 
 const testModel = ref('claude-haiku-5-5')
 const testing = ref(false)
@@ -72,13 +71,15 @@ async function save() {
   try {
     apply(await api.put<ModelAliasResponse>('/api/admin/settings/model-aliases', form.value))
     result.value = null // 规则变了，之前的试解析结果作废
-    justSaved.value = true
-    setTimeout(() => (justSaved.value = false), 1500)
   } catch (e) {
     toastError('保存模型别名失败', e)
   } finally {
     saving.value = false
   }
+}
+
+function discard() {
+  form.value = JSON.parse(saved.value)
 }
 
 async function test() {
@@ -162,10 +163,6 @@ async function test() {
       </SettingCard>
     </SettingGrid>
 
-    <div class="flex flex-wrap items-center gap-3">
-      <Button :disabled="!dirty || saving" @click="save">保存</Button>
-      <span v-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
-      <span v-else class="text-sm text-muted-foreground">保存后立即生效，不用重启。</span>
-    </div>
+    <UnsavedBar :dirty="dirty" :saving="saving" @save="save" @discard="discard" />
   </div>
 </template>

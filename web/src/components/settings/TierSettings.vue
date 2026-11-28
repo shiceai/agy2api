@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check, Plus, Trash2 } from '@lucide/vue'
+import { Plus, Trash2 } from '@lucide/vue'
 import { api, errorMessage, type Settings, type SettingsResponse, type TierFamily } from '@/api/client'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { CardFooter } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import IconAction from '@/components/IconAction.vue'
 import SettingGrid from './SettingGrid.vue'
 import SettingCard from './SettingCard.vue'
+import UnsavedBar from './UnsavedBar.vue'
+import { toastError } from '@/lib/toast'
+import { Button } from '@/components/ui/button'
 
 interface Row {
   family: string
@@ -24,7 +26,6 @@ const rows = ref<Row[]>([])
 const saved = ref('') // 库里当前生效的设置（序列化后），用来判断是否有改动
 const error = ref('')
 const saving = ref(false)
-const justSaved = ref(false)
 
 const tierHints: Record<string, string> = {
   low: '思考最少，最省额度',
@@ -45,14 +46,23 @@ function serialize(s: Settings): string {
 }
 const dirty = computed(() => serialize(current()) !== saved.value)
 
+// setForm 把表单设成 s。
+function setForm(s: Settings) {
+  defaultTier.value = s.default_tier
+  rows.value = Object.entries(s.model_tiers ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([family, tier]) => ({ family, tier }))
+}
+
 function apply(res: SettingsResponse) {
   tiers.value = res.tiers ?? []
   families.value = res.families ?? []
-  defaultTier.value = res.settings.default_tier
-  rows.value = Object.entries(res.settings.model_tiers ?? {})
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([family, tier]) => ({ family, tier }))
+  setForm(res.settings)
   saved.value = serialize(current())
+}
+
+function discard() {
+  setForm(JSON.parse(saved.value))
 }
 
 function familyTiers(family: string, keep?: string): string[] {
@@ -97,13 +107,10 @@ onMounted(load)
 
 async function save() {
   saving.value = true
-  error.value = ''
   try {
     apply(await api.put<SettingsResponse>('/api/admin/settings', current()))
-    justSaved.value = true
-    setTimeout(() => (justSaved.value = false), 1500)
   } catch (e) {
-    handle(e)
+    toastError('保存思考档位失败', e)
   } finally {
     saving.value = false
   }
@@ -177,10 +184,6 @@ async function save() {
       </SettingCard>
     </SettingGrid>
 
-    <div class="flex items-center gap-3">
-      <Button :disabled="!dirty || saving" @click="save">保存</Button>
-      <span v-if="justSaved" class="flex items-center gap-1 text-sm text-muted-foreground"><Check class="size-4" />已保存</span>
-      <span v-else class="text-sm text-muted-foreground">保存后立即生效，不用重启。</span>
-    </div>
+    <UnsavedBar :dirty="dirty" :saving="saving" @save="save" @discard="discard" />
   </div>
 </template>
