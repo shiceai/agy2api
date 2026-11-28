@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/github/go-mod/go-version/shiceai/agy2api?style=flat-square&logo=go&logoColor=white" alt="Go version">
   <img src="https://img.shields.io/github/package-json/dependency-version/shiceai/agy2api/vue?filename=web%2Fpackage.json&style=flat-square&logo=vuedotjs&logoColor=white&label=Vue" alt="Vue version">
   <a href="https://github.com/shiceai/agy2api/pkgs/container/agy2api"><img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker image"></a>
-  <img src="https://img.shields.io/badge/API-Gemini%20v1beta-4285F4?style=flat-square" alt="Gemini v1beta">
+  <img src="https://img.shields.io/badge/API-Gemini%20%7C%20Anthropic%20%7C%20OpenAI-4285F4?style=flat-square" alt="API: Gemini, Anthropic, OpenAI">
 </p>
 
 <p align="center"><a href="https://agy2api.pages.dev"><strong>在线演示</strong></a>（口令 <code>demo</code>，数据是模拟的）</p>
