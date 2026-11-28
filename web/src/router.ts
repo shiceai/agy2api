@@ -3,6 +3,7 @@ import OverviewView from './views/OverviewView.vue'
 import AccountsView from './views/AccountsView.vue'
 import ProxiesView from './views/ProxiesView.vue'
 import KeysView from './views/KeysView.vue'
+import GuideView from './views/GuideView.vue'
 import UsageView from './views/UsageView.vue'
 import SettingsView from './views/SettingsView.vue'
 import LoginView from './views/LoginView.vue'
@@ -29,6 +30,7 @@ export const router = createRouter({
     { path: '/accounts', name: 'accounts', component: AccountsView },
     { path: '/proxies', name: 'proxies', component: ProxiesView },
     { path: '/keys', name: 'keys', component: KeysView },
+    { path: '/guide', name: 'guide', component: GuideView },
     { path: '/usage', name: 'usage', component: UsageView },
     { path: '/settings', name: 'settings', component: SettingsView },
     { path: '/login', name: 'login', component: LoginView },

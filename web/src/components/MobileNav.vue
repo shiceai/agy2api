@@ -3,6 +3,9 @@ import { RouterLink, useRoute } from 'vue-router'
 import { cn } from '@/lib/utils'
 import { navItems } from '@/lib/nav'
 
+// 手机底栏只放常用的一级入口（接入页从密钥页进入）。
+const items = navItems.filter((i) => !('desktopOnly' in i && i.desktopOnly))
+
 const route = useRoute()
 </script>
 
@@ -14,7 +17,7 @@ const route = useRoute()
   >
     <div class="flex h-16">
       <RouterLink
-        v-for="item in navItems"
+        v-for="item in items"
         :key="item.name"
         :to="item.to"
         :aria-current="route.name === item.name ? 'page' : undefined"

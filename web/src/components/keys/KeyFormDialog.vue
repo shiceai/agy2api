@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Check, Copy } from '@lucide/vue'
 import { api, type ApiKey, type ApiKeySettings, type TokenPeriod } from '@/api/client'
 import { copyText } from '@/lib/clipboard'
+import { guideKey } from '@/lib/guide'
 import { fmtCompact, parseTokens, periodLabels } from '@/lib/keys'
 import { fmtTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -127,6 +129,14 @@ async function save() {
   }
 }
 
+// 查看接入示例：把刚创建的 Key 带到接入页（只在内存里，不进地址栏），示例里直接填好。
+const router = useRouter()
+function openGuide() {
+  guideKey.value = secret.value
+  open.value = false
+  router.push('/guide')
+}
+
 async function copy() {
   if (!(await copyText(secret.value))) return
   copied.value = true
@@ -199,7 +209,10 @@ async function copy() {
         <Button variant="outline" @click="open = false">取消</Button>
         <Button :disabled="busy" @click="save">{{ editing ? '保存' : '创建' }}</Button>
       </template>
-      <Button v-else @click="open = false">完成</Button>
+      <template v-else>
+        <Button variant="outline" @click="openGuide">查看接入示例</Button>
+        <Button @click="open = false">完成</Button>
+      </template>
     </template>
   </BaseDialog>
 </template>

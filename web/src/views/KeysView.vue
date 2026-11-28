@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { FileText, Plus, Trash2, Power, PowerOff } from '@lucide/vue'
+import { RouterLink, useRouter } from 'vue-router'
+import { FileText, Plug, Plus, Trash2, Power, PowerOff } from '@lucide/vue'
 import { api, errorMessage, type ApiKey } from '@/api/client'
 import { fmtAgo, fmtTime, fmtTokens } from '@/lib/utils'
 import { fmtCost } from '@/lib/cost'
@@ -102,6 +102,8 @@ const keyLink =
     <PageActions>
       <!-- 显示列只对表格有用：和表格同一个容器查询，卡片布局时不显示 -->
       <div class="hidden @3xl/main:block"><ColumnSettings v-model="columns" :defs="columnDefs" /></div>
+      <!-- 手机底栏没有"接入"，从这里进入（桌面在侧边栏） -->
+      <Button variant="outline" size="sm" class="md:hidden" as-child><RouterLink to="/guide"><Plug />接入</RouterLink></Button>
       <Button size="sm" @click="create"><Plus />新建密钥</Button>
     </PageActions>
 

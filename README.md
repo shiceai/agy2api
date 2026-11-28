@@ -78,7 +78,8 @@ curl -fsSL https://github.com/shiceai/agy2api/releases/latest/download/install.s
 也可以从 [Releases](https://github.com/shiceai/agy2api/releases) 手动下载对应平台的压缩包，解压后运行
 `AGY2API_ADMIN_PASSWORD=<你的口令> ./agy2api`。
 
-打开 `http://127.0.0.1:8249`，用管理口令登录，在"账号"页添加账号，在"密钥"页新建 API Key，然后调用：
+打开 `http://127.0.0.1:8249`，用管理口令登录，在"账号"页添加账号，在"密钥"页新建 API Key，然后调用（管理端"接入"页按 Claude Code、
+Codex、OpenAI 和 Gemini SDK、Cherry Studio、curl 给出填好地址的配置，可直接复制）：
 
 ```bash
 curl http://127.0.0.1:8249/v1beta/models/gemini-3-flash:generateContent \

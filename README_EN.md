@@ -98,7 +98,8 @@ The script downloads and verifies SHA256 checksums; download it first if you wan
 [Releases](https://github.com/shiceai/agy2api/releases), extract it and run `AGY2API_ADMIN_PASSWORD=<your password> ./agy2api`.
 
 Open `http://127.0.0.1:8249`, sign in with the admin password, add accounts on the accounts page, create an API key on
-the keys page, then call:
+the keys page, then call (the console's integration page shows ready-to-copy settings for Claude Code, Codex, the
+OpenAI and Gemini SDKs, Cherry Studio and curl):
 
 ```bash
 curl http://127.0.0.1:8249/v1beta/models/gemini-3-flash:generateContent \
