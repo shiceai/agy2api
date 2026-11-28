@@ -133,5 +133,5 @@ async function purge() {
     </SettingCard>
     <RequestCaptureCard />
   </SettingGrid>
-  <UnsavedBar v-if="view" class="mt-6" :dirty="dirty" :saving="saving" :problem="problem" @save="save" @discard="discard" />
+  <UnsavedBar v-if="view" :dirty="dirty" :saving="saving" :problem="problem" @save="save" @discard="discard" />
 </template>

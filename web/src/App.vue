@@ -89,6 +89,9 @@ const headerClass = computed(() =>
           <DemoNotice v-if="isDemo" class="mb-6" />
           <RouterView />
         </div>
+        <!-- 页面底部的停靠栏（设置页的未保存修改栏，见 UnsavedBar）：放在内容面板最后、铺满宽度；页面短时在面板底部，
+             长时贴在可视区底部；手机在底部导航栏上方 -->
+        <div id="page-bottom" class="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 md:bottom-0" />
       </SidebarInset>
       <MobileNav />
     </SidebarProvider>
