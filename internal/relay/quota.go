@@ -67,7 +67,8 @@ func (r *Relay) stopQuotaRefresh(ctx context.Context) {
 // refreshQuotas 刷新到期的账号。间隔为 0 时不刷新。
 func (r *Relay) refreshQuotas(ctx context.Context, q *quotaRefresher) {
 	interval := r.Policy().QuotaRefresh
-	if interval <= 0 {
+	// 封禁后全池暂停期间不碰上游。
+	if interval <= 0 || r.PoolPause() != nil {
 		return
 	}
 	changed, first := false, true

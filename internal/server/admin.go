@@ -536,17 +536,18 @@ func overviewSince(raw string, now time.Time) (int64, error) {
 // adminLive 返回实时并发：各账号当前进行中的生成请求数（账号 ID → 占用）和总数，供账号页和概览页轮询刷新；
 // warmup 是还在新号预热的账号（账号 ID → 进度、压低后的并发上限、请求间隔），预热关闭时为空。
 // 只读号池内存，不读库；now 是服务器时间（Unix 毫秒），前端据此对齐"已更新"的时间。
-func (s *Service) adminLive(w http.ResponseWriter, _ *http.Request) {
+func (s *Service) adminLive(w http.ResponseWriter, r *http.Request) {
 	inflight := s.relay.InFlight()
 	total := 0
 	for _, n := range inflight {
 		total += n
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"in_flight": inflight,
-		"total":     total,
-		"warmup":    warmupStateViews(s.relay.WarmupStatus()),
-		"now":       time.Now().UnixMilli(),
+		"in_flight":  inflight,
+		"total":      total,
+		"warmup":     warmupStateViews(s.relay.WarmupStatus()),
+		"pool_pause": s.currentPoolPause(r.Context()),
+		"now":        time.Now().UnixMilli(),
 	})
 }
 

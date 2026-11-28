@@ -277,7 +277,7 @@ Docker 是 `docker compose up -d`，`run.sh` 重新运行。
 | `AGY2API_LOG_LEVEL` | 日志级别：`debug`、`info`、`warn`、`error`（debug 会记每次选号和上游响应） | `info` |
 | `AGY2API_UPDATE` | 在线升级：每天和打开管理端时查新版本，管理端可以一键升级（见"在线升级"）；`off` 关闭 | 开启 |
 | `AGY2API_PRICE_SYNC` | 每天从官方价格页同步模型价格，用来估算用量的费用；`off` 关闭（只用已同步的价格和手动设的价格） | 开启 |
-| `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` | 全局出口代理：没绑代理的账号和价格同步走它；账号单独绑的代理在管理端"代理"页配置 | 不设 |
+| `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` | 全局出口代理：没绑代理的账号、价格同步和告警通知走它；账号单独绑的代理在管理端"代理"页配置 | 不设 |
 | `AGY2API_UPSTREAM_BASES` | 上游基址（逗号分隔，按顺序回退），一般不用改 | 内置 |
 | `AGY2API_USER_AGENT` | 上游请求的 User-Agent，一般不用改；留空时按账号自动设置（并随下面的构建表更新） | 按账号设置 |
 | `AGY2API_UA_BUILDS` | 后台定时拉取仓库里的 ua-builds.json，让上游声明的客户端版本随官方发布自动跟进（与发版脱钩）；`off` 只用内置、不外联。设了 `AGY2API_USER_AGENT` 时不生效 | 开启 |

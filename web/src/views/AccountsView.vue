@@ -17,6 +17,7 @@ import ColumnSettings from '@/components/ColumnSettings.vue'
 import CooldownBadge from '@/components/CooldownBadge.vue'
 import LoadError from '@/components/LoadError.vue'
 import PageActions from '@/components/PageActions.vue'
+import PoolPauseAlert from '@/components/PoolPauseAlert.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import WarmupBadge from '@/components/WarmupBadge.vue'
 import IconAction from '@/components/IconAction.vue'
@@ -270,6 +271,7 @@ function toastBatchSync(total: number, failed: { email: string; error: unknown }
     </PageActions>
 
     <LoadError v-if="loadError" :message="loadError" />
+    <PoolPauseAlert v-if="live.poolPause.value" :pause="live.poolPause.value" @resumed="live.refresh()" />
 
     <!-- 内容区放不下默认列时：卡片列表。按内容区宽度（容器查询）切换，侧边栏收起展开都准；
          默认列实测约需 67rem，阈值 68rem（改默认列时重新量） -->

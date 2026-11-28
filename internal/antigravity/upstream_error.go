@@ -41,6 +41,9 @@ type UpstreamError struct {
 	ResetAt time.Time
 	// Raw 是上游错误响应的原文，截到 rawLimit 字节，记进失败请求的用量详情供排查，不发给客户端。
 	Raw string
+	// Link 是上游给的处理链接：条款封禁的申诉地址（ErrorInfo.metadata.appeal_url）或需要验证的验证地址
+	// （metadata.validation_url），只认 https；没有时为空。告警通知里附上，方便去处理。
+	Link string
 }
 
 // StreamError 是上游在流式响应中途推来的错误帧：HTTP 状态已经是 200，错误以 {"error":{...}} 一帧给出。
@@ -72,6 +75,8 @@ const (
 	messageLimit = 1000
 	// rawLimit 是 UpstreamError.Raw 保留的字节数：上游错误体一般一两 KB，留够看全 details。
 	rawLimit = 4 << 10
+	// linkLimit 是 UpstreamError.Link 的最大长度，超过的不要（不像正常的申诉、验证地址）。
+	linkLimit = 2048
 	// RATE_LIMIT_EXCEEDED 的重置时间超过这个长度时，实际是额度窗口耗尽而不是瞬时限流。
 	quotaExhaustedThreshold = 5 * time.Minute
 )
@@ -184,6 +189,14 @@ func parseErrorDetails(body []byte, now time.Time, e *UpstreamError) (reset time
 			}
 			if v, ok := parseRetryDelay(d.Get("metadata.quotaResetDelay")); ok && delay.IsZero() {
 				delay = now.Add(v)
+			}
+			if e.Link == "" {
+				for _, key := range []string{"metadata.appeal_url", "metadata.validation_url"} {
+					if u := strings.TrimSpace(d.Get(key).String()); strings.HasPrefix(u, "https://") && len(u) <= linkLimit {
+						e.Link = u
+						break
+					}
+				}
 			}
 		case strings.HasSuffix(typeName, "google.rpc.RetryInfo"):
 			if v, ok := parseRetryDelay(d.Get("retryDelay")); ok && retry.IsZero() {

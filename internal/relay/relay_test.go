@@ -26,6 +26,8 @@ const (
 	validation403     = 4032 // 需要验证
 	modelForbidden403 = 4033 // 无权使用该模型
 	unknown403        = 4034 // 原因不明
+	tosAppeal403      = 4035 // 条款封禁，ErrorInfo 带申诉地址（实际错误体的形态）
+	validationURL403  = 4036 // 需要验证，ErrorInfo 带验证地址
 	transient429      = 4291 // 瞬时限流，不带恢复时间
 	stallStream       = 2001 // 流式发一帧后不再发数据，直到请求被取消
 	hugeBody          = 2002 // 非流式返回超过 antigravity 上限（64 MiB）的 200 响应
@@ -207,6 +209,19 @@ func (f *fakeUpstream) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{
 			"code": 403, "message": "Please verify your account",
 			"details": []any{map[string]any{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "VALIDATION_REQUIRED"}},
+		}})
+	case tosAppeal403:
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{
+			"code": 403, "status": "PERMISSION_DENIED",
+			"message": "This service has been disabled in this account for violation of Terms of Service. Please submit an appeal to continue using this product.",
+			"details": []any{map[string]any{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "TOS_VIOLATION",
+				"domain": "cloudcode-pa.googleapis.com", "metadata": map[string]any{"uiMessage": "true", "appeal_url": "https://forms.gle/appeal-example"}}},
+		}})
+	case validationURL403:
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{
+			"code": 403, "status": "PERMISSION_DENIED",
+			"details": []any{map[string]any{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "VALIDATION_REQUIRED",
+				"metadata": map[string]any{"validation_url": "https://accounts.google.com/signin/continue", "validation_url_link_text": "Verify your account"}}},
 		}})
 	case modelForbidden403:
 		writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{"code": 403, "message": "The caller does not have access to model x"}})

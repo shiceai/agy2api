@@ -513,12 +513,22 @@ export interface Overview {
   hourly: HourlyUsage[]
 }
 // Live 是 /api/admin/live 的实时并发：in_flight 是账号 ID（字符串键）→ 进行中请求数，total 是总数，
-// warmup 是还在新号预热的账号（账号 ID → 预热情况，预热关闭时为空），now 是服务器时间（Unix 毫秒）。
+// warmup 是还在新号预热的账号（账号 ID → 预热情况，预热关闭时为空），pool_pause 是生效中的封禁后全池暂停（没有时为 null），
+// now 是服务器时间（Unix 毫秒）。
 export interface Live {
   in_flight: Record<string, number>
   total: number
   warmup?: Record<string, WarmupState>
+  pool_pause?: PoolPause | null
   now: number
+}
+// PoolPause 是封禁后的全池暂停：有账号因条款封禁被停用后整个号池暂停到 until，期间请求返回 503。
+// account 是触发暂停的账号（名称，没有名称时是邮箱）。
+export interface PoolPause {
+  since: number
+  until: number
+  account_id: number
+  account: string
 }
 // WarmupState 是还在新号预热的账号此刻的情况。进度按号龄和成功数各算一份取较大者，任一达标即预热完成。
 export interface WarmupState {
@@ -571,6 +581,9 @@ export interface Scheduling {
   sticky_ttl: number
   // weekly_quota 是每周额度的全局开关：开启后后台刷新额度时顺带拉每周额度，账号可单独开关。
   weekly_quota: boolean
+  // tos_pause 是封禁保护：账号被条款封禁后整个号池暂停 tos_pause_hours 小时（1～72）。
+  tos_pause: boolean
+  tos_pause_hours: number
 }
 export type StickyMode = 'off' | 'preferred' | 'strict'
 export type Strategy = 'round_robin' | 'smart' | 'reset_first'
@@ -775,4 +788,33 @@ export interface RetentionView {
   db_bytes: number
   last: PurgeResult | null
   running: boolean
+}
+
+// 告警通知（设置 → 通知）。
+export type NotifyChannelType = 'webhook' | 'dingtalk' | 'feishu' | 'wecom' | 'telegram'
+// NotifyEvent 是可通知的事件，也是 NotifySettings.events 的键。
+export type NotifyEvent = 'account_banned' | 'token_invalid' | 'validation_required' | 'no_account' | 'pool_pause' | 'proxy_failed' | 'new_version'
+// NotifySettings 是通知设置：各事件开关、实例名称（写进每条通知，区分多套部署）、显示时间用的时区（保存时取浏览器时区）。
+export interface NotifySettings {
+  events: Partial<Record<NotifyEvent, boolean>>
+  instance: string
+  timezone: string
+}
+export interface NotifySettingsResponse {
+  settings: NotifySettings
+  defaults?: NotifySettings
+}
+// NotifyChannel 是通知渠道。Webhook 地址、密钥、Bot Token 不回显：hint 是目标说明（主机名和地址末 4 位，或 Chat ID），
+// has_secret 表示设了加签/签名密钥；last_error 为空且 last_sent_at 不为 0 表示最近一次发送成功。
+export interface NotifyChannel {
+  id: number
+  name: string
+  type: NotifyChannelType
+  enabled: boolean
+  hint: string
+  has_secret: boolean
+  chat_id?: string
+  last_sent_at: number
+  last_error: string
+  created_at: number
 }

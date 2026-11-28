@@ -43,6 +43,8 @@ type Options struct {
 	API string
 	// Backup 在换上新程序之前把数据库备份到 dst。
 	Backup func(ctx context.Context, dst string) error
+	// OnNewVersion 在第一次查到某个更新的版本时调用（告警通知用），可为 nil。在检查的 goroutine 里同步调用，要快。
+	OnNewVersion func(rel Release)
 }
 
 // Release 是 GitHub 上最新的正式版本。
@@ -236,16 +238,21 @@ func (m *Manager) Check(ctx context.Context, maxAge time.Duration) error {
 	}
 	rel, err := m.fetchLatest(ctx)
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.checkedAt = time.Now().UnixMilli()
 	if err != nil {
 		m.checkErr = err.Error()
+		m.mu.Unlock()
 		return err
 	}
 	m.latest, m.checkErr = rel, ""
-	if newer(rel.Version, m.opts.Version) && m.notified != rel.Version {
+	first := newer(rel.Version, m.opts.Version) && m.notified != rel.Version
+	if first {
 		m.notified = rel.Version
 		slog.Info("有新版本", "version", rel.Version, "current", m.opts.Version)
+	}
+	m.mu.Unlock()
+	if first && m.opts.OnNewVersion != nil {
+		m.opts.OnNewVersion(*rel)
 	}
 	return nil
 }

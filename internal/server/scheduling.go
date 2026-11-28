@@ -41,6 +41,9 @@ type schedulingView struct {
 	StickyTTL  int    `json:"sticky_ttl"`
 	// WeeklyQuota 是每周额度的全局开关（账号可单独开关），见 relay.Policy.WeeklyQuota。
 	WeeklyQuota bool `json:"weekly_quota"`
+	// TOSPause、TOSPauseHours 是封禁后全池暂停的开关和时长（小时），见 relay.Policy.TOSPause。
+	TOSPause      bool `json:"tos_pause"`
+	TOSPauseHours int  `json:"tos_pause_hours"`
 }
 
 // schedulingSetting 存在 settings 的 scheduling 键，默认值是 relay.DefaultPolicy。
@@ -79,6 +82,8 @@ func schedulingFromPolicy(p relay.Policy) schedulingView {
 		StickyMode:             p.Sticky,
 		StickyTTL:              secs(p.StickyTTL),
 		WeeklyQuota:            p.WeeklyQuota,
+		TOSPause:               p.TOSPause,
+		TOSPauseHours:          int(p.TOSPauseWindow / time.Hour),
 	}
 }
 
@@ -108,6 +113,8 @@ func (v schedulingView) policy() relay.Policy {
 		Sticky:                 v.StickyMode,
 		StickyTTL:              dur(v.StickyTTL),
 		WeeklyQuota:            v.WeeklyQuota,
+		TOSPause:               v.TOSPause,
+		TOSPauseWindow:         time.Duration(v.TOSPauseHours) * time.Hour,
 	}
 }
 
@@ -158,6 +165,7 @@ func (v schedulingView) validate() error {
 		{"model_forbidden_cooldown", v.ModelForbiddenCooldown, 0, 86400},
 		{"low_quota", v.LowQuota, 0, 50},
 		{"sticky_ttl", v.StickyTTL, 300, 86400},
+		{"tos_pause_hours", v.TOSPauseHours, 1, 72},
 	}
 	for _, c := range checks {
 		if c.val < c.min || c.val > c.max {

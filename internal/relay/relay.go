@@ -60,6 +60,13 @@ type Relay struct {
 
 	affinity *affinityStore // 会话粘性：对话上次用的账号
 
+	// onEvent 是值得告警的事件回调（见 events.go），SetEventHandler 在开始服务前设置；为 nil 时不通知。
+	onEvent func(Event)
+	// pause 是封禁后的全池暂停（见 poolpause.go），pauseMu 串行化开始、延长和结束，pauseTimer 到时结束它。
+	pause      atomic.Pointer[PoolPause]
+	pauseMu    sync.Mutex
+	pauseTimer *time.Timer
+
 	// cfg 是运行时配置快照（见 config.go），cfgMu 串行化修改。
 	cfgMu sync.Mutex
 	cfg   atomic.Pointer[runtimeConfig]
@@ -109,6 +116,7 @@ func (r *Relay) Cooldowns() map[int64][]pool.CooldownInfo {
 // Close 停止后台额度刷新、接收用量记录和失败请求正文，等排队的写完；ctx 到期则不再等待。应在 HTTP 服务停止后调用。
 func (r *Relay) Close(ctx context.Context) error {
 	r.stopQuotaRefresh(ctx)
+	r.stopPauseTimer()
 	err := r.usage.Close(ctx)
 	if cerr := r.capture.close(ctx); err == nil {
 		err = cerr
@@ -413,6 +421,10 @@ func (resp *Response) Close() error {
 // 请求的模型按各账号目录解析（家族名按档位选），没有账号能解析时先刷新目录，仍不行返回 404。
 func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 	start := time.Now()
+	// 封禁后全池暂停中：不选号，直接拒绝。
+	if err := r.rejectIfPaused(ctx, req, start); err != nil {
+		return nil, err
+	}
 	cfg := r.config() // 整个请求（含换号重试）用同一份配置
 	if err := r.filterClientNames(ctx, cfg, req, start); err != nil {
 		return nil, err
@@ -492,6 +504,7 @@ func (r *Relay) Generate(ctx context.Context, req Request) (*Response, error) {
 				return canceled()
 			}
 			slog.WarnContext(ctx, "没有可用账号", "model", req.Model, "try", try, "err", err)
+			r.noteNoAccount(req.Model, err, readyAt)
 			return fail(exhaustedError(err, last, minCooldown))
 		}
 		tried[lease.Account.ID] = true
@@ -708,8 +721,11 @@ func firstFrame(up *antigravity.Response, stream bool) (io.Reader, error) {
 func (r *Relay) applyDecision(ctx context.Context, account *pool.Account, model string, ue antigravity.UpstreamError, d decision, p Policy) (time.Duration, time.Time) {
 	id := account.ID
 	if d.disable != "" {
-		r.disableAccount(ctx, id, d.disable)
+		r.disableAccount(ctx, id, d.disable, ue.Link)
 		return 0, time.Time{}
+	}
+	if ue.Kind == antigravity.KindValidationRequired {
+		r.emit(Event{Type: EventValidationRequired, AccountID: id, Model: model, Link: ue.Link})
 	}
 	cooldown := d.cooldown
 	if d.backoff {
@@ -757,8 +773,9 @@ func (r *Relay) relaxRejected(ctx context.Context, rejected []rejectedTry, tr *t
 	}
 }
 
-// disableAccount 自动停用账号并记下原因，刷新号池。不随请求取消。
-func (r *Relay) disableAccount(ctx context.Context, id int64, reason string) {
+// disableAccount 自动停用账号并记下原因，刷新号池，发出告警事件；条款封禁时按设置暂停号池。不随请求取消。
+// link 是上游给的申诉地址（没有时为空）。
+func (r *Relay) disableAccount(ctx context.Context, id int64, reason, link string) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := r.store.SetAccountStatus(ctx, id, store.StatusDisabled, reason); err != nil {
@@ -769,6 +786,30 @@ func (r *Relay) disableAccount(ctx context.Context, id int64, reason string) {
 	if err := r.pool.Reload(ctx); err != nil {
 		slog.ErrorContext(ctx, "刷新号池失败", "err", err)
 	}
+	switch reason {
+	case ReasonTOSViolation:
+		r.emit(Event{Type: EventAccountBanned, AccountID: id, Link: link})
+		r.pauseAfterBan(ctx, id)
+	case ReasonInvalidGrant:
+		r.emit(Event{Type: EventTokenInvalid, AccountID: id})
+	}
+}
+
+// noteNoAccount 在选不到账号时发出没号可用的事件：支持该模型的账号都在冷却、暂停或已停用（只是并发满、
+// 等不到名额的不算，那是容量问题）。readyAt 是这次请求试过的账号冷却最早结束的时间（号池给的恢复时间不含它们），
+// 和号池的取较早的作为最早恢复时间。
+func (r *Relay) noteNoAccount(model string, err error, readyAt time.Time) {
+	retryAt := readyAt
+	var ue *pool.UnavailableError
+	if errors.As(err, &ue) {
+		if ue.Busy {
+			return
+		}
+		if !ue.RetryAt.IsZero() && (retryAt.IsZero() || ue.RetryAt.Before(retryAt)) {
+			retryAt = ue.RetryAt
+		}
+	}
+	r.emit(Event{Type: EventNoAccount, Model: model, RetryAt: retryAt})
 }
 
 // transportFailure 处理没拿到上游响应的失败，返回尝试记录里的分类：代理连不上时暂停这个账号一会儿
@@ -818,6 +859,9 @@ func (r *Relay) callAccount(ctx context.Context, cfg *runtimeConfig, lease *pool
 // CountTokens 选一个账号调用上游 countTokens，返回标准 Gemini JSON。不等并发名额。
 // 没有账号支持该模型时返回 ErrModelNotFound；其它 error 调用方可回退到本地估算。
 func (r *Relay) CountTokens(ctx context.Context, requested string, body map[string]any) ([]byte, error) {
+	if e := r.pausedError(); e != nil {
+		return nil, e
+	}
 	cfg := r.config()
 	refreshed := false
 	lease, err := r.acquire(ctx, requested, cfg.tier(requested, body), nil, 0, false, &refreshed, 0)
@@ -864,7 +908,7 @@ func buildParams(cfg *runtimeConfig, account *pool.Account, model string, body m
 func (r *Relay) accessToken(ctx context.Context, account *pool.Account) (string, error) {
 	token, err := r.tokens.AccessToken(ctx, account.ID, Credential(account.Account))
 	if err != nil && antigravity.IsInvalidGrant(err) {
-		r.disableAccount(ctx, account.ID, ReasonInvalidGrant)
+		r.disableAccount(ctx, account.ID, ReasonInvalidGrant, "")
 	}
 	return token, err
 }

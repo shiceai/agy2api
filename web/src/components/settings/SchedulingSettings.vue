@@ -37,6 +37,8 @@ interface Form {
   strategy: Strategy
   stickyMode: StickyMode
   stickyMin: number
+  tosPause: boolean
+  tosHours: number
 }
 const MIN = 60
 const QUOTA_DEFAULT_MIN = 15
@@ -88,6 +90,8 @@ function toForm(s: Scheduling): Form {
     strategy: s.strategy,
     stickyMode: s.sticky_mode,
     stickyMin: s.sticky_ttl / MIN,
+    tosPause: s.tos_pause,
+    tosHours: s.tos_pause_hours,
   }
 }
 function toApi(f: Form): Scheduling {
@@ -114,6 +118,8 @@ function toApi(f: Form): Scheduling {
     sticky_mode: f.stickyMode,
     sticky_ttl: r(f.stickyMin * MIN),
     weekly_quota: f.weekly,
+    tos_pause: f.tosPause,
+    tos_pause_hours: r(f.tosHours),
   }
 }
 
@@ -150,6 +156,7 @@ const problem = computed(() => {
     [inRange(f.serverError, 0, 3600), '5xx 休息时间应在 0～3600 秒'],
     [inRange(f.validation, 0, 1440), '需要验证的冷却应在 0～1440 分钟'],
     [inRange(f.modelForbidden, 0, 1440), '无权使用模型的冷却应在 0～1440 分钟'],
+    [inRange(f.tosHours, 1, 72), '封禁后暂停时长应在 1～72 小时'],
   ]
   return checks.find(([ok]) => !ok)?.[1] ?? ''
 })
@@ -193,7 +200,7 @@ function restoreDefaults() {
 }
 </script>
 
-<!-- 设置页"账号调度"标签：选号（选号方式、会话粘性）、令牌刷新、并发、代理、流式、额度、重试与冷却。 -->
+<!-- 设置页"账号调度"标签：选号（选号方式、会话粘性）、令牌刷新、并发、代理、流式、额度、重试与冷却、封禁保护。 -->
 <template>
   <div v-if="form" class="space-y-6">
     <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
@@ -321,6 +328,19 @@ function restoreDefaults() {
         </SettingRow>
         <SettingRow label="无权使用模型时冷却" description="403，账号没有这个模型的权限" input-id="sched-model">
           <UnitInput id="sched-model" v-model="form.modelForbidden" unit="分钟" :min="0" :max="1440" />
+        </SettingRow>
+      </SettingCard>
+
+      <SettingCard title="封禁保护">
+        <template #info>
+          <p>账号被上游以违反服务条款（TOS_VIOLATION）封禁时，这个账号总会自动停用。开启后整个号池再暂停一段时间：期间不选任何账号，请求直接返回 503，后台也不刷新额度，避免同一批账号接着被连带。</p>
+          <p>暂停到时自动恢复，也可以在概览或账号页提前恢复。没有证据表明暂停能避免连带封号，所以默认关。</p>
+        </template>
+        <SettingRow label="封禁后暂停号池" description="暂停期间所有请求返回 503" input-id="sched-tos-pause">
+          <Switch id="sched-tos-pause" v-model="form.tosPause" />
+        </SettingRow>
+        <SettingRow label="暂停时长" input-id="sched-tos-hours">
+          <UnitInput id="sched-tos-hours" v-model="form.tosHours" unit="小时" :min="1" :max="72" :disabled="!form.tosPause" />
         </SettingRow>
       </SettingCard>
     </SettingGrid>

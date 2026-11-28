@@ -21,6 +21,10 @@ import type {
   Live,
   ModelInfo,
   ModelStat,
+  NotifyChannel,
+  NotifyChannelType,
+  NotifySettings,
+  NotifySettingsResponse,
   Overview,
   PriceEntry,
   PricesView,
@@ -364,6 +368,7 @@ const schedulingDefaults: Scheduling = {
   max_attempts: 3, cooldown_wait: 30, rate_limit_base: 60, rate_limit_max: 300, server_error_cooldown: 30,
   validation_cooldown: 600, model_forbidden_cooldown: 300, quota_refresh: 900, low_quota: 10, stream_idle: 120,
   require_proxy: false, strategy: 'round_robin', sticky: true, sticky_mode: 'strict', sticky_ttl: 3600, weekly_quota: false,
+  tos_pause: false, tos_pause_hours: 6,
 }
 let scheduling: Scheduling = { ...schedulingDefaults }
 let clientFilter: ClientFilter = { enabled: false, mode: 'rewrite', use_default_keywords: true, rules: '' }
@@ -376,6 +381,16 @@ const BUILTIN_SYSTEM_PROMPT =
   '（演示站省略其余内容，完整基线在自建实例上查看）'
 let requestHandling: RequestHandling = { remote_images_enabled: false, return_thoughts: true }
 let retention: RetentionSettings = { enabled: true, days: 90 }
+// 告警通知：演示站不真的发送，发送测试直接算成功。
+const notifyDefaults: NotifySettings = {
+  events: { account_banned: true, token_invalid: true, validation_required: true, no_account: true, pool_pause: true, proxy_failed: false, new_version: false },
+  instance: '',
+  timezone: '',
+}
+let notifySettings: NotifySettings = { ...notifyDefaults, events: { ...notifyDefaults.events } }
+const notifyChannels: NotifyChannel[] = [
+  { id: 1, name: '运维群', type: 'dingtalk', enabled: true, hint: 'oapi.dingtalk.com/…9f3c', has_secret: true, last_sent_at: start - 3 * HOUR, last_error: '', created_at: start - 5 * DAY },
+]
 let lastPurge: RetentionView['last'] = { at: start - 20 * HOUR, days: 90, deleted: 0, duration_ms: 12, manual: false }
 
 // --- 视图 ---
@@ -455,7 +470,7 @@ function demoWarmup(a: DemoAccount, now: number): WarmupState | undefined {
 }
 
 // 实时并发：每次读取时在 0～2 之间轻微变化，看起来像有流量在跑；预热中的账号带上预热情况。
-const live: Live = { in_flight: {}, total: 0, warmup: {}, now: start }
+const live: Live = { in_flight: {}, total: 0, warmup: {}, pool_pause: null, now: start }
 function tickLive(): Live {
   const now = Date.now()
   live.in_flight = {}
@@ -965,6 +980,58 @@ on('PUT', '/settings/warmup', (_m, _q, b): WarmupResponse => {
   warmup = { ...warmup, ...(b as Partial<Warmup>) }
   return { settings: warmup }
 })
+
+// 告警通知（渠道的地址和密钥不回显，同服务端）。
+on('GET', '/settings/notify', (): NotifySettingsResponse => ({ settings: notifySettings, defaults: notifyDefaults }))
+on('PUT', '/settings/notify', (_m, _q, b): NotifySettingsResponse => {
+  const next = b as Partial<NotifySettings>
+  notifySettings = { ...notifySettings, ...next, events: { ...notifySettings.events, ...(next.events ?? {}) } }
+  return { settings: notifySettings }
+})
+const findChannel = (id: number) => notifyChannels.find((c) => c.id === id) ?? fail(404, '通知渠道不存在')
+function channelHint(type: NotifyChannelType, b: Body): string {
+  if (type === 'telegram') return `Chat ${String(b.chat_id ?? '')}`
+  const url = String(b.url ?? '')
+  try {
+    return `${new URL(url).host}/…${url.slice(-4)}`
+  } catch {
+    return fail(400, 'Webhook 地址应以 http:// 或 https:// 开头')
+  }
+}
+on('GET', '/notify/channels', () => ({ channels: notifyChannels }))
+on('POST', '/notify/channels', (_m, _q, b) => {
+  const type = b.type as NotifyChannelType
+  const c: NotifyChannel = {
+    id: Math.max(0, ...notifyChannels.map((x) => x.id)) + 1, name: String(b.name ?? '').trim() || '通知', type, enabled: b.enabled !== false,
+    hint: channelHint(type, b), has_secret: !!b.secret, chat_id: type === 'telegram' ? String(b.chat_id ?? '') : undefined,
+    last_sent_at: 0, last_error: '', created_at: Date.now(),
+  }
+  notifyChannels.push(c)
+  return { channel: c }
+})
+on('PUT', '/notify/channels/(\\d+)', (m, _q, b) => {
+  const c = findChannel(Number(m[1]))
+  if (b.name !== undefined) c.name = String(b.name).trim() || c.name
+  if (b.enabled !== undefined) c.enabled = Boolean(b.enabled)
+  if (b.url || b.chat_id) c.hint = channelHint(c.type, { ...b, chat_id: b.chat_id ?? c.chat_id })
+  if (b.chat_id !== undefined) c.chat_id = String(b.chat_id)
+  if (b.secret) c.has_secret = true
+  return { channel: c }
+})
+on('DELETE', '/notify/channels/(\\d+)', (m) => {
+  const c = findChannel(Number(m[1]))
+  notifyChannels.splice(notifyChannels.indexOf(c), 1)
+  return ok
+})
+on('POST', '/notify/channels/(\\d+)/test', async (m) => {
+  const c = findChannel(Number(m[1]))
+  await sleep(between(300, 700))
+  c.last_sent_at = Date.now()
+  c.last_error = ''
+  return ok
+})
+// 演示站不模拟封号，号池不会暂停。
+on('POST', '/pool-pause/resume', () => ({ resumed: false }))
 
 on('GET', '/prices', () => prices)
 on('POST', '/prices/sync', async () => {

@@ -49,12 +49,15 @@ APIs (Claude Code, Codex, the OpenAI SDK and others connect directly), and comes
   verified official build (kept current with official releases automatically, no gateway upgrade needed), so the upstream sees
   something closer to the official client; when it blocks Claude Code or Codex by
   their system prompt, the gateway moves the system into a user message automatically; optional new-account warmup (gradual
-  ramp-up) and request pacing (spacing out a single account's requests)
+  ramp-up) and request pacing (spacing out a single account's requests); optional ban protection that pauses the whole pool
+  for a while after an account is banned for terms of service violations
 - **Egress proxies**: bind each account to a fixed egress proxy (http, https, socks5)
 - **API keys**: expiry, token limits, allowed models
 - **Usage and cost**: per-call details, cost estimated from official API prices; failed requests carry a request summary and
   the raw upstream error, and can optionally keep the request body for troubleshooting; conversations the upstream
   rejected are blocked locally afterwards
+- **Alerts**: banned accounts, revoked refresh tokens, no available account, pool pauses and more go to a generic webhook,
+  DingTalk, Feishu, WeCom or Telegram
 - **Admin console**: works on desktop and mobile, light and dark themes; brute-force protection for the admin password,
   IP allowlist (the interface is in Chinese)
 - **Online upgrade**: upgrade to a new release from the admin console in one click; Docker containers keep the new

@@ -13,6 +13,7 @@ import (
 	"github.com/shiceai/agy2api/internal/antigravity"
 	"github.com/shiceai/agy2api/internal/config"
 	"github.com/shiceai/agy2api/internal/cryptox"
+	"github.com/shiceai/agy2api/internal/notify"
 	"github.com/shiceai/agy2api/internal/pricing"
 	"github.com/shiceai/agy2api/internal/relay"
 	"github.com/shiceai/agy2api/internal/store"
@@ -37,6 +38,8 @@ type Service struct {
 	build buildInfo
 	// upgrade 查新版本、执行在线升级（见 system.go）。
 	upgrade *upgrade.Manager
+	// notifier 把账号被封、令牌失效、没号可用等事件发到管理端配置的通知渠道（见 notify.go）。
+	notifier *notify.Dispatcher
 	// aliases 是生效的模型别名规则（见 modelalias.go），零值可用。
 	aliases modelAliases
 	// clientSystemAsUser 为真时把 Anthropic、Responses 入站客户端的 system 降为用户消息（见 anthropic_compat.go），默认开。
@@ -70,12 +73,19 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 	if len(adminAllow) > 0 {
 		slog.Info("管理端只允许这些地址访问", "allow", adminAllow)
 	}
+	// svc 在下面构造；新版本回调最早在启动一分钟后由后台检查调用，那时已赋值。
+	var svc *Service
 	up, err := upgrade.New(upgrade.Options{
 		DataDir: cfg.DataDir,
 		Version: readBuildInfo(cfg.Version).Version,
 		Enabled: cfg.Update,
 		API:     cfg.UpdateAPI,
 		Backup:  st.BackupTo,
+		OnNewVersion: func(rel upgrade.Release) {
+			if svc != nil {
+				svc.notifyNewVersion(rel)
+			}
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -86,16 +96,17 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 		UserAgent:     cfg.UserAgent,
 		UpstreamBases: cfg.UpstreamBases,
 	})
-	svc := &Service{
-		cfg:     cfg,
-		store:   st,
-		enc:     enc,
-		client:  client,
-		relay:   relay.New(client, st, enc),
-		prices:  pricing.New(st),
-		keys:    newAPIKeyCache(st),
-		build:   readBuildInfo(cfg.Version),
-		upgrade: up,
+	svc = &Service{
+		cfg:      cfg,
+		store:    st,
+		enc:      enc,
+		client:   client,
+		relay:    relay.New(client, st, enc),
+		prices:   pricing.New(st),
+		keys:     newAPIKeyCache(st),
+		build:    readBuildInfo(cfg.Version),
+		upgrade:  up,
+		notifier: notify.New(st, enc),
 
 		trusted:    trusted,
 		adminAllow: adminAllow,
@@ -107,6 +118,8 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 	svc.relay.SetUsageHook(func(rec *store.UsageRecord) { svc.keys.AddTokens(rec.APIKeyID, rec.TotalTokens) })
 	// 用量记录按记录时的模型价格算费用。
 	svc.relay.SetPricing(svc.prices)
+	// 账号被封、令牌失效、没号可用、号池暂停等发告警通知。
+	svc.relay.SetEventHandler(svc.onRelayEvent)
 	if err := svc.prices.Load(ctx); err != nil {
 		return nil, err
 	}
@@ -114,6 +127,9 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 		return nil, err
 	}
 	if err := svc.relay.LoadCooldowns(ctx); err != nil {
+		return nil, err
+	}
+	if err := svc.relay.LoadPoolPause(ctx); err != nil {
 		return nil, err
 	}
 	if err := svc.keys.Reload(ctx); err != nil {
@@ -149,6 +165,9 @@ func NewService(ctx context.Context, cfg config.Config, st *store.Store, enc *cr
 	if err := svc.loadAnthropicCompat(ctx); err != nil {
 		return nil, err
 	}
+	if err := svc.loadNotify(ctx); err != nil {
+		return nil, err
+	}
 	svc.relay.StartQuotaRefresh()
 	if cfg.PriceSync {
 		svc.prices.Start()
@@ -179,7 +198,11 @@ func (s *Service) Close(ctx context.Context) error {
 	if err := s.prices.Close(ctx); err != nil {
 		slog.ErrorContext(ctx, "停止价格同步超时", "err", err)
 	}
-	return s.relay.Close(ctx)
+	err := s.relay.Close(ctx)
+	if nerr := s.notifier.Close(ctx); nerr != nil {
+		slog.ErrorContext(ctx, "等通知发完超时", "err", nerr)
+	}
+	return err
 }
 
 // reloadAccounts 在账号变更落库后刷新号池快照。

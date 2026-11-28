@@ -384,12 +384,12 @@ func (s *Service) adminCheckProxies(w http.ResponseWriter, r *http.Request) {
 		}
 		proxies = picked
 	}
-	s.checkProxies(r.Context(), proxies)
+	s.checkProxies(r.Context(), proxies, false)
 	s.writeProxies(w, r)
 }
 
 // checkProxies 并发测试代理（出口和延迟）并记下结果。
-func (s *Service) checkProxies(ctx context.Context, proxies []*store.Proxy) {
+func (s *Service) checkProxies(ctx context.Context, proxies []*store.Proxy, background bool) {
 	sem := make(chan struct{}, proxyCheckParallel)
 	var wg sync.WaitGroup
 	for _, p := range proxies {
@@ -401,6 +401,10 @@ func (s *Service) checkProxies(ctx context.Context, proxies []*store.Proxy) {
 			c := testProxy(ctx, p.URL)
 			if c.Error != "" {
 				slog.WarnContext(ctx, "代理测试没通过", "proxy_id", p.ID, "name", proxyLabel(p), "err", c.Error)
+				// 后台测试发现原来正常的代理坏了：通知（手动测试的结果管理端当场就能看到）。
+				if background && p.CheckedAt > 0 && p.CheckError == "" {
+					s.notifyProxyFailed(p, c.Error)
+				}
 			}
 			if c.IP != "" && p.EgressIP != "" && p.EgressIP != c.IP {
 				slog.WarnContext(ctx, "代理出口变了", "proxy_id", p.ID, "name", proxyLabel(p), "from", p.EgressIP, "to", c.IP)

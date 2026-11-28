@@ -51,6 +51,10 @@ type Policy struct {
 	// WeeklyQuota 是每周额度的全局开关：开启后后台刷新额度时顺带拉分组额度（retrieveUserQuotaSummary），
 	// 账号可以单独开、关（store.Account.WeeklyQuota）。默认关：官方客户端抓包里没见过这个请求。
 	WeeklyQuota bool
+	// TOSPause 为 true 时，有账号因条款封禁被停用后整个号池暂停 TOSPauseWindow（见 poolpause.go），避免同一批账号
+	// 接着被连带。默认关：没有证据表明暂停能避免连带，而暂停期间所有请求都会失败。关闭时 TOSPauseWindow 保留，供再次开启。
+	TOSPause       bool
+	TOSPauseWindow time.Duration
 }
 
 // DefaultPolicy 是未配置时的设置。5xx 休息时间按小号池取得较短：一两个号的池子不能因为一次 500
@@ -74,6 +78,7 @@ func DefaultPolicy() Policy {
 		Strategy:               pool.StrategyRoundRobin,
 		Sticky:                 StickyStrict,
 		StickyTTL:              time.Hour,
+		TOSPauseWindow:         6 * time.Hour,
 	}
 }
 

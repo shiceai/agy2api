@@ -122,3 +122,21 @@ func TestClassifyErrorKeepsRaw(t *testing.T) {
 		t.Fatalf("长的应截到 %d 字节内、不留半个字符：len=%d valid=%v", rawLimit, len(e.Raw), utf8.ValidString(e.Raw))
 	}
 }
+
+// 处理链接：条款封禁取 ErrorInfo.metadata.appeal_url，需要验证取 validation_url；只认 https。
+func TestClassifyErrorLink(t *testing.T) {
+	now := time.Now()
+	cases := []struct {
+		name, body, want string
+	}{
+		{"申诉地址", `{"error":{"code":403,"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"TOS_VIOLATION","metadata":{"uiMessage":"true","appeal_url":"https://forms.gle/x"}}]}}`, "https://forms.gle/x"},
+		{"验证地址", `{"error":{"code":403,"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"VALIDATION_REQUIRED","metadata":{"validation_url":"https://accounts.google.com/signin/continue"}}]}}`, "https://accounts.google.com/signin/continue"},
+		{"不是 https", `{"error":{"code":403,"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"TOS_VIOLATION","metadata":{"appeal_url":"javascript:alert(1)"}}]}}`, ""},
+		{"没有", `{"error":{"code":403,"message":"forbidden"}}`, ""},
+	}
+	for _, c := range cases {
+		if got := ClassifyError(403, nil, []byte(c.body), now).Link; got != c.want {
+			t.Errorf("%s：Link = %q，期望 %q", c.name, got, c.want)
+		}
+	}
+}

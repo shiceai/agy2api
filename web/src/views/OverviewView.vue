@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import HourlyChart from '@/components/HourlyChart.vue'
 import LoadError from '@/components/LoadError.vue'
 import PageActions from '@/components/PageActions.vue'
+import PoolPauseAlert from '@/components/PoolPauseAlert.vue'
 
 const router = useRouter()
 const data = ref<Overview | null>(null)
@@ -122,6 +123,7 @@ const stats = computed(() => {
     </PageActions>
 
     <LoadError v-if="error" :message="error" />
+    <PoolPauseAlert v-if="live.poolPause.value" :pause="live.poolPause.value" @resumed="live.refresh()" />
 
     <!-- 六张卡片按内容区宽度排：窄时两列（三行），中等三列（两行），够宽时一行六张。
          说明固定一行（超长截断，悬停看全文），卡片等高时不会因为某张折行而全部多出一行空白。 -->

@@ -291,6 +291,6 @@ func (s *Service) recheckStaleProxies() {
 	}
 	if len(stale) > 0 {
 		slog.Info("后台测试代理", "proxies", len(stale))
-		s.checkProxies(ctx, stale)
+		s.checkProxies(ctx, stale, true)
 	}
 }

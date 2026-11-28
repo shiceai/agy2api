@@ -27,6 +27,7 @@ export const resultLabels: Record<string, string> = {
   response_too_large: '响应过大',
   request_rejected: '请求被拒',
   context_rejected: '上下文已被拒',
+  pool_paused: '号池暂停',
 }
 
 export function resultLabel(kind: string): string {

@@ -27,10 +27,11 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 | `internal/logx` | slog 初始化，按 ctx 自动附加请求 ID |
 | `internal/store` | SQLite 打开、迁移执行、DAO；数据库访问只在这里 |
 | `internal/antigravity` | Antigravity 上游：OAuth 刷新与控制面（loadCodeAssist、onboardUser、fetchAvailableModels，可选的每周额度 retrieveUserQuotaSummary），数据面（信封构造、生成与计数调用、SSE 解包、上游错误分类）、基址回退、按账号绑定的代理出网 |
-| `internal/relay` | 与入站协议无关的执行层：选号、会话粘性、取令牌、上游错误处理决定（冷却、换号、停用）、调度设置、类型化错误、用量记录、后台额度刷新、账号检测 |
+| `internal/relay` | 与入站协议无关的执行层：选号、会话粘性、取令牌、上游错误处理决定（冷却、换号、停用）、调度设置、类型化错误、用量记录、后台额度刷新、账号检测、告警事件（账号被封、令牌失效、需要验证、没号可用）、封禁后全池暂停 |
 | `internal/pricing` | 模型价格：同步并解析官方价格页（Google AI Studio、Anthropic）、手动价、内存价格表、算用量费用、补算 |
+| `internal/notify` | 告警通知：通知设置（事件开关、实例名称、时区）、消息渲染（邮箱打码）、各渠道发送（通用 Webhook、钉钉加签、飞书签名、企业微信、Telegram）、后台队列（限频、重试、记录结果） |
 | `internal/pool` | 内存号池：启用账号快照、选号（含会话粘性的优先账号、额度避让、只用绑定代理的账号）、账号×模型冷却（落库，额度恢复后提前解除）、代理故障时暂停账号、每账号并发名额 |
-| `internal/server` | HTTP：路由、中间件（客户端 IP 只认可信反代、管理端 IP 白名单、管理口令防爆破）、API Key 鉴权缓存（含到期、允许的模型、Token 上限检查）、Gemini 入站、Anthropic 入站（`/v1/messages`）、OpenAI 入站（`/v1/chat/completions`、`/v1/responses`）、客户端兼容（Claude Code、Codex 的 system 降为用户消息）、按请求区分入站接口（`/v1/models` 三种格式）、取客户端的会话标识（Claude Code 会话头、`X-Session-Id`）、模型别名、管理接口（含代理管理和测试、版本与在线升级）、用量记录清理、前端嵌入；账号变更后通知 relay 重新加载号池 |
+| `internal/server` | HTTP：路由、中间件（客户端 IP 只认可信反代、管理端 IP 白名单、管理口令防爆破）、API Key 鉴权缓存（含到期、允许的模型、Token 上限检查）、Gemini 入站、Anthropic 入站（`/v1/messages`）、OpenAI 入站（`/v1/chat/completions`、`/v1/responses`）、客户端兼容（Claude Code、Codex 的 system 降为用户消息）、按请求区分入站接口（`/v1/models` 三种格式）、取客户端的会话标识（Claude Code 会话头、`X-Session-Id`）、模型别名、管理接口（含代理管理和测试、版本与在线升级、通知渠道和号池恢复）、把 relay 事件和代理测试、新版本检查转成告警通知、用量记录清理、前端嵌入；账号变更后通知 relay 重新加载号池 |
 | `internal/anthropic` | Anthropic Messages 入站的格式转换：请求转成 Gemini 请求体（system、消息、工具、思考参数，去掉 Claude Code 的计费块），非流式响应和流式事件转回 Messages 格式，错误格式，Gemini 思考签名经空思考块往返 |
 | `internal/openai` | OpenAI 入站的格式转换：Chat Completions 请求转成 Gemini 请求体（system/developer、消息、工具、图片音频文件、`reasoning_effort`、`response_format`），响应和流式块转回（思考放 `reasoning_content`）；Responses 请求（无状态，命名空间和自定义工具展开成函数）转成 Gemini 请求体，响应转成输出条目和流式事件（思考签名经 reasoning 条目的 `encrypted_content` 往返）；错误格式和模型记录 |
 | `internal/upgrade` | 在线升级：查 GitHub Releases 的新版本，下载、校验、备份数据库后把新程序放进数据目录；启动时在自带的程序和数据目录里的新程序中选较新的运行，连续起不来时停用；原地重启（exec） |
