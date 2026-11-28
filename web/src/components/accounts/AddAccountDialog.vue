@@ -45,6 +45,8 @@ const oauthBusy = ref(false)
 const oauthError = ref('')
 const oauthDone = ref<ImportResult | null>(null)
 const now = ref(Date.now())
+// 含 // 的属性值写在脚本里再绑定：写在组件的静态属性上，vue-tsc 会把 // 当注释改写，类型检查出错（见 AGENTS.md 前端约定）。
+const callbackPlaceholder = 'http://127.0.0.1:…/oauth-callback?state=…&code=…'
 let timer: number | undefined
 const expired = computed(() => !!session.value && now.value >= session.value.expires_at)
 const minutesLeft = computed(() => (session.value ? Math.max(0, Math.ceil((session.value.expires_at - now.value) / 60_000)) : 0))
@@ -101,6 +103,7 @@ interface Item {
   detail: string
 }
 const importText = ref('')
+const importPlaceholder = '1//0e…（每行一个）或 {"refresh_token":"…"}'
 const importError = ref('')
 const items = ref<Item[]>([])
 const importing = ref(false)
@@ -236,7 +239,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
               id="oauth-callback"
               v-model="callback"
               class="font-mono text-xs"
-              placeholder="http://127.0.0.1:…/oauth-callback?state=…&code=…"
+              :placeholder="callbackPlaceholder"
               autocomplete="off"
               @keydown.enter="callback.trim() && !oauthBusy && completeOAuth()"
             />
@@ -263,7 +266,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
           v-model="importText"
           :disabled="importing"
           class="max-h-72 min-h-28 overflow-y-auto font-mono text-xs break-all"
-          placeholder="1//0e…（每行一个）或 {&quot;refresh_token&quot;:&quot;…&quot;}"
+          :placeholder="importPlaceholder"
         />
         <p class="text-xs text-muted-foreground">每行一个 refresh token，或粘贴 codex2api 导出的 JSON（单个或数组）。多个账号逐个导入，间隔 2 秒。</p>
         <p v-if="importError" class="text-sm text-destructive">{{ importError }}</p>

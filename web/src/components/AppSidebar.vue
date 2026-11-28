@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { ArrowUp, ChevronsLeft, ChevronsRight, LogOut } from '@lucide/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navItems, useLogout } from '@/lib/nav'
-import { appName } from '@/lib/brand'
+import { appName, repoUrl } from '@/lib/brand'
 import { openVersionDialog, useAutoUpdateCheck, useVersion } from '@/lib/version'
 import GitHubIcon from './GitHubIcon.vue'
 import IconAction from './IconAction.vue'
@@ -107,7 +107,7 @@ const itemClass =
            混淆。图标中心和上面菜单的图标对齐。 -->
       <div class="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
         <ThemeToggle placement="sidebar" />
-        <IconAction label="GitHub" as="a" href="https://github.com/shiceai/agy2api" target="_blank" rel="noopener noreferrer"><GitHubIcon class="size-3.5" /></IconAction>
+        <IconAction label="GitHub" as="a" :href="repoUrl" target="_blank" rel="noopener noreferrer"><GitHubIcon class="size-3.5" /></IconAction>
         <IconAction label="退出" @click="logout"><LogOut /></IconAction>
         <IconAction :label="toggleLabel" class="ml-auto group-data-[collapsible=icon]:ml-0" @click="toggleSidebar">
           <ChevronsLeft v-if="state === 'expanded'" /><ChevronsRight v-else />

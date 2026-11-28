@@ -71,6 +71,7 @@ AGY2API 把多个 Antigravity 账号组成号池，对外提供 Gemini 原生 `v
 - vega 风格组件里的 `data-open`、`data-checked`、`data-active`、`data-horizontal` 等简写变体靠 `style.css` 里的 `@custom-variant` 映射到 reka-ui 的 `data-state`、`data-orientation`（摘自 `shadcn-vue/dist/tailwind.css`）。新组件用到没定义的简写变体时在那里补，否则选中、展开等样式会静默失效。
 - 字重只用 400 和 600：Windows 的微软雅黑没有 500，`font-medium` 在中文上退成 400，和同一行英文粗细不一致。新生成的组件里的 `font-medium` 要改掉（`check.sh` 会拦）：控件和正文用默认字重，标题用 `font-semibold`，表头靠灰色区分。
 - 等宽字体只用于请求 ID、Key 前缀、凭据这类标识，模型名、项目、版本号用普通字体。
+- 组件的静态属性值里不写 `//`（如 `placeholder="http://…"`、`href="https://…"`）：vue-tsc 3.3 把组件属性压成一行时会把 `//` 改成块注释，生成代码语法出错，同一模板里会冒出莫名的类型错误（如对普通常量报 `.value` 不存在）或漏查。写成脚本里的常量再 `:属性="常量"` 绑定。
 - 亮暗模式：浅色、深色、跟随系统（默认），`lib/theme.ts` 的 `useTheme` 和 `ThemeToggle`（桌面在侧边栏底部，手机在顶栏）；改主题走 `setTheme`，新主题从点击处圆形展开（View Transition）。颜色用主题变量（`bg-background`、`text-muted-foreground` 等），不写死浅色值；界面改动的截图浅色、深色各看一遍。
 - 界面文案短：名称说"是什么"，说明只说"效果"、最多一行（约 25 字内），和名称意思重复的不写；背景、原理、取值依据不写在页面上，放进 ⓘ（Popover，手机上也能点开）。风险提示（如"会改变模型行为"）不藏，留在对应控件的一行说明里。
 - 依赖固定精确版本（不用 `^`）；pnpm 12 会拦截发布不满一天的版本，选版本时避开刚发布的。

@@ -29,12 +29,8 @@ watch(open, (o) => {
 
 const lineCount = computed(() => text.value.split('\n').filter((l) => l.trim()).length)
 const statusText = { added: '已添加', duplicate: '已有同样的代理', invalid: '格式不对' } as const
-
-// 每行结果的说明：有说明用说明，否则按状态给文案。写成函数而不在模板里直接按键取 statusText：
-// vue-tsc 3.3 在 TypeScript 5.9 下会把模板里按键取值的普通常量误当成 ref（补 .value）而报类型错误。
-function resultText(r: ProxyAddResult) {
-  return r.message || statusText[r.status]
-}
+// 含 // 的属性值写在脚本里再绑定：写在组件的静态属性上，vue-tsc 会把 // 当注释改写，类型检查出错（见 AGENTS.md 前端约定）。
+const placeholder = 'socks5h://user:pass@1.2.3.4:1080\nuser:pass@1.2.3.4:8080\n1.2.3.4:8080:user:pass'
 
 async function add() {
   busy.value = true
@@ -64,7 +60,7 @@ async function add() {
           class="font-mono text-xs"
           autocomplete="off"
           spellcheck="false"
-          placeholder="socks5h://user:pass@1.2.3.4:1080&#10;user:pass@1.2.3.4:8080&#10;1.2.3.4:8080:user:pass"
+          :placeholder="placeholder"
         />
         <p class="text-xs text-muted-foreground">
           支持 http、https、socks5、socks5h（两种 socks 都由代理解析域名）。不带协议的 user:pass@host:port、host:port:user:pass、
@@ -94,7 +90,7 @@ async function add() {
         <CircleX v-else class="mt-0.5 size-4 shrink-0 text-destructive" />
         <div class="min-w-0">
           <div class="font-mono text-xs break-all">{{ r.line }}</div>
-          <div class="text-xs text-muted-foreground">{{ resultText(r) }}</div>
+          <div class="text-xs text-muted-foreground">{{ r.message || statusText[r.status] }}</div>
         </div>
       </li>
     </ul>
