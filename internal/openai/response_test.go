@@ -98,3 +98,39 @@ func TestConvertResponseFinishReasons(t *testing.T) {
 		}
 	}
 }
+
+// 生图模型的图片放进 message.images（data URL，index 是第几张）；思考里的图片不返回；只有图片时 content 是空字符串。
+func TestConvertResponseImages(t *testing.T) {
+	out, err := ConvertResponse([]byte(`{"candidates":[{"content":{"parts":[
+		{"inlineData":{"mimeType":"image/png","data":"dGhpbms="},"thought":true},
+		{"inlineData":{"mimeType":"image/jpeg","data":"aW1nMQ=="},"thoughtSignature":"sig"},
+		{"inlineData":{"data":"aW1nMg=="}}]},"finishReason":"STOP"}]}`), "gemini-3.1-flash-image")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c struct {
+		Choices []struct {
+			Message struct {
+				Content *string `json:"content"`
+				Images  []struct {
+					Index    int    `json:"index"`
+					Type     string `json:"type"`
+					ImageURL struct {
+						URL string `json:"url"`
+					} `json:"image_url"`
+				} `json:"images"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(out, &c); err != nil {
+		t.Fatal(err)
+	}
+	m := c.Choices[0].Message
+	if m.Content == nil || *m.Content != "" || len(m.Images) != 2 {
+		t.Fatalf("message = %s", out)
+	}
+	if m.Images[0].Index != 0 || m.Images[0].Type != "image_url" || m.Images[0].ImageURL.URL != "data:image/jpeg;base64,aW1nMQ==" ||
+		m.Images[1].Index != 1 || m.Images[1].ImageURL.URL != "data:image/png;base64,aW1nMg==" {
+		t.Fatalf("images = %+v", m.Images)
+	}
+}

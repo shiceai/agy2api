@@ -123,3 +123,29 @@ func TestStreamerError(t *testing.T) {
 		t.Fatalf("error = %v", e)
 	}
 }
+
+// 流式里的图片：每张一块 delta.images，index 递增；思考里的图片不发。
+func TestStreamerImages(t *testing.T) {
+	var buf bytes.Buffer
+	s := NewStreamer(&buf, nil, "gemini-3.1-flash-image", false)
+	s.Chunk([]byte(`{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"dGhpbms="},"thought":true},{"inlineData":{"mimeType":"image/jpeg","data":"aW1nMQ=="},"thoughtSignature":"sig"}]}}]}`))
+	s.Chunk([]byte(`{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/jpeg","data":"aW1nMg=="}},{"text":""}]},"finishReason":"STOP"}]}`))
+	s.Finish()
+	chunks, done := parseChunks(t, buf.String())
+	var urls []string
+	for _, c := range chunks {
+		d, _ := choice(c)
+		imgs, ok := d["images"].([]any)
+		if !ok {
+			continue
+		}
+		img := imgs[0].(map[string]any)
+		if int(img["index"].(float64)) != len(urls) || img["type"] != "image_url" {
+			t.Fatalf("image chunk = %v", img)
+		}
+		urls = append(urls, img["image_url"].(map[string]any)["url"].(string))
+	}
+	if !done || len(urls) != 2 || urls[0] != "data:image/jpeg;base64,aW1nMQ==" || urls[1] != "data:image/jpeg;base64,aW1nMg==" {
+		t.Fatalf("urls = %v\n%s", urls, buf.String())
+	}
+}

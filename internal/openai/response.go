@@ -31,6 +31,25 @@ type geminiPart struct {
 		Name string          `json:"name"`
 		Args json.RawMessage `json:"args"`
 	} `json:"functionCall"`
+	// InlineData 是生图模型回复里的图片（base64）。
+	InlineData *struct {
+		MimeType string `json:"mimeType"`
+		Data     string `json:"data"`
+	} `json:"inlineData"`
+}
+
+// image 把回复里的图片 part 换成 OpenAI 兼容客户端认的图片条目（OpenRouter 的写法，放在 message.images、
+// 流式 delta.images 里）：{type: image_url, image_url: {url: data URL}}，index 是第几张。不是图片时返回 nil。
+func image(p geminiPart, index int) map[string]any {
+	if p.InlineData == nil || p.InlineData.Data == "" {
+		return nil
+	}
+	mime := p.InlineData.MimeType
+	if mime == "" {
+		mime = "image/png"
+	}
+	return map[string]any{"index": index, "type": "image_url",
+		"image_url": map[string]any{"url": "data:" + mime + ";base64," + p.InlineData.Data}}
 }
 
 type geminiUsage struct {
@@ -104,7 +123,7 @@ func ConvertResponse(raw []byte, model string) ([]byte, error) {
 		return nil, err
 	}
 	var text, reasoning []byte
-	var calls []any
+	var calls, images []any
 	finish := ""
 	if len(g.Candidates) > 0 {
 		cand := g.Candidates[0]
@@ -115,6 +134,10 @@ func ConvertResponse(raw []byte, model string) ([]byte, error) {
 				reasoning = append(reasoning, p.Text...)
 			case p.FunctionCall != nil:
 				calls = append(calls, toolCall(p))
+			case p.InlineData != nil:
+				if img := image(p, len(images)); img != nil {
+					images = append(images, img)
+				}
 			default:
 				text = append(text, p.Text...)
 			}
@@ -125,6 +148,9 @@ func ConvertResponse(raw []byte, model string) ([]byte, error) {
 	message := map[string]any{"role": "assistant", "content": string(text)}
 	if len(reasoning) > 0 {
 		message["reasoning_content"] = string(reasoning)
+	}
+	if len(images) > 0 {
+		message["images"] = images
 	}
 	if len(calls) > 0 {
 		message["tool_calls"] = calls

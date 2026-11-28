@@ -27,7 +27,9 @@
 part 原样带回（图片和签名都要），再提新的要求；请求体上限 16 MiB，图片多、尺寸大时注意总大小。
 
 - 费用按官方价格页的图片输出价估算（上游报的输出 token 不分文字和图片，生图模型的输出基本是图片），附带的文字很少时略微高估。
-- OpenAI、Anthropic 接口目前不返回图片：生图模型的回复在这两种接口里内容为空。
+- OpenAI Chat Completions 接口把图片放在 `message.images`（流式在 `delta.images`），每项是
+  `{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,…"}}`（OpenRouter 的写法，支持 OpenRouter 生图的客户端能显示）；
+  多轮改图要用 Gemini 原生接口（OpenAI 格式带不回思考签名）。Responses、Anthropic 接口没有通用的图片输出格式，不返回图片。
 
 ## Anthropic 接口
 

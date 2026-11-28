@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Streamer 把 Gemini 流式响应的每一块转成 chat.completion.chunk：第一块带 role，之后是 content、reasoning_content
-// 和 tool_calls 的增量，最后一块带 finish_reason；客户端要了用量（stream_options.include_usage）时再发一块
+// Streamer 把 Gemini 流式响应的每一块转成 chat.completion.chunk：第一块带 role，之后是 content、reasoning_content、
+// tool_calls 和 images（生图模型的图片）的增量，最后一块带 finish_reason；客户端要了用量（stream_options.include_usage）时再发一块
 // choices 为空的用量；最后是 data: [DONE]。
 type Streamer struct {
 	w            io.Writer
@@ -21,6 +21,7 @@ type Streamer struct {
 	started  bool
 	finished bool
 	tools    int // 已发的工具调用数，也是下一个工具调用的 index
+	images   int // 已发的图片数，也是下一张图片的 index
 	finish   string
 	usage    *geminiUsage
 	// err 是写客户端失败的错误，之后不再写。
@@ -64,6 +65,11 @@ func (s *Streamer) Chunk(raw []byte) {
 			call["index"] = s.tools
 			s.tools++
 			s.delta(map[string]any{"tool_calls": []any{call}}, nil)
+		case p.InlineData != nil:
+			if img := image(p, s.images); img != nil {
+				s.images++
+				s.delta(map[string]any{"images": []any{img}}, nil)
+			}
 		case p.Text != "":
 			s.delta(map[string]any{"content": p.Text}, nil)
 		}

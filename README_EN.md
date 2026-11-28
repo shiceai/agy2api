@@ -181,6 +181,8 @@ print(resp.choices[0].message.content)
   that are not in the pool, map them with rules under Settings -> Model aliases.
 - Thinking content is returned in the `reasoning_content` field (not part of the OpenAI standard; Cherry Studio and other
   clients display it). Turn it off under Settings -> Request handling.
+- Images from the image model (`gemini-3.1-flash-image`) are returned in `message.images` (`delta.images` when
+  streaming) as data URLs, the way OpenRouter does it.
 - `response_format` with `json_schema` works with Gemini models; `json_object` is not enforced by the upstream and relies
   on the prompt; Claude models do not support structured output (the upstream returns 400).
 - The Responses API (`/v1/responses`) does not store responses: send the whole conversation every turn;

@@ -150,6 +150,7 @@ print(resp.choices[0].message.content)
 - 支持流式（含 `stream_options.include_usage`）、工具调用、图片（data URL；http 地址要在"设置 → 请求处理"里打开远程图片内联）、
   `reasoning_effort`。客户端用的模型名不在号池里时，可以在"设置 → 模型别名"里加规则映射。
 - 思考内容放在 `reasoning_content` 字段（不是 OpenAI 的标准字段，Cherry Studio 等客户端会显示），可以在"设置 → 请求处理"里关掉。
+- 生图模型（`gemini-3.1-flash-image`）的图片放在 `message.images`（流式 `delta.images`），是 data URL（OpenRouter 的写法）。
 - `response_format` 的 `json_schema` 对 Gemini 模型生效；`json_object` 上游不强制，靠提示词；Claude 模型不支持结构化输出（上游报 400）。
 - Responses 接口（`/v1/responses`）不存响应：每轮要带上完整对话，`previous_response_id`、`background` 不支持（返回 400）。
   思考放在 reasoning 条目的摘要里；`include` 里要了 `reasoning.encrypted_content` 时带上思考签名，下一轮原样传回即可。
