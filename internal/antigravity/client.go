@@ -106,13 +106,13 @@ func orDefault(v, def string) string {
 }
 
 // UserAgentFor 返回某账号 Cloud Code 请求实际用的 User-Agent，优先级：配置的统一 UA >
-// 账号保存的设备画像 stored > 按账号邮箱派生（见 DeviceUserAgent）> 最新核验构建（账号未知时，
-// 如导入时还没拿到邮箱）。
+// 账号保存的设备画像 stored（声明的版本已被淘汰的除外，见 profileRetired）> 按账号邮箱派生（见 DeviceUserAgent）>
+// 最新核验构建（账号未知时，如导入时还没拿到邮箱）。
 func (c *Client) UserAgentFor(stored, accountKey string) string {
 	switch {
 	case c.uaOverride != "":
 		return c.uaOverride
-	case stored != "":
+	case stored != "" && !profileRetired(stored):
 		return stored
 	case strings.TrimSpace(accountKey) != "":
 		return DeviceUserAgent(accountKey)

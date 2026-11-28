@@ -21,6 +21,32 @@ func LatestShippedHubVersion() string { return currentBuilds()[0].version }
 // 只用实抓过的平台；macOS、Windows 的 UA 写法没有实抓依据，不引入。
 const deviceOS, deviceArch = "linux", "amd64"
 
+// profileVersion 取 User-Agent 里声明的客户端版本（antigravity/hub/<版本> (...)），不是这种形态时返回 false。
+func profileVersion(ua string) (string, bool) {
+	rest, ok := strings.CutPrefix(ua, "antigravity/hub/")
+	if !ok {
+		return "", false
+	}
+	v, _, ok := strings.Cut(rest, " ")
+	if !ok || !validHubVersion(v) {
+		return "", false
+	}
+	return v, true
+}
+
+// profileRetired 判断账号保存的画像是否已经淘汰：声明的版本比当前参与派生的构建（活动表最新几条）里最旧的还旧。
+// 画像平时保持不变（真实客户端的安装是稳定的），但真实客户端会随官方发布自动更新，一直声明淘汰的旧版本反而显眼，
+// 淘汰后改按邮箱重新派生（落在同一档权重上的当前构建）。比活动表还新的不算（构建表刷新失败、退回内置表时），只升不降；
+// 不是我们派生的形态时不动。
+func profileRetired(ua string) bool {
+	v, ok := profileVersion(ua)
+	if !ok {
+		return false
+	}
+	builds := currentBuilds()
+	return HubVersionNewer(builds[len(builds)-1].version, v)
+}
+
 // deviceProfileSalt 只用于派生，改了会让所有账号的画像一起变。
 const deviceProfileSalt = "agy2api:antigravity:device-profile:v1\x00"
 

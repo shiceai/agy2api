@@ -36,19 +36,40 @@ func TestDeviceUserAgent(t *testing.T) {
 	}
 }
 
-// 优先级：统一 UA > 账号保存的画像 > 按邮箱派生 > 最新核验构建。
+// 优先级：统一 UA > 账号保存的画像（没被淘汰的）> 按邮箱派生 > 最新核验构建。保存的版本比活动表里最旧的一档还旧时
+// 已被淘汰，改按邮箱派生；比活动表还新的保持不动（只升不降）；不是派生形态的原样用。
 func TestUserAgentFor(t *testing.T) {
-	const stored = "antigravity/hub/2.31.0 (aidev_client; os_type=linux; arch=amd64; cl=1017595969)"
+	defer restoreBuilds(t)
+	if err := SetActiveBuilds([]Build{{"2.35.2", "1029311855"}, {"2.34.0", "1026637980"}, {"2.33.1", "1026001617"}}); err != nil {
+		t.Fatal(err)
+	}
+	const (
+		stored  = "antigravity/hub/2.33.1 (aidev_client; os_type=linux; arch=amd64; cl=1026001617)"
+		retired = "antigravity/hub/2.31.0 (aidev_client; os_type=linux; arch=amd64; cl=1017595969)"
+		newer   = "antigravity/hub/2.40.0 (aidev_client; os_type=linux; arch=amd64; cl=2000000000)"
+		other   = "custom-client/1.0"
+	)
 	c := NewClient(Options{})
 	cases := []struct{ stored, key, want string }{
 		{"", "", DefaultUserAgent()},
 		{"", "a@example.com", DeviceUserAgent("a@example.com")},
 		{stored, "a@example.com", stored},
+		{retired, "a@example.com", DeviceUserAgent("a@example.com")},
+		{retired, "", DefaultUserAgent()},
+		{newer, "a@example.com", newer},
+		{other, "a@example.com", other},
 	}
 	for _, tc := range cases {
 		if got := c.UserAgentFor(tc.stored, tc.key); got != tc.want {
 			t.Fatalf("UserAgentFor(%q, %q) = %q，期望 %q", tc.stored, tc.key, got, tc.want)
 		}
+	}
+	// 官方发新版、活动表前进后，原来还在表里的 2.33.1 也被淘汰，换到当前的构建。
+	if err := SetActiveBuilds([]Build{{"2.37.0", "1032000000"}, {"2.36.1", "1031000000"}, {"2.35.2", "1029311855"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.UserAgentFor(stored, "a@example.com"); got != DeviceUserAgent("a@example.com") || !strings.Contains(got, "antigravity/hub/2.3") || strings.Contains(got, "2.33.1") {
+		t.Fatalf("活动表前进后应换到当前构建，实际 %q", got)
 	}
 	c = NewClient(Options{UserAgent: "antigravity/hub/custom"})
 	if c.UserAgentFor(stored, "a@example.com") != "antigravity/hub/custom" || c.UserAgentFor("", "") != "antigravity/hub/custom" {

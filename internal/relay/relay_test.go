@@ -1152,22 +1152,26 @@ func TestUnknownModelRefreshesCatalog(t *testing.T) {
 	}
 }
 
-// 每个账号用自己的设备画像 UA：保存了的用保存的，没保存的按邮箱派生。
+// 每个账号用自己的设备画像 UA：保存了的用保存的（版本已被淘汰的除外），没保存的按邮箱派生。
 func TestGenerateUsesAccountUserAgent(t *testing.T) {
-	e := newEnv(t, "a", "b", "c")
-	const stored = "antigravity/hub/2.31.0 (aidev_client; os_type=linux; arch=amd64; cl=1017595969)"
-	acc, err := e.store.GetAccount(context.Background(), e.enc, e.ids["c"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	acc.UserAgent = stored
-	if err := e.store.UpdateAccountSync(context.Background(), e.enc, acc); err != nil {
-		t.Fatal(err)
+	e := newEnv(t, "a", "b", "c", "d")
+	// c 存的版本比构建表还新：原样用（只升不降）；d 存的 2.31.0 已被淘汰：改按邮箱派生到当前构建。
+	const newer = "antigravity/hub/99.0.0 (aidev_client; os_type=linux; arch=amd64; cl=9999999999)"
+	const retired = "antigravity/hub/2.31.0 (aidev_client; os_type=linux; arch=amd64; cl=1017595969)"
+	for rt, ua := range map[string]string{"c": newer, "d": retired} {
+		acc, err := e.store.GetAccount(context.Background(), e.enc, e.ids[rt])
+		if err != nil {
+			t.Fatal(err)
+		}
+		acc.UserAgent = ua
+		if err := e.store.UpdateAccountSync(context.Background(), e.enc, acc); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := e.relay.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 4; i++ {
 		if status, body, _, err := e.generate("gemini-2.5-flash", false); err != nil || status != http.StatusOK {
 			t.Fatalf("%d %v %s", status, err, body)
 		}
@@ -1175,7 +1179,8 @@ func TestGenerateUsesAccountUserAgent(t *testing.T) {
 	want := map[string]string{
 		"a": antigravity.DeviceUserAgent("a@example.com"),
 		"b": antigravity.DeviceUserAgent("b@example.com"),
-		"c": stored,
+		"c": newer,
+		"d": antigravity.DeviceUserAgent("d@example.com"),
 	}
 	for rt, w := range want {
 		e.up.mu.Lock()
