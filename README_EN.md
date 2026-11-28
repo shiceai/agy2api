@@ -34,7 +34,7 @@ APIs (Claude Code, Codex, the OpenAI SDK and others connect directly), and comes
 ## Features
 
 - **Native Gemini API**: `generateContent`, `streamGenerateContent`, `countTokens` and model listing; works with SDKs
-  such as `google-genai`
+  such as `google-genai`; the image model returns images as-is and supports multi-turn editing
 - **Anthropic API**: `/v1/messages` (streaming and non-streaming) and `count_tokens`, so Claude Code and other Anthropic clients
   can connect directly; official model names are mapped to models in the pool by model aliases
 - **OpenAI API**: `/v1/chat/completions` and `/v1/responses` (both with streaming) and model listing, with tool calls,

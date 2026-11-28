@@ -20,6 +20,15 @@
 档位，再用默认档位。家族没有这一档时先往低、再往高取最接近的。按家族名查单个模型（`/v1/models/{家族名}`）时，显示名是
 按默认档位解析到的那一档。
 
+## 生图模型
+
+`gemini-3.1-flash-image` 走 Gemini 原生接口（`generateContent`、`streamGenerateContent`），请求和响应原样透传：图片在回复的
+`inlineData` 里（JPEG，base64），同一个 part 还带一段较大的思考签名（`thoughtSignature`，几百 KB）。多轮改图时把上一轮模型回复的
+part 原样带回（图片和签名都要），再提新的要求；请求体上限 16 MiB，图片多、尺寸大时注意总大小。
+
+- 费用按官方价格页的图片输出价估算（上游报的输出 token 不分文字和图片，生图模型的输出基本是图片），附带的文字很少时略微高估。
+- OpenAI、Anthropic 接口目前不返回图片：生图模型的回复在这两种接口里内容为空。
+
 ## Anthropic 接口
 
 除了 Gemini 原生接口，网关还提供 Anthropic Messages 接口，Claude Code 等客户端可以直接接入（用法见 README）：

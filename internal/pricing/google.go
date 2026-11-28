@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	// 限时价的日期按美国太平洋时间理解，Windows 和精简镜像上没有系统时区数据，内嵌一份。
 	_ "time/tzdata"
 )
@@ -26,6 +27,7 @@ var (
 	googlePlain      = regexp.MustCompile(`^\$([0-9]+(?:\.[0-9]+)?)$`)
 	googleTextFirst  = regexp.MustCompile(`^\$([0-9]+(?:\.[0-9]+)?) \(text[^)]*\)(?: \$[0-9]+(?:\.[0-9]+)? \(audio\))?$`)
 	googleTiered     = regexp.MustCompile(`^\$([0-9]+(?:\.[0-9]+)?), prompts <= ([0-9]+)k tokens \$([0-9]+(?:\.[0-9]+)?), prompts > ([0-9]+)k(?: tokens)?$`)
+	googleImageOut   = regexp.MustCompile(`^\$[0-9]+(?:\.[0-9]+)? \(text and thinking\) \$([0-9]+(?:\.[0-9]+)?) \(images\)(?: Equivalent to .*)?$`)
 	googleDated      = regexp.MustCompile(`^\$([0-9]+(?:\.[0-9]+)?)(?: \(text[^)]*\))? through ([A-Z][a-z]+ [0-9]{1,2}, [0-9]{4})\. \$([0-9]+(?:\.[0-9]+)?)(?: \(text[^)]*\))? starting ([A-Z][a-z]+ [0-9]{1,2}, [0-9]{4})\.?$`)
 	officialModelRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*$`)
 	googleZone, _    = time.LoadLocation("America/Los_Angeles")
@@ -43,7 +45,8 @@ type googleCell struct {
 }
 
 // parseGoogle 解析 Google AI Studio 价格页。只认单一价格、按提示长度分两档、按模态分开且第一项是文字、
-// 带期限（某日前限时价，次日起标准价）四种写法；按图片或时长计价、输出不是文字的型号计为读不出。
+// 带期限（某日前限时价，次日起标准价）四种写法，以及生图模型分文字和图片的输出价（按图片价）；按张、按时长计价、
+// 输出是语音的型号计为读不出。
 func parseGoogle(data []byte) ([]Entry, []Skip, error) {
 	text := strings.ReplaceAll(string(data), "\r", "")
 	var entries []Entry
@@ -55,7 +58,9 @@ func parseGoogle(data []byte) ([]Entry, []Skip, error) {
 		if heading == nil {
 			continue
 		}
-		name, model := strings.TrimSpace(heading[1]), heading[2]
+		// 标题末尾可能带表情（如生图模型的 🍌），去掉。
+		name := strings.TrimRightFunc(heading[1], func(r rune) bool { return unicode.IsSpace(r) || unicode.IsSymbol(r) })
+		model := heading[2]
 		// 型号小节都链接到型号页，工具、说明等小节没有。
 		if !officialModelRe.MatchString(model) || !strings.Contains(section, "(/docs/models/"+model+")") {
 			continue
@@ -228,6 +233,11 @@ func parseGoogleCell(cell string, optional bool) (googleCell, string) {
 		return googleCell{base: dollars(m[1])}, ""
 	}
 	if m := googleTextFirst.FindStringSubmatch(cell); m != nil {
+		return googleCell{base: dollars(m[1])}, ""
+	}
+	// 生图模型的输出价分文字（含思考）和图片两种，如 "$3 (text and thinking) $60.00 (images) Equivalent to …"。
+	// 上游报的输出 token 不分模态，生图模型的输出基本是图片，按图片价算（附带的文字很少，略微高估）。
+	if m := googleImageOut.FindStringSubmatch(cell); m != nil {
 		return googleCell{base: dollars(m[1])}, ""
 	}
 	if m := googleTiered.FindStringSubmatch(cell); m != nil && m[2] == m[4] {

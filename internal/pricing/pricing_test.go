@@ -57,8 +57,13 @@ func TestParseGoogle(t *testing.T) {
 	for _, s := range skipped {
 		reasons[s.Model] = s.Reason
 	}
-	if reasons["gemini-3.1-flash-image"] == "" || reasons["gemini-2.5-flash-preview-tts"] == "" {
-		t.Fatalf("image/tts models should be skipped: %v", reasons)
+	// 生图模型的输出价分文字和图片两种时按图片价（上游的输出 token 不分模态，生图模型的输出基本是图片）。
+	img, ok := m["gemini-3.1-flash-image"]
+	if !ok || img.Name != "Gemini 3.1 Flash Image (Nano Banana 2)" || img.Price.Input != 500_000 || img.Price.Output != 60_000_000 || img.Price.CacheRead != nil {
+		t.Fatalf("3.1 flash image: %+v（跳过原因 %q）", img, reasons["gemini-3.1-flash-image"])
+	}
+	if reasons["gemini-2.5-flash-image"] == "" || reasons["gemini-2.5-flash-preview-tts"] == "" {
+		t.Fatalf("per-image and tts models should be skipped: %v", reasons)
 	}
 	if _, _, err := parseGoogle([]byte("# Pricing\n\nnothing here")); err == nil {
 		t.Fatal("page without model sections should fail")

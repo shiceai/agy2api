@@ -30,7 +30,7 @@
 
 ## 功能
 
-- **Gemini 原生接口**：`generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，可直接用 `google-genai` 等 SDK
+- **Gemini 原生接口**：`generateContent`、`streamGenerateContent`、`countTokens` 和模型列表，可直接用 `google-genai` 等 SDK；生图模型原样返回图片，可多轮改图
 - **Anthropic 接口**：`/v1/messages`（流式和非流式）和 `count_tokens`，Claude Code 等客户端可以直接接入；官方模型名按模型别名映射到号池里的模型
 - **OpenAI 接口**：`/v1/chat/completions`、`/v1/responses`（都支持流式）和模型列表，支持工具调用、图片、思考内容和结构化输出，OpenAI SDK、Cherry Studio、Codex 等客户端可以直接接入
 - **号池调度**：轮询、智能打分或重置优先选号，按账号和模型冷却，失败自动换号，额度低的账号避让，同一对话优先用同一账号
