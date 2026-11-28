@@ -920,7 +920,7 @@ func (r *Relay) recordUsage(resp *Response) {
 	switch se := up.StreamError(); {
 	case streamIdled(up.Body):
 		uerr = &store.UsageError{Kind: KindStreamIdle,
-			Message: fmt.Sprintf("上游超过 %s 没有数据，已断开", resp.cfg.policy.StreamIdleTimeout)}
+			Message: fmt.Sprintf("upstream stream idle timeout: no data for %s, disconnected", resp.cfg.policy.StreamIdleTimeout)}
 		rec.StatusCode = http.StatusGatewayTimeout
 		resp.trace.add(c.try, c.lease, c.started, up.Status, KindStreamIdle, uerr.Message, 0)
 	case se != nil:
