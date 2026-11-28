@@ -44,8 +44,9 @@ function serialize(s: Settings): string {
   const sorted = Object.fromEntries(Object.entries(s.model_tiers).sort(([a], [b]) => a.localeCompare(b)))
   return JSON.stringify({ default_tier: s.default_tier, model_tiers: sorted })
 }
-// 设置加载完（saved 不为空）才比较：加载前表单是空的，不算改动。
-const dirty = computed(() => saved.value !== '' && serialize(current()) !== saved.value)
+// 设置加载完（saved 不为空）才判断改动、显示空状态说明：加载前表单和家族列表都是空的。
+const loaded = computed(() => saved.value !== '')
+const dirty = computed(() => loaded.value && serialize(current()) !== saved.value)
 
 // setForm 把表单设成 s。
 function setForm(s: Settings) {
@@ -175,11 +176,11 @@ async function save() {
           </div>
           <IconAction label="删除" @click="rows.splice(i, 1)"><Trash2 /></IconAction>
         </div>
-        <p v-if="!rows.length" class="text-sm text-muted-foreground">还没有单独设置的家族。</p>
+        <p v-if="loaded && !rows.length" class="text-sm text-muted-foreground">还没有单独设置的家族。</p>
         <template #footer>
           <CardFooter class="flex-wrap gap-3">
             <Button variant="outline" size="sm" :disabled="!canAdd" @click="addRow"><Plus />添加</Button>
-            <span v-if="!families.length" class="text-xs text-muted-foreground">账号目录里还没有分档家族，导入账号后再设置。</span>
+            <span v-if="loaded && !families.length" class="text-xs text-muted-foreground">账号目录里还没有分档家族，导入账号后再设置。</span>
           </CardFooter>
         </template>
       </SettingCard>
