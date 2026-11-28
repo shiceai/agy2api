@@ -49,8 +49,9 @@ const headerClass = computed(() =>
     <RouterView v-if="isLogin" />
     <SidebarProvider v-else>
       <AppSidebar />
-      <!-- 桌面端内容区是侧边栏右侧的圆角面板（inset），铺满剩余宽度 -->
-      <SidebarInset class="min-w-0">
+      <!-- 桌面端内容区是侧边栏右侧的圆角面板（inset），铺满剩余宽度。
+           纵向 clip：底部停靠栏滑入滑出时伸出面板的部分裁掉，不撑出临时滚动条（clip 不形成滚动容器，吸顶吸底照常） -->
+      <SidebarInset class="min-w-0 overflow-y-clip">
         <!-- 顶栏：页名只在这里出现一次（内容区不再放大标题），右侧是页面主操作（页面用 PageActions 传送过来）。
              桌面端左侧是侧边栏开关；移动端吸顶，最右是退出。
              页面有勾选时进入选择模式（浅灰底）：页名、页面操作、退出收起，换成页面的选择栏（SelectionBar 传送过来）。
