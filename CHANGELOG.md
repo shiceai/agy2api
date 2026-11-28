@@ -2,6 +2,19 @@
 
 每个版本的说明也会作为 GitHub Release 的正文发布。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## v1.16.0 - 2026-11-28
+
+新增接入指南页；生图模型可以估算费用，OpenAI 接口也能返回生成的图片。
+
+### 功能
+
+- **接入指南页。** 管理端"接入"页按 Claude Code、Codex、OpenAI 和 Gemini SDK、Cherry Studio、curl 给出填好接口地址的配置，可直接复制；新建密钥后点"查看接入示例"可带入这个密钥。
+- **OpenAI 接口返回生图模型的图片。** 图片放在 `message.images`（流式为 `delta.images`），格式与 OpenRouter 相同。
+
+### 改动
+
+- **生图模型 `gemini-3.1-flash-image` 按官方图片输出价估算费用。** 原来没有价格，用量中不显示费用。
+
 ## v1.15.0 - 2026-11-27
 
 新增告警通知和封禁保护；早期导入的账号声明的客户端版本自动跟进官方。
